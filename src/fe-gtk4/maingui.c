@@ -1,6 +1,7 @@
 /* HexChat GTK4 main window and session UI */
 #include "fe-gtk4.h"
 #include "sexy-spell-entry.h"
+#include "../common/url.h"
 
 GtkWidget *main_window;
 GtkWidget *main_box;
@@ -13,6 +14,7 @@ GtkTextBuffer *log_buffer;
 GtkWidget *command_entry;
 GSimpleActionGroup *window_actions;
 static GtkWidget *main_right_paned;
+static GtkWidget *main_right_box;
 static GtkWidget *main_center_box;
 static GtkWidget *topic_row;
 static GtkWidget *topic_entry;
@@ -333,6 +335,7 @@ fe_gtk4_maingui_cleanup (void)
 	fe_gtk4_chanview_cleanup ();
 	g_clear_object (&window_actions);
 	main_right_paned = NULL;
+	main_right_box = NULL;
 	main_center_box = NULL;
 	topic_row = NULL;
 	topic_entry = NULL;
@@ -471,14 +474,19 @@ fe_gtk4_create_main_window (void)
 	session_scroller = fe_gtk4_chanview_create_widget ();
 	gtk_paned_set_start_child (GTK_PANED (content_paned), session_scroller);
 
-	main_right_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
-	gtk_widget_set_hexpand (main_right_paned, TRUE);
-	gtk_widget_set_vexpand (main_right_paned, TRUE);
-	gtk_paned_set_end_child (GTK_PANED (content_paned), main_right_paned);
+	main_right_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
+	gtk_widget_set_hexpand (main_right_box, TRUE);
+	gtk_widget_set_vexpand (main_right_box, TRUE);
+	gtk_paned_set_end_child (GTK_PANED (content_paned), main_right_box);
 	gtk_paned_set_resize_start_child (GTK_PANED (content_paned), FALSE);
 	gtk_paned_set_shrink_start_child (GTK_PANED (content_paned), TRUE);
 	gtk_paned_set_resize_end_child (GTK_PANED (content_paned), TRUE);
 	gtk_paned_set_shrink_end_child (GTK_PANED (content_paned), TRUE);
+
+	main_right_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
+	gtk_widget_set_hexpand (main_right_paned, TRUE);
+	gtk_widget_set_vexpand (main_right_paned, TRUE);
+	gtk_box_append (GTK_BOX (main_right_box), main_right_paned);
 
 	main_center_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
 	gtk_widget_set_hexpand (main_center_box, TRUE);
@@ -505,7 +513,7 @@ fe_gtk4_create_main_window (void)
 	gtk_paned_set_shrink_end_child (GTK_PANED (main_right_paned), TRUE);
 
 	entry_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-	gtk_box_append (GTK_BOX (main_center_box), entry_row);
+	gtk_box_append (GTK_BOX (main_right_box), entry_row);
 
 	input_nick_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_box_append (GTK_BOX (entry_row), input_nick_box);
@@ -971,18 +979,37 @@ fe_set_inputbox_cursor (struct session *sess, int delta, int pos)
 void
 fe_open_url (const char *url)
 {
+	int url_type;
+	char *uri;
 	GError *error;
 
 	if (!url || !*url)
 		return;
 
+	url_type = url_check_word (url);
+	uri = NULL;
+
+	if (url_type == WORD_PATH)
+		uri = g_strconcat ("file://", url, NULL);
+	else if (url_type == WORD_HOST6)
+	{
+		if (*url != '[')
+			uri = g_strdup_printf ("http://[%s]", url);
+		else
+			uri = g_strdup_printf ("http://%s", url);
+	}
+	else if (strchr (url, ':') == NULL)
+		uri = g_strdup_printf ("http://%s", url);
+
 	error = NULL;
-	g_app_info_launch_default_for_uri (url, NULL, &error);
+	g_app_info_launch_default_for_uri (uri ? uri : url, NULL, &error);
 	if (error)
 	{
 		g_warning ("Unable to open URL '%s': %s", url, error->message);
 		g_error_free (error);
 	}
+
+	g_free (uri);
 }
 
 void

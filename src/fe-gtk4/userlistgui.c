@@ -10,7 +10,7 @@ typedef struct _HcUserItem
 	struct User *user;
 	char *display;
 	char *host;
-	GdkPixbuf *icon;
+	char prefix;
 } HcUserItem;
 
 typedef struct _HcUserItemClass
@@ -23,6 +23,7 @@ GType hc_user_item_get_type (void);
 G_DEFINE_TYPE (HcUserItem, hc_user_item, G_TYPE_OBJECT)
 
 static GtkWidget *userlist_panel;
+static GtkWidget *userlist_revealer;
 static GtkWidget *userlist_info_label;
 static GtkWidget *userlist_scroller;
 static GtkWidget *userlist_view;
@@ -30,60 +31,74 @@ static GListStore *userlist_store;
 static GtkMultiSelection *userlist_selection;
 static session *userlist_session;
 static gboolean userlist_select_syncing;
+static GtkCssProvider *userlist_css_provider;
 
-static GdkPixbuf *
-get_user_icon (server *serv, struct User *user)
+static const char *
+userlist_role_css_class (char prefix)
 {
-	char *pre;
-	int level;
-
-	if (!serv || !user)
-		return NULL;
-
-	switch (user->prefix[0])
+	switch (prefix)
 	{
-	case 0:
-		return NULL;
-	case '+':
-		return pix_ulist_voice;
-	case '%':
-		return pix_ulist_halfop;
 	case '@':
-		return pix_ulist_op;
+	case '&':
+	case '~':
+	case '!':
+		return "hc-user-role-op";
+	case '%':
+		return "hc-user-role-halfop";
+	case '+':
+		return "hc-user-role-voice";
 	default:
-		break;
+		return NULL;
 	}
+}
 
-	pre = strchr (serv->nick_prefixes, '@');
-	if (pre && pre != serv->nick_prefixes)
+static void
+userlist_install_css (void)
+{
+	GdkDisplay *display;
+	const char *css;
+
+	if (userlist_css_provider)
+		return;
+
+	display = gdk_display_get_default ();
+	if (!display)
+		return;
+
+	css =
+		".hc-user-role-op { color: #157915; }\n"
+		".hc-user-role-halfop { color: #856117; }\n"
+		".hc-user-role-voice { color: #451984; }\n";
+
+	userlist_css_provider = gtk_css_provider_new ();
+	gtk_css_provider_load_from_string (userlist_css_provider, css);
+	gtk_style_context_add_provider_for_display (display,
+		GTK_STYLE_PROVIDER (userlist_css_provider),
+		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+static void
+userlist_set_role_icon (GtkWidget *image, char prefix)
+{
+	const char *role_class;
+
+	if (!image)
+		return;
+
+	gtk_image_set_from_icon_name (GTK_IMAGE (image), "user-available-symbolic");
+	gtk_widget_remove_css_class (image, "hc-user-role-op");
+	gtk_widget_remove_css_class (image, "hc-user-role-halfop");
+	gtk_widget_remove_css_class (image, "hc-user-role-voice");
+	gtk_widget_remove_css_class (image, "dim-label");
+
+	role_class = userlist_role_css_class (prefix);
+	if (role_class)
 	{
-		pre--;
-		level = 0;
-		while (1)
-		{
-			if (pre[0] == user->prefix[0])
-			{
-				switch (level)
-				{
-				case 0:
-					return pix_ulist_owner;
-				case 1:
-					return pix_ulist_founder;
-				case 2:
-					return pix_ulist_netop;
-				default:
-					break;
-				}
-				break;
-			}
-			level++;
-			if (pre == serv->nick_prefixes)
-				break;
-			pre--;
-		}
+		gtk_widget_add_css_class (image, role_class);
+		return;
 	}
 
-	return NULL;
+	gtk_widget_add_css_class (image, "dim-label");
 }
 
 static char *
@@ -152,7 +167,6 @@ hc_user_item_finalize (GObject *object)
 	item = (HcUserItem *) object;
 	g_free (item->display);
 	g_free (item->host);
-	g_clear_object (&item->icon);
 
 	G_OBJECT_CLASS (hc_user_item_parent_class)->finalize (object);
 }
@@ -176,18 +190,13 @@ static HcUserItem *
 hc_user_item_new (session *sess, struct User *user)
 {
 	HcUserItem *item;
-	GdkPixbuf *icon;
 
+	(void) sess;
 	item = g_object_new (HC_TYPE_USER_ITEM, NULL);
 	item->user = user;
 	item->display = user_display_text (user);
 	item->host = g_strdup (user && user->hostname ? user->hostname : "");
-
-	icon = NULL;
-	if (prefs.hex_gui_ulist_icons && sess && sess->server)
-		icon = get_user_icon (sess->server, user);
-	if (icon)
-		item->icon = g_object_ref (icon);
+	item->prefix = (user && user->prefix[0]) ? user->prefix[0] : 0;
 
 	return item;
 }
@@ -365,13 +374,17 @@ userlist_update_info_label (session *sess)
 
 	if (!sess || sess->total <= 0)
 	{
-		gtk_label_set_text (GTK_LABEL (userlist_info_label), NULL);
+		gtk_label_set_text (GTK_LABEL (userlist_info_label), "");
 		return;
 	}
 
-	g_snprintf (tbuf, sizeof (tbuf), _("%d ops, %d total"), sess->ops, sess->total);
+	g_snprintf (tbuf, sizeof (tbuf),
+		_("Users: %d, <span foreground=\"#157915\">%d@</span>,"
+		  "<span foreground=\"#856117\">%d%%</span>,"
+		  "<span foreground=\"#451984\">%d+</span>"),
+		sess->total, sess->ops, sess->hops, sess->voices);
 	tbuf[sizeof (tbuf) - 1] = 0;
-	gtk_label_set_text (GTK_LABEL (userlist_info_label), tbuf);
+	gtk_label_set_markup (GTK_LABEL (userlist_info_label), tbuf);
 }
 
 static void
@@ -446,25 +459,15 @@ userlist_apply_row (GtkListItem *list_item, HcUserItem *item)
 
 	if (!item)
 	{
-		gtk_widget_set_visible (image, FALSE);
+		gtk_widget_set_visible (image, TRUE);
+		userlist_set_role_icon (image, 0);
 		gtk_label_set_text (GTK_LABEL (label), "");
 		gtk_widget_set_tooltip_text (GTK_WIDGET (label), NULL);
 		return;
 	}
 
-	if (item->icon && prefs.hex_gui_ulist_icons)
-	{
-		GdkTexture *texture;
-
-		texture = gdk_texture_new_for_pixbuf (item->icon);
-		gtk_image_set_from_paintable (GTK_IMAGE (image), GDK_PAINTABLE (texture));
-		g_object_unref (texture);
-		gtk_widget_set_visible (image, TRUE);
-	}
-	else
-	{
-		gtk_widget_set_visible (image, FALSE);
-	}
+	gtk_widget_set_visible (image, TRUE);
+	userlist_set_role_icon (image, item->prefix);
 
 	markup = user_markup_text (item->user, item->display);
 	gtk_label_set_markup (GTK_LABEL (label), markup);
@@ -492,7 +495,12 @@ userlist_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_
 	(void) user_data;
 
 	row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_margin_start (row, 6);
+	gtk_widget_set_margin_end (row, 6);
+	gtk_widget_set_margin_top (row, 2);
+	gtk_widget_set_margin_bottom (row, 2);
 	image = gtk_image_new ();
+	gtk_widget_set_valign (image, GTK_ALIGN_CENTER);
 	label = gtk_label_new ("");
 	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
 	gtk_widget_set_hexpand (label, TRUE);
@@ -634,7 +642,9 @@ fe_gtk4_userlist_cleanup (void)
 {
 	g_clear_object (&userlist_selection);
 	g_clear_object (&userlist_store);
+	g_clear_object (&userlist_css_provider);
 	userlist_panel = NULL;
+	userlist_revealer = NULL;
 	userlist_info_label = NULL;
 	userlist_scroller = NULL;
 	userlist_view = NULL;
@@ -650,22 +660,39 @@ fe_gtk4_userlist_create_widget (void)
 
 	right_size = MAX (prefs.hex_gui_pane_right_size, prefs.hex_gui_pane_right_size_min);
 	if (right_size <= 0)
-		right_size = 100;
+		right_size = 150;
+
+	userlist_install_css ();
+
+	if (!userlist_revealer)
+	{
+		userlist_revealer = gtk_revealer_new ();
+		gtk_widget_set_hexpand (userlist_revealer, FALSE);
+		gtk_widget_set_vexpand (userlist_revealer, TRUE);
+		gtk_revealer_set_transition_type (GTK_REVEALER (userlist_revealer), GTK_REVEALER_TRANSITION_TYPE_SLIDE_LEFT);
+		gtk_revealer_set_transition_duration (GTK_REVEALER (userlist_revealer), 180);
+	}
 
 	if (!userlist_panel)
 	{
-		userlist_panel = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
+		userlist_panel = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 		gtk_widget_set_size_request (userlist_panel, right_size, -1);
 
 		userlist_info_label = gtk_label_new (NULL);
 		gtk_label_set_xalign (GTK_LABEL (userlist_info_label), 0.0f);
+		gtk_widget_set_margin_start (userlist_info_label, 6);
+		gtk_widget_set_margin_end (userlist_info_label, 6);
+		gtk_widget_set_margin_top (userlist_info_label, 6);
+		gtk_widget_set_margin_bottom (userlist_info_label, 6);
+		gtk_label_set_use_markup (GTK_LABEL (userlist_info_label), TRUE);
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_info_label);
+		gtk_box_append (GTK_BOX (userlist_panel), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
 
 		userlist_scroller = gtk_scrolled_window_new ();
 		gtk_widget_set_hexpand (userlist_scroller, FALSE);
 		gtk_widget_set_vexpand (userlist_scroller, TRUE);
 		gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (userlist_scroller),
-			prefs.hex_gui_ulist_show_hosts ? GTK_POLICY_AUTOMATIC : GTK_POLICY_NEVER,
+			GTK_POLICY_NEVER,
 			GTK_POLICY_AUTOMATIC);
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_scroller);
 
@@ -688,18 +715,17 @@ fe_gtk4_userlist_create_widget (void)
 		g_signal_connect (userlist_selection, "selection-changed",
 			G_CALLBACK (userlist_selection_changed_cb), NULL);
 		g_signal_connect (userlist_view, "activate", G_CALLBACK (userlist_activate_cb), NULL);
+
+		gtk_revealer_set_child (GTK_REVEALER (userlist_revealer), userlist_panel);
 	}
 	else
 	{
 		gtk_widget_set_size_request (userlist_panel, right_size, -1);
 	}
 
-	if (prefs.hex_gui_ulist_hide)
-		gtk_widget_set_visible (userlist_panel, FALSE);
-	else
-		gtk_widget_set_visible (userlist_panel, TRUE);
+	fe_gtk4_userlist_set_visible (prefs.hex_gui_ulist_hide ? FALSE : TRUE);
 
-	return userlist_panel;
+	return userlist_revealer;
 }
 
 void
@@ -712,15 +738,28 @@ void
 fe_gtk4_userlist_set_visible (gboolean visible)
 {
 	prefs.hex_gui_ulist_hide = visible ? 0 : 1;
-	if (userlist_panel)
-		gtk_widget_set_visible (userlist_panel, visible ? TRUE : FALSE);
+	if (userlist_revealer)
+	{
+		if (visible)
+		{
+			gtk_widget_set_visible (userlist_revealer, TRUE);
+			gtk_revealer_set_reveal_child (GTK_REVEALER (userlist_revealer), TRUE);
+		}
+		else
+		{
+			gtk_revealer_set_reveal_child (GTK_REVEALER (userlist_revealer), FALSE);
+			gtk_widget_set_visible (userlist_revealer, FALSE);
+		}
+	}
+	fe_gtk4_adw_sync_userlist_button (visible ? TRUE : FALSE);
 }
 
 gboolean
 fe_gtk4_userlist_get_visible (void)
 {
-	if (userlist_panel)
-		return gtk_widget_get_visible (userlist_panel);
+	if (userlist_revealer)
+		return gtk_widget_get_visible (userlist_revealer) &&
+			gtk_revealer_get_reveal_child (GTK_REVEALER (userlist_revealer));
 
 	return prefs.hex_gui_ulist_hide ? FALSE : TRUE;
 }

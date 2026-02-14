@@ -19,42 +19,28 @@ static GtkTextTag *tag_stamp;
 static GtkTextTag *tag_bold;
 static GtkTextTag *tag_italic;
 static GtkTextTag *tag_underline;
+static GtkTextTag *tag_link_hover;
 static GtkTextTag *tag_font;
 static char *xtext_search_text;
 static GtkTextMark *xtext_search_mark;
+static GtkTextMark *xtext_hover_start_mark;
+static GtkTextMark *xtext_hover_end_mark;
+static char *xtext_primary_pending_target;
+static int xtext_secondary_pending_type;
+static char *xtext_secondary_pending_target;
+static double xtext_secondary_pending_x;
+static double xtext_secondary_pending_y;
 
 static void xtext_render_raw_append (const char *raw);
 
 static gboolean
-xtext_is_word_char (gunichar ch)
+xtext_is_space_char (gunichar ch)
 {
-	if (g_unichar_isalnum (ch))
-		return TRUE;
-
-	switch (ch)
-	{
-	case '_':
-	case '-':
-	case '[':
-	case ']':
-	case '\\':
-	case '`':
-	case '^':
-	case '{':
-	case '}':
-	case '|':
-	case '#':
-	case '&':
-		return TRUE;
-	default:
-		break;
-	}
-
-	return FALSE;
+	return g_unichar_isspace (ch) ? TRUE : FALSE;
 }
 
 static char *
-xtext_word_at_point (GtkTextView *view, double x, double y)
+xtext_token_at_point (GtkTextView *view, double x, double y, GtkTextIter *start_out, GtkTextIter *end_out)
 {
 	GtkTextIter iter;
 	GtkTextIter start;
@@ -77,7 +63,7 @@ xtext_word_at_point (GtkTextView *view, double x, double y)
 	end = iter;
 
 	ch = gtk_text_iter_get_char (&iter);
-	if (!xtext_is_word_char (ch))
+	if (xtext_is_space_char (ch))
 	{
 		GtkTextIter prev;
 
@@ -85,7 +71,7 @@ xtext_word_at_point (GtkTextView *view, double x, double y)
 		if (!gtk_text_iter_backward_char (&prev))
 			return NULL;
 		ch = gtk_text_iter_get_char (&prev);
-		if (!xtext_is_word_char (ch))
+		if (xtext_is_space_char (ch))
 			return NULL;
 		start = prev;
 		end = prev;
@@ -100,7 +86,7 @@ xtext_word_at_point (GtkTextView *view, double x, double y)
 		if (!gtk_text_iter_backward_char (&prev))
 			break;
 		prev_ch = gtk_text_iter_get_char (&prev);
-		if (!xtext_is_word_char (prev_ch))
+		if (xtext_is_space_char (prev_ch))
 			break;
 		start = prev;
 	}
@@ -112,7 +98,7 @@ xtext_word_at_point (GtkTextView *view, double x, double y)
 
 		next = end;
 		next_ch = gtk_text_iter_get_char (&next);
-		if (!xtext_is_word_char (next_ch))
+		if (xtext_is_space_char (next_ch))
 			break;
 		if (!gtk_text_iter_forward_char (&end))
 			break;
@@ -129,52 +115,351 @@ xtext_word_at_point (GtkTextView *view, double x, double y)
 		return NULL;
 	}
 
+	if (start_out)
+		*start_out = start;
+	if (end_out)
+		*end_out = end;
+
 	return word;
 }
 
 static void
-xtext_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+xtext_classify_at_point (GtkTextView *view, session *sess, double x, double y, int *type_out, char **target_out,
+	GtkTextIter *match_start_out, GtkTextIter *match_end_out)
+{
+	char *token;
+	char *target;
+	GtkTextIter token_start;
+	int type;
+	int start;
+	int end;
+	gsize len;
+
+	if (type_out)
+		*type_out = 0;
+	if (target_out)
+		*target_out = NULL;
+	if (match_start_out)
+		gtk_text_buffer_get_start_iter (gtk_text_view_get_buffer (view), match_start_out);
+	if (match_end_out)
+		gtk_text_buffer_get_start_iter (gtk_text_view_get_buffer (view), match_end_out);
+
+	token = xtext_token_at_point (view, x, y, &token_start, NULL);
+	if (!token)
+		return;
+
+	type = url_check_word (token);
+	if (type == 0 && sess && sess->type == SESS_DIALOG)
+		type = WORD_DIALOG;
+
+	if (type == 0)
+	{
+		g_free (token);
+		return;
+	}
+
+	target = NULL;
+	if (type == WORD_DIALOG)
+	{
+		target = g_strdup (sess && sess->channel[0] ? sess->channel : "");
+	}
+	else
+	{
+		GtkTextIter match_start;
+		GtkTextIter match_end;
+		int start_chars;
+		int end_chars;
+
+		url_last (&start, &end);
+		len = strlen (token);
+		if (start < 0 || end <= start || (gsize) end > len)
+		{
+			start = 0;
+			end = (int) len;
+		}
+
+		match_start = token_start;
+		match_end = token_start;
+		start_chars = g_utf8_pointer_to_offset (token, token + start);
+		end_chars = g_utf8_pointer_to_offset (token, token + end);
+		gtk_text_iter_forward_chars (&match_start, start_chars);
+		gtk_text_iter_forward_chars (&match_end, end_chars);
+		if (match_start_out)
+			*match_start_out = match_start;
+		if (match_end_out)
+			*match_end_out = match_end;
+
+		target = g_strndup (token + start, end - start);
+		if (type == WORD_EMAIL && target[0])
+		{
+			char *mailto;
+
+			mailto = g_strdup_printf ("mailto:%s", target);
+			g_free (target);
+			target = mailto;
+		}
+	}
+	g_free (token);
+
+	if (!target || !target[0])
+	{
+		g_free (target);
+		return;
+	}
+
+	if (type_out)
+		*type_out = type;
+	if (target_out)
+		*target_out = target;
+	else
+		g_free (target);
+}
+
+static gboolean
+xtext_type_is_url_like (int type)
+{
+	return (type == WORD_URL || type == WORD_HOST || type == WORD_HOST6 || type == WORD_EMAIL);
+}
+
+static void
+xtext_primary_pending_clear (void)
+{
+	g_free (xtext_primary_pending_target);
+	xtext_primary_pending_target = NULL;
+}
+
+static void
+xtext_secondary_pending_clear (void)
+{
+	g_free (xtext_secondary_pending_target);
+	xtext_secondary_pending_target = NULL;
+	xtext_secondary_pending_type = 0;
+	xtext_secondary_pending_x = 0.0;
+	xtext_secondary_pending_y = 0.0;
+}
+
+static void
+xtext_link_hover_clear (void)
+{
+	GtkTextIter start;
+	GtkTextIter end;
+
+	if (!log_buffer || !tag_link_hover || !xtext_hover_start_mark || !xtext_hover_end_mark)
+		return;
+
+	gtk_text_buffer_get_iter_at_mark (log_buffer, &start, xtext_hover_start_mark);
+	gtk_text_buffer_get_iter_at_mark (log_buffer, &end, xtext_hover_end_mark);
+	if (gtk_text_iter_compare (&start, &end) < 0)
+		gtk_text_buffer_remove_tag (log_buffer, tag_link_hover, &start, &end);
+
+	gtk_text_buffer_delete_mark (log_buffer, xtext_hover_start_mark);
+	gtk_text_buffer_delete_mark (log_buffer, xtext_hover_end_mark);
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
+}
+
+static gboolean
+xtext_link_hover_is_same_range (const GtkTextIter *start, const GtkTextIter *end)
+{
+	GtkTextIter current_start;
+	GtkTextIter current_end;
+
+	if (!log_buffer || !xtext_hover_start_mark || !xtext_hover_end_mark)
+		return FALSE;
+
+	gtk_text_buffer_get_iter_at_mark (log_buffer, &current_start, xtext_hover_start_mark);
+	gtk_text_buffer_get_iter_at_mark (log_buffer, &current_end, xtext_hover_end_mark);
+
+	return gtk_text_iter_equal (&current_start, start) && gtk_text_iter_equal (&current_end, end);
+}
+
+static void
+xtext_link_hover_set (const GtkTextIter *start, const GtkTextIter *end)
+{
+	GtkTextIter start_iter;
+	GtkTextIter end_iter;
+
+	if (!log_buffer || !tag_link_hover || !start || !end)
+	{
+		xtext_link_hover_clear ();
+		return;
+	}
+	start_iter = *start;
+	end_iter = *end;
+	if (gtk_text_iter_compare (&start_iter, &end_iter) >= 0)
+	{
+		xtext_link_hover_clear ();
+		return;
+	}
+
+	if (xtext_link_hover_is_same_range (start, end))
+		return;
+
+	xtext_link_hover_clear ();
+	gtk_text_buffer_apply_tag (log_buffer, tag_link_hover, &start_iter, &end_iter);
+	xtext_hover_start_mark = gtk_text_buffer_create_mark (log_buffer, NULL, &start_iter, TRUE);
+	xtext_hover_end_mark = gtk_text_buffer_create_mark (log_buffer, NULL, &end_iter, FALSE);
+}
+
+static void
+xtext_primary_press_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
 {
 	session *sess;
-	char *word;
 	int type;
-	const char *nick;
+	char *target;
 
 	(void) user_data;
 
 	if (n_press != 1 || !log_view)
 		return;
 
+	xtext_primary_pending_clear ();
+
 	sess = current_tab;
 	if (!sess || !is_session (sess))
 		return;
 
-	word = xtext_word_at_point (GTK_TEXT_VIEW (log_view), x, y);
-	if (!word)
+	xtext_classify_at_point (GTK_TEXT_VIEW (log_view), sess, x, y, &type, &target, NULL, NULL);
+	if (!target)
 		return;
 
-	type = url_check_word (word);
-	if (type == 0 && sess->type == SESS_DIALOG)
-		type = WORD_DIALOG;
-
-	if (type != WORD_NICK && type != WORD_DIALOG)
+	if (xtext_type_is_url_like (type))
 	{
-		g_free (word);
-		return;
-	}
-
-	if (type == WORD_DIALOG)
-		nick = sess->channel;
-	else
-		nick = word;
-
-	if (nick && nick[0])
-	{
-		fe_gtk4_menu_show_nickmenu (log_view, x, y, sess, nick);
+		xtext_primary_pending_target = target;
 		gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 	}
+	else
+	{
+		g_free (target);
+	}
+}
 
-	g_free (word);
+static void
+xtext_primary_release_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+{
+	(void) x;
+	(void) y;
+	(void) user_data;
+
+	if (n_press != 1 || !xtext_primary_pending_target)
+		return;
+
+	fe_open_url (xtext_primary_pending_target);
+	gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+	xtext_primary_pending_clear ();
+}
+
+static void
+xtext_secondary_press_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+{
+	session *sess;
+	int type;
+	char *target;
+
+	(void) user_data;
+
+	if (n_press != 1 || !log_view)
+		return;
+
+	xtext_secondary_pending_clear ();
+
+	sess = current_tab;
+	if (!sess || !is_session (sess))
+		return;
+
+	xtext_classify_at_point (GTK_TEXT_VIEW (log_view), sess, x, y, &type, &target, NULL, NULL);
+	if (!target)
+		return;
+
+	if (xtext_type_is_url_like (type) || type == WORD_NICK || type == WORD_DIALOG)
+	{
+		xtext_secondary_pending_type = type;
+		xtext_secondary_pending_target = target;
+		xtext_secondary_pending_x = x;
+		xtext_secondary_pending_y = y;
+		gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+	}
+	else
+	{
+		g_free (target);
+	}
+}
+
+static void
+xtext_secondary_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+{
+	session *sess;
+
+	(void) user_data;
+
+	if (n_press != 1 || !log_view || !xtext_secondary_pending_target)
+		return;
+
+	sess = current_tab;
+	if (!sess || !is_session (sess))
+	{
+		xtext_secondary_pending_clear ();
+		return;
+	}
+
+	if (xtext_type_is_url_like (xtext_secondary_pending_type))
+		fe_gtk4_menu_show_urlmenu (log_view, xtext_secondary_pending_x, xtext_secondary_pending_y,
+			sess, xtext_secondary_pending_target);
+	else if (xtext_secondary_pending_type == WORD_NICK || xtext_secondary_pending_type == WORD_DIALOG)
+		fe_gtk4_menu_show_nickmenu (log_view, xtext_secondary_pending_x, xtext_secondary_pending_y,
+			sess, xtext_secondary_pending_target);
+
+	gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+	xtext_secondary_pending_clear ();
+}
+
+static void
+xtext_motion_cb (GtkEventControllerMotion *controller, double x, double y, gpointer user_data)
+{
+	session *sess;
+	int type;
+	char *target;
+	GtkTextIter match_start;
+	GtkTextIter match_end;
+
+	(void) controller;
+	(void) user_data;
+
+	if (!log_view)
+		return;
+
+	sess = current_tab;
+	if (!sess || !is_session (sess))
+	{
+		gtk_widget_set_cursor_from_name (log_view, NULL);
+		xtext_link_hover_clear ();
+		return;
+	}
+
+	xtext_classify_at_point (GTK_TEXT_VIEW (log_view), sess, x, y, &type, &target, &match_start, &match_end);
+	if (target && xtext_type_is_url_like (type))
+	{
+		gtk_widget_set_cursor_from_name (log_view, "pointer");
+		xtext_link_hover_set (&match_start, &match_end);
+	}
+	else
+	{
+		gtk_widget_set_cursor_from_name (log_view, NULL);
+		xtext_link_hover_clear ();
+	}
+
+	g_free (target);
+}
+
+static void
+xtext_motion_leave_cb (GtkEventControllerMotion *controller, gpointer user_data)
+{
+	(void) controller;
+	(void) user_data;
+
+	if (log_view)
+		gtk_widget_set_cursor_from_name (log_view, NULL);
+	xtext_link_hover_clear ();
 }
 
 static void
@@ -598,6 +883,8 @@ xtext_render_raw_all (const char *raw)
 	if (!log_buffer)
 		return;
 
+	xtext_link_hover_clear ();
+
 	gtk_text_buffer_get_bounds (log_buffer, &start, &end);
 	gtk_text_buffer_delete (log_buffer, &start, &end);
 
@@ -719,8 +1006,13 @@ fe_gtk4_xtext_cleanup (void)
 	tag_bold = NULL;
 	tag_italic = NULL;
 	tag_underline = NULL;
+	tag_link_hover = NULL;
 	tag_font = NULL;
 	xtext_search_mark = NULL;
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
+	xtext_primary_pending_clear ();
+	xtext_secondary_pending_clear ();
 	g_free (xtext_search_text);
 	xtext_search_text = NULL;
 }
@@ -742,11 +1034,25 @@ fe_gtk4_xtext_create_widget (void)
 	gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (log_view), GTK_WRAP_WORD_CHAR);
 	{
 		GtkGesture *gesture;
+		GtkEventController *motion;
+
+		gesture = gtk_gesture_click_new ();
+		gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_PRIMARY);
+		g_signal_connect (gesture, "pressed", G_CALLBACK (xtext_primary_press_cb), NULL);
+		g_signal_connect (gesture, "released", G_CALLBACK (xtext_primary_release_cb), NULL);
+		gtk_widget_add_controller (log_view, GTK_EVENT_CONTROLLER (gesture));
 
 		gesture = gtk_gesture_click_new ();
 		gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
-		g_signal_connect (gesture, "pressed", G_CALLBACK (xtext_right_click_cb), NULL);
+		gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (gesture), GTK_PHASE_CAPTURE);
+		g_signal_connect (gesture, "pressed", G_CALLBACK (xtext_secondary_press_cb), NULL);
+		g_signal_connect (gesture, "released", G_CALLBACK (xtext_secondary_click_cb), NULL);
 		gtk_widget_add_controller (log_view, GTK_EVENT_CONTROLLER (gesture));
+
+		motion = gtk_event_controller_motion_new ();
+		g_signal_connect (motion, "motion", G_CALLBACK (xtext_motion_cb), NULL);
+		g_signal_connect (motion, "leave", G_CALLBACK (xtext_motion_leave_cb), NULL);
+		gtk_widget_add_controller (log_view, motion);
 	}
 	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), log_view);
 
@@ -761,6 +1067,9 @@ fe_gtk4_xtext_create_widget (void)
 	tag_underline = gtk_text_buffer_create_tag (log_buffer, "hc-underline",
 		"underline", PANGO_UNDERLINE_SINGLE,
 		NULL);
+	tag_link_hover = gtk_text_buffer_create_tag (log_buffer, "hc-link-hover",
+		"underline", PANGO_UNDERLINE_SINGLE,
+		NULL);
 	tag_font = gtk_text_buffer_create_tag (log_buffer, "hc-font", NULL);
 
 	xtext_color_to_rgba (COL_FG, &stamp_rgba);
@@ -772,6 +1081,8 @@ fe_gtk4_xtext_create_widget (void)
 		g_hash_table_remove_all (color_tags);
 
 	xtext_search_mark = NULL;
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
 	xtext_apply_font_pref ();
 
 	return scroll;
