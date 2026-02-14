@@ -43,6 +43,8 @@ GtkWidget *fe_gtk4_adw_window_new (void);
 void fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content);
 void fe_gtk4_adw_attach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_detach_menu_bar (GtkWidget *menu_widget);
+void fe_gtk4_adw_set_menu_model (GMenuModel *model);
+gboolean fe_gtk4_adw_use_hamburger_menu (void);
 GtkApplication *fe_gtk4_get_application (void);
 session *fe_gtk4_window_target_session (void);
 void fe_gtk4_append_log_text (const char *text);

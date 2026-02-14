@@ -425,8 +425,7 @@ win_action_network_list (GSimpleAction *action, GVariant *parameter, gpointer us
 	(void) userdata;
 
 	sess = window_target_session ();
-	if (sess)
-		fe_serverlist_open (sess);
+	fe_serverlist_open (sess);
 }
 
 static void
@@ -1283,7 +1282,8 @@ fe_gtk4_rebuild_menu_bar (void)
 	g_object_unref (hexchat_menu);
 
 	view_menu = g_menu_new ();
-	g_menu_append (view_menu, _("Menu Bar"), "win.toggle-menubar");
+	if (!fe_gtk4_adw_use_hamburger_menu ())
+		g_menu_append (view_menu, _("Menu Bar"), "win.toggle-menubar");
 	g_menu_append (view_menu, _("Topic Bar"), "win.toggle-topicbar");
 	g_menu_append (view_menu, _("User List"), "win.toggle-userlist");
 	g_menu_append (view_menu, _("User List Buttons"), "win.toggle-userlist-buttons");
@@ -1441,8 +1441,15 @@ fe_gtk4_rebuild_menu_bar (void)
 		menu_bar = NULL;
 	}
 
-	menu_bar = gtk_popover_menu_bar_new_from_model (G_MENU_MODEL (root));
-	fe_gtk4_adw_attach_menu_bar (menu_bar);
+	if (fe_gtk4_adw_use_hamburger_menu ())
+	{
+		fe_gtk4_adw_set_menu_model (G_MENU_MODEL (root));
+	}
+	else
+	{
+		menu_bar = gtk_popover_menu_bar_new_from_model (G_MENU_MODEL (root));
+		fe_gtk4_adw_attach_menu_bar (menu_bar);
+	}
 	g_object_unref (root);
 	fe_gtk4_menu_sync_actions ();
 }
