@@ -41,6 +41,7 @@ void fe_gtk4_adw_init (void);
 GtkApplication *fe_gtk4_adw_application_new (void);
 GtkWidget *fe_gtk4_adw_window_new (void);
 void fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content);
+void fe_gtk4_adw_set_window_title (const char *title);
 void fe_gtk4_adw_attach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_detach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_set_menu_model (GMenuModel *model);
@@ -84,6 +85,7 @@ void fe_gtk4_menu_cleanup (void);
 void fe_gtk4_menu_register_actions (void);
 void fe_gtk4_rebuild_menu_bar (void);
 void fe_gtk4_menu_sync_actions (void);
+void fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess, const char *nick);
 
 void fe_gtk4_maingui_set_menubar_visible (gboolean visible);
 gboolean fe_gtk4_maingui_get_menubar_visible (void);

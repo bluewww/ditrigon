@@ -1,5 +1,7 @@
 /* HexChat GTK4 menu model and window actions */
 #include "fe-gtk4.h"
+#include "../common/url.h"
+#include "../common/userlist.h"
 
 #define usercommands_help  _("User Commands - Special codes:\n\n" \
 	"%c  =  current channel\n" \
@@ -229,6 +231,453 @@ menu_target_session (void)
 	if (sess_list)
 		return sess_list->data;
 	return NULL;
+}
+
+typedef struct
+{
+	GtkWidget *root_popover;
+	session *sess;
+	char *nick;
+	char *allnicks;
+} HcNickMenuContext;
+
+typedef struct
+{
+	HcNickMenuContext *ctx;
+	char *cmd;
+} HcNickMenuItemData;
+
+typedef struct
+{
+	GtkWidget *box;
+	GtkWidget *submenu_button;
+	int childcount;
+} HcNickMenuLevel;
+
+static void
+nick_menu_context_free (gpointer data)
+{
+	HcNickMenuContext *ctx;
+
+	ctx = data;
+	if (!ctx)
+		return;
+
+	g_free (ctx->nick);
+	g_free (ctx->allnicks);
+	g_free (ctx);
+}
+
+static void
+nick_menu_item_data_free (gpointer data, GClosure *closure)
+{
+	HcNickMenuItemData *item_data;
+
+	(void) closure;
+	item_data = data;
+	if (!item_data)
+		return;
+
+	g_free (item_data->cmd);
+	g_free (item_data);
+}
+
+static void
+nick_menu_exec_command (session *sess, const char *cmd)
+{
+	char *line;
+
+	if (!sess || !cmd || !cmd[0])
+		return;
+
+	if (cmd[0] == '!')
+	{
+		hexchat_exec ((char *) cmd + 1);
+		return;
+	}
+
+	line = g_strdup (cmd);
+	handle_command (sess, line, TRUE);
+	g_free (line);
+}
+
+static void
+nick_menu_command_parse (session *sess, const char *cmd, const char *nick, const char *allnick)
+{
+	struct User *user;
+	const char *host;
+	const char *account;
+	const char *nick_safe;
+	const char *allnicks_safe;
+	const char *network;
+	char *buf;
+	char *at;
+	int len;
+
+	if (!sess || !cmd)
+		return;
+
+	nick_safe = nick ? nick : "";
+	allnicks_safe = allnick ? allnick : nick_safe;
+	host = _("Host unknown");
+	account = _("Account unknown");
+
+	user = userlist_find (sess, nick_safe);
+	if (user)
+	{
+		if (user->hostname && user->hostname[0])
+		{
+			at = strchr (user->hostname, '@');
+			if (at && at[1])
+				host = at + 1;
+			else
+				host = user->hostname;
+		}
+		if (user->account && user->account[0])
+			account = user->account;
+	}
+
+	network = server_get_network (sess->server, TRUE);
+	if (!network)
+		network = "";
+
+	len = (int) strlen (cmd) + (int) strlen (nick_safe) + (int) strlen (allnicks_safe) + 512;
+	buf = g_malloc (len);
+	auto_insert (buf, len, (char *) cmd, 0, 0, (char *) allnicks_safe,
+		sess->channel, "",
+		(char *) network, (char *) host,
+		sess->server ? sess->server->nick : "", (char *) nick_safe, (char *) account);
+	nick_menu_exec_command (sess, buf);
+	g_free (buf);
+}
+
+static void
+nick_menu_item_activate_cb (GtkButton *button, gpointer userdata)
+{
+	HcNickMenuItemData *item_data;
+	HcNickMenuContext *ctx;
+
+	(void) button;
+	item_data = userdata;
+	if (!item_data || !item_data->ctx)
+		return;
+
+	ctx = item_data->ctx;
+	nick_menu_command_parse (ctx->sess, item_data->cmd, ctx->nick, ctx->allnicks);
+	if (ctx->root_popover)
+		gtk_popover_popdown (GTK_POPOVER (ctx->root_popover));
+}
+
+static void
+nick_menu_extract_icon (const char *name, char **label, char **icon)
+{
+	const char *p;
+	const char *start;
+	const char *end;
+
+	if (!name)
+	{
+		*label = g_strdup ("");
+		*icon = NULL;
+		return;
+	}
+
+	p = name;
+	start = NULL;
+	end = NULL;
+	while (*p)
+	{
+		if (*p == '~' && (p == name || p[-1] != '\\'))
+		{
+			if (!start)
+				start = p + 1;
+			else if (!end)
+				end = p + 1;
+		}
+		p++;
+	}
+
+	if (!end)
+		end = p;
+
+	if (start && start != end)
+	{
+		*label = g_strndup (name, (gsize) ((start - name) - 1));
+		*icon = g_strndup (start, (gsize) ((end - start) - 1));
+	}
+	else
+	{
+		*label = g_strdup (name);
+		*icon = NULL;
+	}
+}
+
+static GtkWidget *
+nick_menu_new_button (const char *label, const char *icon)
+{
+	GtkWidget *button;
+
+	if (!icon || !icon[0])
+	{
+		button = gtk_button_new_with_mnemonic (label ? label : "");
+	}
+	else
+	{
+		GtkWidget *row;
+		GtkWidget *image;
+		GtkWidget *text;
+
+		button = gtk_button_new ();
+		row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+		image = gtk_image_new_from_icon_name (icon);
+		text = gtk_label_new (label ? label : "");
+		gtk_label_set_use_underline (GTK_LABEL (text), TRUE);
+		gtk_label_set_xalign (GTK_LABEL (text), 0.0f);
+		gtk_box_append (GTK_BOX (row), image);
+		gtk_box_append (GTK_BOX (row), text);
+		gtk_button_set_child (GTK_BUTTON (button), row);
+	}
+
+	gtk_widget_set_hexpand (button, TRUE);
+	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+	return button;
+}
+
+static void
+nick_menu_append_info_row (GtkWidget *grid, int row, const char *title, const char *value)
+{
+	GtkWidget *name;
+	GtkWidget *text;
+
+	name = gtk_label_new (title);
+	gtk_label_set_xalign (GTK_LABEL (name), 0.0f);
+	gtk_widget_add_css_class (name, "heading");
+	gtk_grid_attach (GTK_GRID (grid), name, 0, row, 1, 1);
+
+	text = gtk_label_new (value ? value : "");
+	gtk_label_set_xalign (GTK_LABEL (text), 0.0f);
+	gtk_label_set_selectable (GTK_LABEL (text), TRUE);
+	gtk_grid_attach (GTK_GRID (grid), text, 1, row, 1, 1);
+}
+
+static GtkWidget *
+nick_menu_create_info_popover (GtkWidget *relative_to, session *sess, const char *nick)
+{
+	GtkWidget *popover;
+	GtkWidget *grid;
+	struct User *user;
+	char mins[96];
+	char *real;
+	const char *host;
+	const char *account;
+	const char *serv;
+	const char *last_msg;
+	char *users_country;
+
+	if (!sess || !nick || !nick[0])
+		return NULL;
+	(void) relative_to;
+
+	user = userlist_find (sess, nick);
+	if (!user && sess->server)
+		user = userlist_find_global (sess->server, (char *) nick);
+	if (!user)
+		return NULL;
+
+	popover = gtk_popover_new ();
+
+	grid = gtk_grid_new ();
+	gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
+	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+	gtk_widget_set_margin_start (grid, 10);
+	gtk_widget_set_margin_end (grid, 10);
+	gtk_widget_set_margin_top (grid, 10);
+	gtk_widget_set_margin_bottom (grid, 10);
+	gtk_popover_set_child (GTK_POPOVER (popover), grid);
+
+	real = user->realname ? strip_color (user->realname, -1, STRIP_ALL) : NULL;
+	host = (user->hostname && user->hostname[0]) ? user->hostname : _("Unknown");
+	account = (user->account && user->account[0]) ? user->account : _("Unknown");
+	serv = (user->servername && user->servername[0]) ? user->servername : _("Unknown");
+	if (user->lasttalk)
+	{
+		g_snprintf (mins, sizeof (mins), _("%u minutes ago"),
+			(unsigned int) ((time (NULL) - user->lasttalk) / 60));
+		last_msg = mins;
+	}
+	else
+	{
+		last_msg = _("Unknown");
+	}
+
+	nick_menu_append_info_row (grid, 0, _("Real Name:"), real ? real : _("Unknown"));
+	nick_menu_append_info_row (grid, 1, _("User:"), host);
+	nick_menu_append_info_row (grid, 2, _("Account:"), account);
+	users_country = country (user->hostname);
+	if (users_country && users_country[0])
+		nick_menu_append_info_row (grid, 3, _("Country:"), users_country);
+	nick_menu_append_info_row (grid, users_country && users_country[0] ? 4 : 3, _("Server:"), serv);
+	nick_menu_append_info_row (grid, users_country && users_country[0] ? 5 : 4, _("Last Msg:"), last_msg);
+
+	g_free (real);
+	return popover;
+}
+
+void
+fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess, const char *nick)
+{
+	GtkWidget *popover;
+	GtkWidget *root;
+	GPtrArray *levels;
+	HcNickMenuContext *ctx;
+	GSList *list;
+	HcNickMenuLevel *level;
+	GdkRectangle rect;
+
+	if (!parent || !sess || !nick || !nick[0] || !is_session (sess))
+		return;
+
+	popover = gtk_popover_new ();
+	gtk_widget_set_parent (popover, parent);
+	g_signal_connect_swapped (popover, "closed",
+		G_CALLBACK (gtk_widget_unparent), popover);
+
+	ctx = g_new0 (HcNickMenuContext, 1);
+	ctx->root_popover = popover;
+	ctx->sess = sess;
+	ctx->nick = g_strdup (nick);
+	ctx->allnicks = g_strdup (nick);
+	g_object_set_data_full (G_OBJECT (popover), "hc-nick-menu-context", ctx, nick_menu_context_free);
+
+	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
+	gtk_widget_set_margin_start (root, 6);
+	gtk_widget_set_margin_end (root, 6);
+	gtk_widget_set_margin_top (root, 6);
+	gtk_widget_set_margin_bottom (root, 6);
+	gtk_popover_set_child (GTK_POPOVER (popover), root);
+
+	{
+		GtkWidget *info_button;
+		GtkWidget *info_popover;
+
+		info_popover = nick_menu_create_info_popover (root, sess, nick);
+		if (info_popover)
+		{
+			info_button = gtk_menu_button_new ();
+			gtk_button_set_label (GTK_BUTTON (info_button), nick);
+			gtk_widget_set_hexpand (info_button, TRUE);
+			gtk_widget_set_halign (info_button, GTK_ALIGN_FILL);
+			gtk_menu_button_set_popover (GTK_MENU_BUTTON (info_button), info_popover);
+			gtk_box_append (GTK_BOX (root), info_button);
+			gtk_box_append (GTK_BOX (root), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
+		}
+	}
+
+	levels = g_ptr_array_new_with_free_func (g_free);
+	level = g_new0 (HcNickMenuLevel, 1);
+	level->box = root;
+	g_ptr_array_add (levels, level);
+
+	list = popup_list;
+	while (list)
+	{
+		struct popup *pop;
+		HcNickMenuLevel *current;
+
+		pop = (struct popup *) list->data;
+		current = g_ptr_array_index (levels, levels->len - 1);
+		if (!pop || !current)
+		{
+			list = list->next;
+			continue;
+		}
+
+		if (!g_ascii_strncasecmp (pop->name, "SUB", 3))
+		{
+			GtkWidget *sub_button;
+			GtkWidget *sub_popover;
+			GtkWidget *sub_box;
+			HcNickMenuLevel *sub_level;
+
+			sub_button = gtk_menu_button_new ();
+			gtk_button_set_label (GTK_BUTTON (sub_button), pop->cmd ? pop->cmd : "");
+			gtk_widget_set_hexpand (sub_button, TRUE);
+			gtk_widget_set_halign (sub_button, GTK_ALIGN_FILL);
+
+			sub_popover = gtk_popover_new ();
+			sub_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
+			gtk_widget_set_margin_start (sub_box, 6);
+			gtk_widget_set_margin_end (sub_box, 6);
+			gtk_widget_set_margin_top (sub_box, 6);
+			gtk_widget_set_margin_bottom (sub_box, 6);
+			gtk_popover_set_child (GTK_POPOVER (sub_popover), sub_box);
+			gtk_menu_button_set_popover (GTK_MENU_BUTTON (sub_button), sub_popover);
+			gtk_box_append (GTK_BOX (current->box), sub_button);
+			current->childcount++;
+
+			sub_level = g_new0 (HcNickMenuLevel, 1);
+			sub_level->box = sub_box;
+			sub_level->submenu_button = sub_button;
+			g_ptr_array_add (levels, sub_level);
+			list = list->next;
+			continue;
+		}
+
+		if (!g_ascii_strncasecmp (pop->name, "ENDSUB", 6))
+		{
+			if (levels->len > 1)
+			{
+				HcNickMenuLevel *finished;
+				HcNickMenuLevel *parent_level;
+
+				finished = g_ptr_array_index (levels, levels->len - 1);
+				parent_level = g_ptr_array_index (levels, levels->len - 2);
+				if (finished && parent_level && finished->childcount < 1 && finished->submenu_button)
+					gtk_box_remove (GTK_BOX (parent_level->box), finished->submenu_button);
+				g_ptr_array_set_size (levels, levels->len - 1);
+			}
+			list = list->next;
+			continue;
+		}
+
+		if (!g_ascii_strncasecmp (pop->name, "SEP", 3))
+		{
+			gtk_box_append (GTK_BOX (current->box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
+			list = list->next;
+			continue;
+		}
+
+		{
+			GtkWidget *button;
+			HcNickMenuItemData *item_data;
+			char *label;
+			char *icon;
+
+			nick_menu_extract_icon (pop->name, &label, &icon);
+			button = nick_menu_new_button (label, icon);
+			item_data = g_new0 (HcNickMenuItemData, 1);
+			item_data->ctx = ctx;
+			item_data->cmd = g_strdup (pop->cmd ? pop->cmd : "");
+			g_signal_connect_data (button, "clicked",
+				G_CALLBACK (nick_menu_item_activate_cb), item_data,
+				nick_menu_item_data_free, 0);
+			gtk_box_append (GTK_BOX (current->box), button);
+			current->childcount++;
+			g_free (label);
+			g_free (icon);
+		}
+
+		list = list->next;
+	}
+
+	g_ptr_array_free (levels, TRUE);
+
+	rect.x = (int) x;
+	rect.y = (int) y;
+	rect.width = 1;
+	rect.height = 1;
+	gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
+	gtk_popover_popup (GTK_POPOVER (popover));
 }
 
 static void

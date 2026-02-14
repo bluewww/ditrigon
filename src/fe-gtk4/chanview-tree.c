@@ -1016,6 +1016,8 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	(void) user_data;
 
 	expander = gtk_tree_expander_new ();
+	gtk_tree_expander_set_indent_for_depth (GTK_TREE_EXPANDER (expander), FALSE);
+	gtk_tree_expander_set_indent_for_icon (GTK_TREE_EXPANDER (expander), FALSE);
 	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_add_css_class (row_box, "hc-tree-row");
 	gtk_widget_set_hexpand (row_box, TRUE);

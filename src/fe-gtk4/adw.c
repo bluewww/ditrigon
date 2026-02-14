@@ -9,6 +9,7 @@
 static GtkWidget *adw_toolbar_view;
 static GtkWidget *adw_header_bar;
 static GtkWidget *adw_menu_button;
+static GtkWidget *adw_title_widget;
 
 static void
 adw_new_item_clicked_cb (AdwSplitButton *button, gpointer userdata)
@@ -107,6 +108,7 @@ void
 fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 {
 #ifdef USE_LIBADWAITA
+	adw_title_widget = NULL;
 	if (ADW_IS_WINDOW (window))
 	{
 		GtkWidget *title;
@@ -117,6 +119,7 @@ fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 		adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
 		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
 		title = adw_window_title_new (PACKAGE_NAME, NULL);
+		adw_title_widget = title;
 		adw_header_bar_set_title_widget (ADW_HEADER_BAR (adw_header_bar), title);
 
 		button = adw_new_item_button_new ();
@@ -149,6 +152,7 @@ fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 		adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
 		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
 		title = adw_window_title_new (PACKAGE_NAME, NULL);
+		adw_title_widget = title;
 		adw_header_bar_set_title_widget (ADW_HEADER_BAR (adw_header_bar), title);
 
 		button = adw_new_item_button_new ();
@@ -173,6 +177,21 @@ fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 #endif
 
 	gtk_window_set_child (GTK_WINDOW (window), content);
+}
+
+void
+fe_gtk4_adw_set_window_title (const char *title)
+{
+#ifdef USE_LIBADWAITA
+	if (adw_title_widget && ADW_IS_WINDOW_TITLE (adw_title_widget))
+	{
+		adw_window_title_set_title (ADW_WINDOW_TITLE (adw_title_widget),
+			(title && title[0]) ? title : PACKAGE_NAME);
+		adw_window_title_set_subtitle (ADW_WINDOW_TITLE (adw_title_widget), NULL);
+	}
+#else
+	(void) title;
+#endif
 }
 
 void

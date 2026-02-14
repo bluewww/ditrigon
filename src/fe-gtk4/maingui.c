@@ -19,6 +19,7 @@ static GtkWidget *topic_entry;
 static GtkWidget *entry_row;
 static GtkWidget *input_nick_box;
 static GtkWidget *input_nick_button;
+static GtkWidget *input_send_button;
 static gboolean pane_positions_ready;
 
 #define GUI_PANE_LEFT_DEFAULT 128
@@ -338,6 +339,7 @@ fe_gtk4_maingui_cleanup (void)
 	entry_row = NULL;
 	input_nick_box = NULL;
 	input_nick_button = NULL;
+	input_send_button = NULL;
 	pane_positions_ready = FALSE;
 }
 
@@ -391,16 +393,30 @@ send_command (const char *cmd)
 }
 
 static void
-entry_activate_cb (GtkEntry *entry, gpointer userdata)
+entry_send_cb (GtkWidget *button, gpointer userdata)
 {
 	const char *text;
 
-	text = gtk_editable_get_text (GTK_EDITABLE (entry));
+	(void) button;
+	(void) userdata;
+
+	if (!command_entry)
+		return;
+
+	text = gtk_editable_get_text (GTK_EDITABLE (command_entry));
 	if (!text || !*text)
 		return;
 
 	send_command (text);
-	gtk_editable_set_text (GTK_EDITABLE (entry), "");
+	gtk_editable_set_text (GTK_EDITABLE (command_entry), "");
+	gtk_widget_grab_focus (command_entry);
+}
+
+static void
+entry_activate_cb (GtkEntry *entry, gpointer userdata)
+{
+	(void) entry;
+	entry_send_cb (NULL, userdata);
 }
 
 static gboolean
@@ -514,6 +530,14 @@ fe_gtk4_create_main_window (void)
 	sexy_spell_entry_set_parse_attributes (SEXY_SPELL_ENTRY (command_entry), prefs.hex_gui_input_attr);
 	sexy_spell_entry_activate_default_languages (SEXY_SPELL_ENTRY (command_entry));
 	entry_apply_input_font ();
+
+	input_send_button = gtk_button_new_from_icon_name ("mail-send-symbolic");
+	gtk_widget_set_tooltip_text (input_send_button, _("Send Message"));
+	gtk_widget_set_size_request (input_send_button, 30, -1);
+	gtk_widget_add_css_class (input_send_button, "flat");
+	gtk_box_append (GTK_BOX (entry_row), input_send_button);
+	g_signal_connect (input_send_button, "clicked", G_CALLBACK (entry_send_cb), NULL);
+
 	entry_update_nick (current_tab);
 
 	window_actions = g_simple_action_group_new ();
@@ -1141,6 +1165,7 @@ fe_set_title (struct session *sess)
 	if (!sess || !sess->server)
 	{
 		gtk_window_set_title (GTK_WINDOW (main_window), display_name);
+		fe_gtk4_adw_set_window_title (display_name);
 		return;
 	}
 
@@ -1150,6 +1175,7 @@ fe_set_title (struct session *sess)
 	if (!sess->server->connected && sess->type != SESS_DIALOG)
 	{
 		gtk_window_set_title (GTK_WINDOW (main_window), display_name);
+		fe_gtk4_adw_set_window_title (display_name);
 		return;
 	}
 
@@ -1200,6 +1226,7 @@ fe_set_title (struct session *sess)
 	}
 
 	gtk_window_set_title (GTK_WINDOW (main_window), tbuf);
+	fe_gtk4_adw_set_window_title (tbuf);
 }
 
 void

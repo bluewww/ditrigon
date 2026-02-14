@@ -1,5 +1,7 @@
 /* HexChat GTK4 text view/log buffer */
 #include "fe-gtk4.h"
+#include "../common/url.h"
+#include "../common/userlist.h"
 
 typedef struct
 {
@@ -22,6 +24,158 @@ static char *xtext_search_text;
 static GtkTextMark *xtext_search_mark;
 
 static void xtext_render_raw_append (const char *raw);
+
+static gboolean
+xtext_is_word_char (gunichar ch)
+{
+	if (g_unichar_isalnum (ch))
+		return TRUE;
+
+	switch (ch)
+	{
+	case '_':
+	case '-':
+	case '[':
+	case ']':
+	case '\\':
+	case '`':
+	case '^':
+	case '{':
+	case '}':
+	case '|':
+	case '#':
+	case '&':
+		return TRUE;
+	default:
+		break;
+	}
+
+	return FALSE;
+}
+
+static char *
+xtext_word_at_point (GtkTextView *view, double x, double y)
+{
+	GtkTextIter iter;
+	GtkTextIter start;
+	GtkTextIter end;
+	int buffer_x;
+	int buffer_y;
+	GtkTextBuffer *buffer;
+	gunichar ch;
+	char *word;
+
+	if (!view)
+		return NULL;
+
+	gtk_text_view_window_to_buffer_coords (view, GTK_TEXT_WINDOW_WIDGET,
+		(int) x, (int) y, &buffer_x, &buffer_y);
+	if (!gtk_text_view_get_iter_at_location (view, &iter, buffer_x, buffer_y))
+		return NULL;
+
+	start = iter;
+	end = iter;
+
+	ch = gtk_text_iter_get_char (&iter);
+	if (!xtext_is_word_char (ch))
+	{
+		GtkTextIter prev;
+
+		prev = iter;
+		if (!gtk_text_iter_backward_char (&prev))
+			return NULL;
+		ch = gtk_text_iter_get_char (&prev);
+		if (!xtext_is_word_char (ch))
+			return NULL;
+		start = prev;
+		end = prev;
+	}
+
+	while (!gtk_text_iter_starts_line (&start))
+	{
+		GtkTextIter prev;
+		gunichar prev_ch;
+
+		prev = start;
+		if (!gtk_text_iter_backward_char (&prev))
+			break;
+		prev_ch = gtk_text_iter_get_char (&prev);
+		if (!xtext_is_word_char (prev_ch))
+			break;
+		start = prev;
+	}
+
+	while (!gtk_text_iter_ends_line (&end))
+	{
+		GtkTextIter next;
+		gunichar next_ch;
+
+		next = end;
+		next_ch = gtk_text_iter_get_char (&next);
+		if (!xtext_is_word_char (next_ch))
+			break;
+		if (!gtk_text_iter_forward_char (&end))
+			break;
+	}
+
+	if (gtk_text_iter_compare (&start, &end) >= 0)
+		return NULL;
+
+	buffer = gtk_text_view_get_buffer (view);
+	word = gtk_text_buffer_get_text (buffer, &start, &end, FALSE);
+	if (!word || !word[0])
+	{
+		g_free (word);
+		return NULL;
+	}
+
+	return word;
+}
+
+static void
+xtext_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+{
+	session *sess;
+	char *word;
+	int type;
+	const char *nick;
+
+	(void) user_data;
+
+	if (n_press != 1 || !log_view)
+		return;
+
+	sess = current_tab;
+	if (!sess || !is_session (sess))
+		return;
+
+	word = xtext_word_at_point (GTK_TEXT_VIEW (log_view), x, y);
+	if (!word)
+		return;
+
+	type = url_check_word (word);
+	if (type == 0 && sess->type == SESS_DIALOG)
+		type = WORD_DIALOG;
+
+	if (type != WORD_NICK && type != WORD_DIALOG)
+	{
+		g_free (word);
+		return;
+	}
+
+	if (type == WORD_DIALOG)
+		nick = sess->channel;
+	else
+		nick = word;
+
+	if (nick && nick[0])
+	{
+		fe_gtk4_menu_show_nickmenu (log_view, x, y, sess, nick);
+		gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+	}
+
+	g_free (word);
+}
 
 static void
 session_log_free (gpointer data)
@@ -586,6 +740,14 @@ fe_gtk4_xtext_create_widget (void)
 	gtk_text_view_set_cursor_visible (GTK_TEXT_VIEW (log_view), FALSE);
 	gtk_text_view_set_monospace (GTK_TEXT_VIEW (log_view), TRUE);
 	gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (log_view), GTK_WRAP_WORD_CHAR);
+	{
+		GtkGesture *gesture;
+
+		gesture = gtk_gesture_click_new ();
+		gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
+		g_signal_connect (gesture, "pressed", G_CALLBACK (xtext_right_click_cb), NULL);
+		gtk_widget_add_controller (log_view, GTK_EVENT_CONTROLLER (gesture));
+	}
 	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), log_view);
 
 	log_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (log_view));

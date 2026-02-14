@@ -478,11 +478,15 @@ userlist_apply_row (GtkListItem *list_item, HcUserItem *item)
 }
 
 static void
+userlist_row_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data);
+
+static void
 userlist_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
 	GtkWidget *row;
 	GtkWidget *image;
 	GtkWidget *label;
+	GtkGesture *gesture;
 
 	(void) factory;
 	(void) user_data;
@@ -497,6 +501,11 @@ userlist_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_
 
 	g_object_set_data (G_OBJECT (list_item), "hc-user-image", image);
 	g_object_set_data (G_OBJECT (list_item), "hc-user-label", label);
+	gesture = gtk_gesture_click_new ();
+	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect (gesture, "pressed",
+		G_CALLBACK (userlist_row_right_click_cb), list_item);
+	gtk_widget_add_controller (row, GTK_EVENT_CONTROLLER (gesture));
 	gtk_list_item_set_child (list_item, row);
 }
 
@@ -580,6 +589,38 @@ userlist_activate_cb (GtkListView *list, guint position, gpointer user_data)
 		handle_command (current_sess, cmd, FALSE);
 	g_free (cmd);
 	g_object_unref (item);
+}
+
+static void
+userlist_row_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+{
+	GtkListItem *list_item;
+	HcUserItem *item;
+	guint position;
+	GtkWidget *widget;
+
+	if (n_press != 1 || !userlist_session || !is_session (userlist_session))
+		return;
+
+	list_item = GTK_LIST_ITEM (user_data);
+	item = (HcUserItem *) gtk_list_item_get_item (list_item);
+	if (!item || !item->user || !item->user->nick[0])
+		return;
+
+	position = gtk_list_item_get_position (list_item);
+	if (userlist_selection && position != GTK_INVALID_LIST_POSITION &&
+		!gtk_selection_model_is_selected (GTK_SELECTION_MODEL (userlist_selection), position))
+	{
+		userlist_select_syncing = TRUE;
+		gtk_selection_model_unselect_all (GTK_SELECTION_MODEL (userlist_selection));
+		gtk_selection_model_select_item (GTK_SELECTION_MODEL (userlist_selection), position, TRUE);
+		userlist_select_syncing = FALSE;
+		fe_userlist_set_selected (userlist_session);
+	}
+
+	widget = gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (gesture));
+	fe_gtk4_menu_show_nickmenu (widget, x, y, userlist_session, item->user->nick);
+	gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 }
 
 void
