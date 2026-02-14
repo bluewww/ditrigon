@@ -39,6 +39,7 @@ static GtkSingleSelection *tree_selection;
 static GtkWidget *tree_scroller;
 static GtkWidget *tree_view;
 static gboolean tree_select_syncing;
+static gboolean tree_css_loaded;
 
 typedef struct
 {
@@ -55,6 +56,133 @@ typedef struct
 } HcServerToggleData;
 
 static gboolean tree_group_by_server (void);
+static gboolean tree_node_has_children (HcChanNode *node);
+
+static void
+tree_load_css (void)
+{
+	GtkCssProvider *provider;
+	GdkDisplay *display;
+
+	if (tree_css_loaded)
+		return;
+
+	display = gdk_display_get_default ();
+	if (!display)
+		return;
+
+	provider = gtk_css_provider_new ();
+	gtk_css_provider_load_from_string (provider,
+		".hc-tree-row { border-radius: 8px; padding: 1px 0; }"
+		".hc-tree-label { padding: 1px 0; }"
+		".hc-tree-icon { opacity: 0.82; }"
+		".hc-tree-server { color: alpha(@theme_fg_color, 0.88); font-weight: 600; }"
+		".hc-tree-data { color: @theme_fg_color; font-weight: 600; }"
+		".hc-tree-msg { color: #b54708; font-weight: 700; }"
+		".hc-tree-hilight { color: #c01c28; font-weight: 700; }");
+	gtk_style_context_add_provider_for_display (display,
+		GTK_STYLE_PROVIDER (provider),
+		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+	g_object_unref (provider);
+	tree_css_loaded = TRUE;
+}
+
+static const char *
+tree_node_icon_name (HcChanNode *node)
+{
+	session *sess;
+
+	if (!node)
+		return "chat-message-new-symbolic";
+
+	sess = node->sess;
+	if (!sess)
+	{
+		if (node->children)
+			return "network-workgroup-symbolic";
+		return "chat-message-new-symbolic";
+	}
+
+	switch (sess->type)
+	{
+	case SESS_SERVER:
+		return "network-server-symbolic";
+	case SESS_CHANNEL:
+		return "chat-message-new-symbolic";
+	case SESS_DIALOG:
+		return "user-available-symbolic";
+	case SESS_NOTICES:
+	case SESS_SNOTICES:
+		return "dialog-information-symbolic";
+	default:
+		return "applications-system-symbolic";
+	}
+}
+
+static void
+tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
+{
+	static const char *const classes[] =
+	{
+		"hc-tree-server",
+		"hc-tree-data",
+		"hc-tree-msg",
+		"hc-tree-hilight"
+	};
+	guint i;
+
+	for (i = 0; i < G_N_ELEMENTS (classes); i++)
+	{
+		if (row_box)
+			gtk_widget_remove_css_class (row_box, classes[i]);
+		if (label)
+			gtk_widget_remove_css_class (label, classes[i]);
+	}
+}
+
+static void
+tree_apply_state_classes (GtkWidget *row_box, GtkWidget *label, HcChanNode *node)
+{
+	session *sess;
+
+	sess = node ? node->sess : NULL;
+	tree_clear_state_classes (row_box, label);
+
+	if ((sess && sess->type == SESS_SERVER) || (node && node->children && !sess))
+	{
+		if (row_box)
+			gtk_widget_add_css_class (row_box, "hc-tree-server");
+		if (label)
+			gtk_widget_add_css_class (label, "hc-tree-server");
+	}
+
+	if (!sess || sess == current_tab)
+		return;
+
+	if (sess->tab_state & TAB_STATE_NEW_HILIGHT)
+	{
+		if (row_box)
+			gtk_widget_add_css_class (row_box, "hc-tree-hilight");
+		if (label)
+			gtk_widget_add_css_class (label, "hc-tree-hilight");
+		return;
+	}
+	if (sess->tab_state & TAB_STATE_NEW_MSG)
+	{
+		if (row_box)
+			gtk_widget_add_css_class (row_box, "hc-tree-msg");
+		if (label)
+			gtk_widget_add_css_class (label, "hc-tree-msg");
+		return;
+	}
+	if (sess->tab_state & TAB_STATE_NEW_DATA)
+	{
+		if (row_box)
+			gtk_widget_add_css_class (row_box, "hc-tree-data");
+		if (label)
+			gtk_widget_add_css_class (label, "hc-tree-data");
+	}
+}
 
 static gboolean
 tree_node_has_children (HcChanNode *node)
@@ -63,6 +191,44 @@ tree_node_has_children (HcChanNode *node)
 		return FALSE;
 
 	return g_list_model_get_n_items (G_LIST_MODEL (node->children)) > 0;
+}
+
+static void
+tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
+{
+	GtkWidget *expander;
+	GtkWidget *row_box;
+	GtkWidget *icon;
+	GtkWidget *label;
+
+	if (!list_item)
+		return;
+
+	expander = gtk_list_item_get_child (list_item);
+	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
+	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
+	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
+
+	if (label)
+	{
+		gtk_label_set_text (GTK_LABEL (label), node && node->label ? node->label : "");
+		gtk_widget_set_tooltip_text (label, (node && node->label && node->label[0]) ? node->label : NULL);
+	}
+
+	if (icon)
+	{
+		gtk_image_set_from_icon_name (GTK_IMAGE (icon), tree_node_icon_name (node));
+		gtk_widget_set_visible (icon, prefs.hex_gui_tab_icons != 0);
+	}
+
+	if (expander)
+	{
+		gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander),
+			tree_node_has_children (node) ? FALSE : TRUE);
+		gtk_widget_set_tooltip_text (expander, (node && node->label && node->label[0]) ? node->label : NULL);
+	}
+
+	tree_apply_state_classes (row_box, label, node);
 }
 
 static session *
@@ -813,7 +979,6 @@ static void
 tree_children_changed_cb (GListModel *model, guint position, guint removed, guint added, gpointer user_data)
 {
 	GtkListItem *list_item;
-	GtkWidget *expander;
 	GtkTreeListRow *row;
 	HcChanNode *node;
 
@@ -823,50 +988,58 @@ tree_children_changed_cb (GListModel *model, guint position, guint removed, guin
 	(void) added;
 
 	list_item = GTK_LIST_ITEM (user_data);
-	expander = gtk_list_item_get_child (list_item);
-	if (!expander)
-		return;
-
 	row = GTK_TREE_LIST_ROW (gtk_list_item_get_item (list_item));
 	node = row ? (HcChanNode *) gtk_tree_list_row_get_item (row) : NULL;
-	gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander),
-		tree_node_has_children (node) ? FALSE : TRUE);
+	tree_update_list_item (list_item, node);
 }
 
 static void
 tree_label_notify_cb (HcChanNode *node, GParamSpec *pspec, gpointer user_data)
 {
 	GtkListItem *list_item;
-	GtkWidget *expander;
-	GtkWidget *label;
 
-	(void) node;
 	(void) pspec;
 
 	list_item = GTK_LIST_ITEM (user_data);
-	expander = gtk_list_item_get_child (list_item);
-	if (!expander)
-		return;
-
-	label = gtk_tree_expander_get_child (GTK_TREE_EXPANDER (expander));
-	if (label)
-		gtk_label_set_text (GTK_LABEL (label), node && node->label ? node->label : "");
+	tree_update_list_item (list_item, node);
 }
 
 static void
 tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
 	GtkWidget *expander;
+	GtkWidget *row_box;
+	GtkWidget *icon;
 	GtkWidget *label;
 
 	(void) factory;
 	(void) user_data;
 
 	expander = gtk_tree_expander_new ();
+	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_add_css_class (row_box, "hc-tree-row");
+	gtk_widget_set_hexpand (row_box, TRUE);
+
+	icon = gtk_image_new_from_icon_name ("chat-message-new-symbolic");
+	gtk_widget_add_css_class (icon, "hc-tree-icon");
+	gtk_widget_set_valign (icon, GTK_ALIGN_CENTER);
+	gtk_box_append (GTK_BOX (row_box), icon);
+
 	label = gtk_label_new ("");
+	gtk_widget_add_css_class (label, "hc-tree-label");
+	gtk_widget_set_hexpand (label, TRUE);
+	gtk_widget_set_halign (label, GTK_ALIGN_FILL);
 	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_tree_expander_set_child (GTK_TREE_EXPANDER (expander), label);
+	gtk_label_set_single_line_mode (GTK_LABEL (label), TRUE);
+	gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
+	gtk_box_append (GTK_BOX (row_box), label);
+
+	gtk_tree_expander_set_child (GTK_TREE_EXPANDER (expander), row_box);
 	gtk_list_item_set_child (list_item, expander);
+
+	g_object_set_data (G_OBJECT (list_item), "hc-tree-row-box", row_box);
+	g_object_set_data (G_OBJECT (list_item), "hc-tree-icon", icon);
+	g_object_set_data (G_OBJECT (list_item), "hc-tree-label", label);
 }
 
 static void
@@ -875,7 +1048,6 @@ tree_factory_bind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item,
 	GtkTreeListRow *row;
 	HcChanNode *node;
 	GtkWidget *expander;
-	GtkWidget *label;
 
 	(void) factory;
 	(void) user_data;
@@ -888,11 +1060,7 @@ tree_factory_bind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item,
 		return;
 
 	gtk_tree_expander_set_list_row (GTK_TREE_EXPANDER (expander), row);
-	gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander),
-		tree_node_has_children (node) ? FALSE : TRUE);
-	label = gtk_tree_expander_get_child (GTK_TREE_EXPANDER (expander));
-	if (label)
-		gtk_label_set_text (GTK_LABEL (label), node && node->label ? node->label : "");
+	tree_update_list_item (list_item, node);
 
 	if (node)
 	{
@@ -909,7 +1077,9 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	GtkTreeListRow *row;
 	HcChanNode *node;
 	GtkWidget *expander;
+	GtkWidget *row_box;
 	GtkWidget *label;
+	GtkWidget *icon;
 
 	(void) factory;
 	(void) user_data;
@@ -928,10 +1098,21 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	if (!expander)
 		return;
 
+	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
+	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
+	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
+
 	gtk_tree_expander_set_list_row (GTK_TREE_EXPANDER (expander), NULL);
-	label = gtk_tree_expander_get_child (GTK_TREE_EXPANDER (expander));
+	if (row_box)
+		tree_clear_state_classes (row_box, label);
 	if (label)
+	{
 		gtk_label_set_text (GTK_LABEL (label), "");
+		gtk_widget_set_tooltip_text (label, NULL);
+	}
+	if (icon)
+		gtk_image_set_from_icon_name (GTK_IMAGE (icon), "chat-message-new-symbolic");
+	gtk_widget_set_tooltip_text (expander, NULL);
 }
 
 void
@@ -977,9 +1158,11 @@ fe_gtk4_chanview_tree_create_widget (void)
 
 	if (!tree_scroller)
 	{
+		tree_load_css ();
 		tree_scroller = gtk_scrolled_window_new ();
 		gtk_widget_set_hexpand (tree_scroller, FALSE);
 		gtk_widget_set_vexpand (tree_scroller, TRUE);
+		gtk_scrolled_window_set_has_frame (GTK_SCROLLED_WINDOW (tree_scroller), FALSE);
 		gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (tree_scroller),
 			GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 
@@ -1001,6 +1184,8 @@ fe_gtk4_chanview_tree_create_widget (void)
 			GTK_SELECTION_MODEL (g_object_ref (tree_selection)),
 			GTK_LIST_ITEM_FACTORY (g_object_ref (factory)));
 		gtk_list_view_set_single_click_activate (GTK_LIST_VIEW (tree_view), FALSE);
+		gtk_list_view_set_show_separators (GTK_LIST_VIEW (tree_view), FALSE);
+		gtk_widget_add_css_class (tree_view, "navigation-sidebar");
 		gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (tree_scroller), tree_view);
 		g_object_unref (factory);
 
