@@ -2,6 +2,9 @@
 option('gtk-frontend', type: 'boolean',
   description: 'Main graphical interface'
 )
+option('gtk4-frontend', type: 'boolean', value: false,
+  description: 'Experimental GTK4 frontend'
+)
 option('text-frontend', type: 'boolean', value: false,
   description: 'Text interface (not generally useful)'
 )
@@ -21,6 +24,9 @@ option('dbus', type: 'feature', value: 'auto',
 )
 option('libcanberra', type: 'feature', value: 'auto',
   description: 'Support for sound alerts, Unix only'
+)
+option('libadwaita', type: 'feature', value: 'auto',
+  description: 'Support for GNOME libadwaita styling in GTK4 frontend'
 )
 
 # Install options
