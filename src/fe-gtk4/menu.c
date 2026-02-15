@@ -772,6 +772,8 @@ typedef struct
 	char *url;
 } HcUrlMenuContext;
 
+static GtkWidget *active_url_popover;
+
 static void
 url_menu_context_free (gpointer data)
 {
@@ -783,6 +785,29 @@ url_menu_context_free (gpointer data)
 
 	g_free (ctx->url);
 	g_free (ctx);
+}
+
+static void
+url_menu_popover_closed_cb (GtkPopover *popover, gpointer user_data)
+{
+	(void) user_data;
+
+	if (active_url_popover == GTK_WIDGET (popover))
+		active_url_popover = NULL;
+
+	if (gtk_widget_get_parent (GTK_WIDGET (popover)))
+		gtk_widget_unparent (GTK_WIDGET (popover));
+}
+
+static void
+url_menu_close_active (void)
+{
+	if (!active_url_popover)
+		return;
+
+	if (gtk_widget_get_parent (active_url_popover))
+		gtk_widget_unparent (active_url_popover);
+	active_url_popover = NULL;
 }
 
 static void
@@ -878,10 +903,15 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	if (!parent || !url || !url[0])
 		return;
 
+	url_menu_close_active ();
+
 	popover = gtk_popover_new ();
+	active_url_popover = popover;
 	gtk_widget_set_parent (popover, parent);
-	g_signal_connect_swapped (popover, "closed",
-		G_CALLBACK (gtk_widget_unparent), popover);
+	g_signal_connect (popover, "closed",
+		G_CALLBACK (url_menu_popover_closed_cb), NULL);
+	gtk_popover_set_autohide (GTK_POPOVER (popover), TRUE);
+	gtk_popover_set_cascade_popdown (GTK_POPOVER (popover), TRUE);
 
 	ctx = g_new0 (HcUrlMenuContext, 1);
 	ctx->popover = popover;
@@ -895,27 +925,32 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	gtk_widget_set_margin_end (box, 6);
 	gtk_widget_set_margin_top (box, 6);
 	gtk_widget_set_margin_bottom (box, 6);
+	gtk_widget_add_css_class (box, "menu");
 	gtk_popover_set_child (GTK_POPOVER (popover), box);
 
 	button = gtk_button_new_with_label (_("Open Link"));
+	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 
 	button = gtk_button_new_with_label (_("Open Link in Browser"));
+	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_browser_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 
 	button = gtk_button_new_with_label (_("Open Link in New Window"));
+	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_new_window_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 
 	button = gtk_button_new_with_label (_("Copy Selected Link"));
+	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_copy_cb), ctx);
