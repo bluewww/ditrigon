@@ -193,6 +193,18 @@ tree_node_has_children (HcChanNode *node)
 	return g_list_model_get_n_items (G_LIST_MODEL (node->children)) > 0;
 }
 
+static gboolean
+tree_node_is_server_entry (HcChanNode *node)
+{
+	if (!node)
+		return FALSE;
+
+	if (node->sess && node->sess->type == SESS_SERVER)
+		return TRUE;
+
+	return node->children && !node->sess;
+}
+
 static void
 tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 {
@@ -200,6 +212,7 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	GtkWidget *row_box;
 	GtkWidget *icon;
 	GtkWidget *label;
+	gboolean server_entry;
 
 	if (!list_item)
 		return;
@@ -208,6 +221,7 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
 	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
 	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
+	server_entry = tree_node_is_server_entry (node);
 
 	if (label)
 	{
@@ -217,8 +231,15 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 
 	if (icon)
 	{
-		gtk_image_set_from_icon_name (GTK_IMAGE (icon), tree_node_icon_name (node));
-		gtk_widget_set_visible (icon, prefs.hex_gui_tab_icons != 0);
+		if (prefs.hex_gui_tab_icons != 0 && !server_entry)
+		{
+			gtk_image_set_from_icon_name (GTK_IMAGE (icon), tree_node_icon_name (node));
+			gtk_widget_set_visible (icon, TRUE);
+		}
+		else
+		{
+			gtk_widget_set_visible (icon, FALSE);
+		}
 	}
 
 	if (expander)
@@ -744,13 +765,13 @@ tree_server_label (server *serv)
 	const char *network;
 
 	if (!serv)
-		return g_strdup (_("[Server]"));
+		return g_strdup (_("Server"));
 
 	network = server_get_network (serv, TRUE);
 	if (!network || !network[0])
 		network = serv->servername[0] ? serv->servername : _("Server");
 
-	return g_strdup_printf ("[%s]", network);
+	return g_strdup (network);
 }
 
 static char *
@@ -769,7 +790,7 @@ tree_session_label (session *sess)
 		network = server_get_network (sess->server, TRUE);
 		if (!network || !network[0])
 			network = sess->server && sess->server->servername[0] ? sess->server->servername : _("Server");
-		base = g_strdup_printf ("[%s]", network);
+		base = g_strdup (network);
 	}
 	else if (!sess->channel[0] && sess->server &&
 		sess->type != SESS_DIALOG &&
@@ -779,7 +800,7 @@ tree_session_label (session *sess)
 		network = server_get_network (sess->server, TRUE);
 		if (!network || !network[0])
 			network = sess->server->servername[0] ? sess->server->servername : _("Server");
-		base = g_strdup_printf ("[%s]", network);
+		base = g_strdup (network);
 	}
 	else if (sess->channel[0])
 		base = g_strdup (sess->channel);
@@ -1016,13 +1037,14 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	(void) user_data;
 
 	expander = gtk_tree_expander_new ();
-	gtk_tree_expander_set_indent_for_depth (GTK_TREE_EXPANDER (expander), FALSE);
-	gtk_tree_expander_set_indent_for_icon (GTK_TREE_EXPANDER (expander), FALSE);
-	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_tree_expander_set_indent_for_depth (GTK_TREE_EXPANDER (expander), TRUE);
+	gtk_tree_expander_set_indent_for_icon (GTK_TREE_EXPANDER (expander), TRUE);
+	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
 	gtk_widget_add_css_class (row_box, "hc-tree-row");
 	gtk_widget_set_hexpand (row_box, TRUE);
 
 	icon = gtk_image_new_from_icon_name ("chat-message-new-symbolic");
+	gtk_widget_set_size_request (icon, 16, 16);
 	gtk_widget_add_css_class (icon, "hc-tree-icon");
 	gtk_widget_set_valign (icon, GTK_ALIGN_CENTER);
 	gtk_box_append (GTK_BOX (row_box), icon);
