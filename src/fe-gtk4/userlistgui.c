@@ -134,7 +134,9 @@ userlist_install_css (void)
 		".hc-user-role-voice-badge { background-color: alpha(#451984, 0.32); color: #c7a2fa; }\n"
 		".hc-user-role-op { color: #157915; }\n"
 		".hc-user-role-halfop { color: #856117; }\n"
-		".hc-user-role-voice { color: #451984; }\n";
+		".hc-user-role-voice { color: #451984; }\n"
+		".hc-userlist-empty label { font-size: 0.8em; }\n"
+		".hc-userlist-empty image { -gtk-icon-size: 52px; }\n";
 
 	userlist_css_provider = gtk_css_provider_new ();
 	gtk_css_provider_load_from_string (userlist_css_provider, css);
@@ -1076,6 +1078,7 @@ fe_gtk4_userlist_create_widget (void)
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_scroller);
 
 		userlist_empty_page = adw_status_page_new ();
+		gtk_widget_add_css_class (userlist_empty_page, "hc-userlist-empty");
 		gtk_widget_set_hexpand (userlist_empty_page, TRUE);
 		gtk_widget_set_vexpand (userlist_empty_page, TRUE);
 		gtk_widget_set_margin_start (userlist_empty_page, 8);
