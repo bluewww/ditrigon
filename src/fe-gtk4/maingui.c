@@ -951,6 +951,10 @@ fe_gtk4_create_main_window (void)
 		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (sidebar_header), FALSE);
 		new_item_button = fe_gtk4_adw_new_item_button ();
 		adw_header_bar_pack_start (ADW_HEADER_BAR (sidebar_header), new_item_button);
+		menu_button = gtk_menu_button_new ();
+		gtk_menu_button_set_icon_name (GTK_MENU_BUTTON (menu_button), "open-menu-symbolic");
+		gtk_widget_set_tooltip_text (menu_button, _("Main Menu"));
+		adw_header_bar_pack_end (ADW_HEADER_BAR (sidebar_header), menu_button);
 		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (sidebar_toolbar), sidebar_header);
 		adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (sidebar_toolbar), session_scroller);
 		adw_toolbar_view_set_top_bar_style (ADW_TOOLBAR_VIEW (sidebar_toolbar), ADW_TOOLBAR_FLAT);
@@ -981,11 +985,6 @@ fe_gtk4_create_main_window (void)
 		gtk_widget_set_tooltip_text (userlist_button, _("Hide User List"));
 		gtk_actionable_set_action_name (GTK_ACTIONABLE (userlist_button), "win.toggle-userlist");
 		adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), userlist_button);
-
-		menu_button = gtk_menu_button_new ();
-		gtk_menu_button_set_icon_name (GTK_MENU_BUTTON (menu_button), "open-menu-symbolic");
-		gtk_widget_set_tooltip_text (menu_button, _("Main Menu"));
-		adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), menu_button);
 
 		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (content_toolbar), content_header);
 		adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (content_toolbar), main_right_box);
