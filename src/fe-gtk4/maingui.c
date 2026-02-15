@@ -899,8 +899,50 @@ entry_key_pressed_cb (GtkEventControllerKey *controller,
 }
 
 static gboolean
+window_is_maximized (GtkWindow *window)
+{
+	return window ? gtk_window_is_maximized (window) : FALSE;
+}
+
+static gboolean
+window_is_fullscreen (GtkWindow *window)
+{
+	return window ? gtk_window_is_fullscreen (window) : FALSE;
+}
+
+static void
+window_save_geometry (GtkWindow *window)
+{
+	int width;
+	int height;
+	gboolean maximized;
+	gboolean fullscreen;
+
+	if (!window)
+		return;
+
+	maximized = window_is_maximized (window);
+	fullscreen = window_is_fullscreen (window);
+
+	prefs.hex_gui_win_state = maximized ? 1 : 0;
+	prefs.hex_gui_win_fullscreen = fullscreen ? 1 : 0;
+
+	if (!prefs.hex_gui_win_save || maximized || fullscreen)
+		return;
+
+	width = gtk_widget_get_width (GTK_WIDGET (window));
+	height = gtk_widget_get_height (GTK_WIDGET (window));
+	if (width > 0)
+		prefs.hex_gui_win_width = width;
+	if (height > 0)
+		prefs.hex_gui_win_height = height;
+}
+
+static gboolean
 window_close_request_cb (GtkWindow *window, gpointer userdata)
 {
+	(void) userdata;
+	window_save_geometry (window);
 	hexchat_exit ();
 	return TRUE;
 }
@@ -929,7 +971,12 @@ fe_gtk4_create_main_window (void)
 
 	main_window = fe_gtk4_adw_window_new ();
 	gtk_window_set_title (GTK_WINDOW (main_window), PACKAGE_NAME);
-	gtk_window_set_default_size (GTK_WINDOW (main_window), 960, 700);
+	if (prefs.hex_gui_win_save)
+		gtk_window_set_default_size (GTK_WINDOW (main_window),
+			MAX (prefs.hex_gui_win_width, 106),
+			MAX (prefs.hex_gui_win_height, 138));
+	else
+		gtk_window_set_default_size (GTK_WINDOW (main_window), 960, 700);
 	maingui_install_css ();
 
 	maingui_build_main_box_from_ui ();
@@ -1073,6 +1120,8 @@ fe_gtk4_create_main_window (void)
 
 	if (prefs.hex_gui_win_fullscreen)
 		gtk_window_fullscreen (GTK_WINDOW (main_window));
+	else if (prefs.hex_gui_win_state)
+		gtk_window_maximize (GTK_WINDOW (main_window));
 
 	fe_gtk4_menu_sync_actions ();
 	fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
