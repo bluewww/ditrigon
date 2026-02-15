@@ -26,20 +26,6 @@
             <property name="hexpand">True</property>
             <property name="vexpand">True</property>
             <child>
-              <object class="GtkBox" id="topic_row">
-                <property name="orientation">horizontal</property>
-                <property name="spacing">6</property>
-                <property name="margin-start">1</property>
-                <property name="margin-end">1</property>
-                <child>
-                  <object class="GtkEntry" id="topic_entry">
-                    <property name="editable">False</property>
-                    <property name="hexpand">True</property>
-                  </object>
-                </child>
-              </object>
-            </child>
-            <child>
               <object class="GtkBox" id="chat_scroll_slot">
                 <property name="orientation">vertical</property>
                 <property name="hexpand">True</property>

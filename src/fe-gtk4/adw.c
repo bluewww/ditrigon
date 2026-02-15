@@ -196,8 +196,19 @@ fe_gtk4_adw_set_window_title (const char *title)
 	{
 		adw_window_title_set_title (ADW_WINDOW_TITLE (adw_title_widget),
 			(title && title[0]) ? title : PACKAGE_NAME);
-		adw_window_title_set_subtitle (ADW_WINDOW_TITLE (adw_title_widget), NULL);
 	}
+}
+
+void
+fe_gtk4_adw_set_window_subtitle (const char *subtitle)
+{
+	if (!adw_title_widget || !ADW_IS_WINDOW_TITLE (adw_title_widget))
+		return;
+
+	adw_window_title_set_subtitle (ADW_WINDOW_TITLE (adw_title_widget),
+		(subtitle && subtitle[0]) ? subtitle : NULL);
+	gtk_widget_set_tooltip_text (adw_title_widget,
+		(subtitle && subtitle[0]) ? subtitle : NULL);
 }
 
 void

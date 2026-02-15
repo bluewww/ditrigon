@@ -17,8 +17,6 @@ GSimpleActionGroup *window_actions;
 static GtkWidget *main_right_paned;
 static GtkWidget *main_right_box;
 static GtkWidget *main_center_box;
-static GtkWidget *topic_row;
-static GtkWidget *topic_entry;
 static GtkWidget *entry_row;
 static GtkWidget *input_composer_box;
 static GtkWidget *input_nick_box;
@@ -105,8 +103,6 @@ maingui_build_chat_layout_from_ui (GtkWidget **chat_scroll_slot,
 	right_box = maingui_ui_get_widget_typed (builder, "main_right_box", GTK_TYPE_BOX);
 	main_right_paned = maingui_ui_get_widget_typed (builder, "main_right_paned", GTK_TYPE_PANED);
 	main_center_box = maingui_ui_get_widget_typed (builder, "main_center_box", GTK_TYPE_BOX);
-	topic_row = maingui_ui_get_widget_typed (builder, "topic_row", GTK_TYPE_BOX);
-	topic_entry = maingui_ui_get_widget_typed (builder, "topic_entry", GTK_TYPE_ENTRY);
 	entry_row = maingui_ui_get_widget_typed (builder, "entry_row", GTK_TYPE_BOX);
 	input_composer_box = maingui_ui_get_widget_typed (builder, "input_composer_box", GTK_TYPE_BOX);
 	input_nick_box = maingui_ui_get_widget_typed (builder, "input_nick_box", GTK_TYPE_BOX);
@@ -496,28 +492,39 @@ fe_gtk4_maingui_apply_input_font (void)
 	entry_apply_input_font ();
 }
 
+static gboolean
+topic_supports_session_type (session *sess)
+{
+	if (!sess)
+		return FALSE;
+
+	switch (sess->type)
+	{
+	case SESS_CHANNEL:
+	case SESS_DIALOG:
+	case SESS_NOTICES:
+	case SESS_SNOTICES:
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
+
 static void
 topic_update_for_session (session *sess)
 {
 	const char *topic;
 	char *topic_clean;
 	const char *shown_topic;
-	gboolean visible;
-
-	if (!topic_row || !topic_entry)
-		return;
+	gboolean can_show;
 
 	if (!sess)
 		sess = current_tab;
 
-	visible = prefs.hex_gui_topicbar != 0 &&
-		sess &&
-		(sess->type == SESS_CHANNEL || sess->type == SESS_DIALOG || sess->type == SESS_NOTICES || sess->type == SESS_SNOTICES);
-	gtk_widget_set_visible (topic_row, visible);
-	if (!visible)
+	can_show = prefs.hex_gui_topicbar != 0 && topic_supports_session_type (sess);
+	if (!can_show)
 	{
-		gtk_editable_set_text (GTK_EDITABLE (topic_entry), "");
-		gtk_widget_set_tooltip_text (topic_entry, NULL);
+		fe_gtk4_adw_set_window_subtitle (NULL);
 		return;
 	}
 
@@ -531,11 +538,7 @@ topic_update_for_session (session *sess)
 			shown_topic = topic_clean;
 	}
 
-	gtk_editable_set_text (GTK_EDITABLE (topic_entry), shown_topic);
-	if (shown_topic[0])
-		gtk_widget_set_tooltip_text (topic_entry, shown_topic);
-	else
-		gtk_widget_set_tooltip_text (topic_entry, _("No topic is set"));
+	fe_gtk4_adw_set_window_subtitle (shown_topic);
 
 	g_free (topic_clean);
 }
@@ -824,8 +827,6 @@ fe_gtk4_maingui_cleanup (void)
 	main_right_paned = NULL;
 	main_right_box = NULL;
 	main_center_box = NULL;
-	topic_row = NULL;
-	topic_entry = NULL;
 	main_nav_split = NULL;
 	main_nav_sidebar_page = NULL;
 	main_nav_content_page = NULL;
@@ -1627,14 +1628,10 @@ fe_set_topic (struct session *sess, char *topic, char *stripped_topic)
 	{
 		if (log_view)
 			gtk_widget_set_tooltip_text (log_view, shown_topic && shown_topic[0] ? shown_topic : NULL);
-		if (topic_entry)
-		{
-			gtk_editable_set_text (GTK_EDITABLE (topic_entry), shown_topic ? shown_topic : "");
-			if (shown_topic && shown_topic[0])
-				gtk_widget_set_tooltip_text (topic_entry, shown_topic);
-			else
-				gtk_widget_set_tooltip_text (topic_entry, _("No topic is set"));
-		}
+		if (prefs.hex_gui_topicbar && topic_supports_session_type (sess))
+			fe_gtk4_adw_set_window_subtitle (shown_topic);
+		else
+			fe_gtk4_adw_set_window_subtitle (NULL);
 	}
 }
 
@@ -1714,11 +1711,8 @@ fe_clear_channel (struct session *sess)
 	fe_text_clear (sess, 0);
 	if (sess == current_tab && log_view)
 		gtk_widget_set_tooltip_text (log_view, NULL);
-	if (sess == current_tab && topic_entry)
-	{
-		gtk_editable_set_text (GTK_EDITABLE (topic_entry), "");
-		gtk_widget_set_tooltip_text (topic_entry, NULL);
-	}
+	if (sess == current_tab)
+		topic_update_for_session (sess);
 }
 
 void
@@ -1785,12 +1779,14 @@ fe_set_title (struct session *sess)
 {
 	char tbuf[512];
 	const char *display_name;
+	const char *header_title;
 	const char *network;
 
 	if (!main_window)
 		return;
 
 	display_name = PACKAGE_NAME;
+	header_title = display_name;
 	if (!sess)
 		sess = current_tab;
 	if (sess)
@@ -1799,6 +1795,7 @@ fe_set_title (struct session *sess)
 	{
 		gtk_window_set_title (GTK_WINDOW (main_window), display_name);
 		fe_gtk4_adw_set_window_title (display_name);
+		topic_update_for_session (sess);
 		return;
 	}
 
@@ -1809,6 +1806,7 @@ fe_set_title (struct session *sess)
 	{
 		gtk_window_set_title (GTK_WINDOW (main_window), display_name);
 		fe_gtk4_adw_set_window_title (display_name);
+		topic_update_for_session (sess);
 		return;
 	}
 
@@ -1822,12 +1820,14 @@ fe_set_title (struct session *sess)
 		g_snprintf (tbuf, sizeof (tbuf), "%s %s @ %s - %s",
 			_("Dialog with"), sess->channel[0] ? sess->channel : "",
 			network, display_name);
+		header_title = sess->channel[0] ? sess->channel : network;
 		break;
 	case SESS_SERVER:
 		g_snprintf (tbuf, sizeof (tbuf), "%s%s%s - %s",
 			prefs.hex_gui_win_nick && sess->server->nick[0] ? sess->server->nick : "",
 			prefs.hex_gui_win_nick ? " @ " : "",
 			network, display_name);
+		header_title = network;
 		break;
 	case SESS_CHANNEL:
 		g_snprintf (tbuf, sizeof (tbuf), "%s%s%s / %s%s%s%s - %s",
@@ -1845,6 +1845,7 @@ fe_set_title (struct session *sess)
 			if (used < sizeof (tbuf))
 				g_snprintf (tbuf + used, sizeof (tbuf) - used, " (%d)", sess->total);
 		}
+		header_title = sess->channel[0] ? sess->channel : network;
 		break;
 	case SESS_NOTICES:
 	case SESS_SNOTICES:
@@ -1852,14 +1853,17 @@ fe_set_title (struct session *sess)
 			prefs.hex_gui_win_nick && sess->server->nick[0] ? sess->server->nick : "",
 			prefs.hex_gui_win_nick ? " @ " : "",
 			network, display_name);
+		header_title = network;
 		break;
 	default:
 		g_snprintf (tbuf, sizeof (tbuf), "%s", display_name);
+		header_title = display_name;
 		break;
 	}
 
 	gtk_window_set_title (GTK_WINDOW (main_window), tbuf);
-	fe_gtk4_adw_set_window_title (tbuf);
+	fe_gtk4_adw_set_window_title (header_title);
+	topic_update_for_session (sess);
 }
 
 void

@@ -47,6 +47,7 @@ void fe_gtk4_adw_bind_header_controls (GtkWidget *title_widget,
 	GtkWidget *userlist_button,
 	GtkWidget *menu_button);
 void fe_gtk4_adw_set_window_title (const char *title);
+void fe_gtk4_adw_set_window_subtitle (const char *subtitle);
 void fe_gtk4_adw_attach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_detach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_set_menu_model (GMenuModel *model);
