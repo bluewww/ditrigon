@@ -66,6 +66,7 @@ GtkWidget *fe_gtk4_chanview_create_widget (void);
 void fe_gtk4_chanview_add (session *sess);
 void fe_gtk4_chanview_remove (session *sess);
 void fe_gtk4_chanview_select (session *sess);
+void fe_gtk4_chanview_note_activity (session *sess, int color);
 void fe_gtk4_chanview_set_layout (int layout);
 int fe_gtk4_chanview_get_layout (void);
 

@@ -25,6 +25,7 @@ void fe_gtk4_chanview_tree_add (session *sess);
 void fe_gtk4_chanview_tree_remove (session *sess);
 void fe_gtk4_chanview_tree_select (session *sess);
 void fe_gtk4_chanview_tree_update_label (session *sess);
+void fe_gtk4_chanview_tree_note_activity (session *sess, int color);
 
 static HcChanviewImpl
 chanview_impl_from_prefs (void)
@@ -92,6 +93,22 @@ fe_gtk4_session_sidebar_update_label (session *sess)
 	case HC_CHANVIEW_TREE:
 	default:
 		fe_gtk4_chanview_tree_update_label (sess);
+		break;
+	}
+}
+
+void
+fe_gtk4_chanview_note_activity (session *sess, int color)
+{
+	switch (active_impl)
+	{
+	case HC_CHANVIEW_TABS:
+		(void) sess;
+		(void) color;
+		break;
+	case HC_CHANVIEW_TREE:
+	default:
+		fe_gtk4_chanview_tree_note_activity (sess, color);
 		break;
 	}
 }

@@ -33,6 +33,7 @@ static GParamSpec *chan_node_props[PROP_LAST];
 
 static GHashTable *tree_session_nodes;
 static GHashTable *tree_server_nodes;
+static GHashTable *tree_unread_counts;
 static GListStore *tree_root_nodes;
 static GtkTreeListModel *tree_model;
 static GtkSingleSelection *tree_selection;
@@ -76,14 +77,14 @@ tree_load_css (void)
 		".hc-tree-row { border-radius: 8px; min-height: 28px; padding: 1px 2px; }"
 		".hc-tree-label { padding: 1px 0; }"
 		".hc-tree-icon { opacity: 0.72; }"
-		".hc-tree-dot { min-width: 7px; min-height: 7px; border-radius: 999px; margin: 0 6px 0 4px; }"
+		".hc-tree-badge { min-width: 16px; padding: 0 6px; border-radius: 999px; margin: 0 4px 0 4px; font-size: 0.85em; font-weight: 700; }"
 		".hc-tree-server { color: alpha(@theme_fg_color, 0.90); font-weight: 600; }"
 		".hc-tree-data { color: @theme_fg_color; font-weight: 600; }"
 		".hc-tree-msg { color: @theme_fg_color; font-weight: 600; }"
 		".hc-tree-hilight { color: @theme_fg_color; font-weight: 700; }"
-		".hc-tree-dot-data { background-color: alpha(@theme_fg_color, 0.35); }"
-		".hc-tree-dot-msg { background-color: @accent_bg_color; }"
-		".hc-tree-dot-hilight { background-color: #e01b24; }");
+		".hc-tree-badge-data { background-color: alpha(@theme_fg_color, 0.18); color: @theme_fg_color; }"
+		".hc-tree-badge-msg { background-color: alpha(@accent_bg_color, 0.25); color: @accent_fg_color; }"
+		".hc-tree-badge-hilight { background-color: #e01b24; color: #ffffff; }");
 	gtk_style_context_add_provider_for_display (display,
 		GTK_STYLE_PROVIDER (provider),
 		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -145,21 +146,62 @@ tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
 }
 
 static void
-tree_clear_dot_classes (GtkWidget *dot)
+tree_clear_badge_classes (GtkWidget *badge)
 {
 	static const char *const classes[] =
 	{
-		"hc-tree-dot-data",
-		"hc-tree-dot-msg",
-		"hc-tree-dot-hilight"
+		"hc-tree-badge-data",
+		"hc-tree-badge-msg",
+		"hc-tree-badge-hilight"
 	};
 	guint i;
 
-	if (!dot)
+	if (!badge)
 		return;
 
 	for (i = 0; i < G_N_ELEMENTS (classes); i++)
-		gtk_widget_remove_css_class (dot, classes[i]);
+		gtk_widget_remove_css_class (badge, classes[i]);
+}
+
+static int
+tree_unread_count_get (session *sess)
+{
+	if (!tree_unread_counts || !sess)
+		return 0;
+
+	return GPOINTER_TO_INT (g_hash_table_lookup (tree_unread_counts, sess));
+}
+
+static void
+tree_unread_count_set (session *sess, int count)
+{
+	if (!tree_unread_counts || !sess)
+		return;
+
+	if (count <= 0)
+	{
+		g_hash_table_remove (tree_unread_counts, sess);
+		return;
+	}
+
+	if (count > 999)
+		count = 999;
+
+	g_hash_table_replace (tree_unread_counts, sess, GINT_TO_POINTER (count));
+}
+
+static void
+tree_unread_count_bump (session *sess)
+{
+	int count;
+
+	if (!sess)
+		return;
+
+	count = tree_unread_count_get (sess);
+	if (count < 999)
+		count++;
+	tree_unread_count_set (sess, count);
 }
 
 static void
@@ -234,10 +276,12 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	GtkWidget *row_box;
 	GtkWidget *icon;
 	GtkWidget *label;
-	GtkWidget *dot;
+	GtkWidget *badge;
 	session *sess;
-	gboolean show_dot;
+	gboolean show_badge;
 	gboolean server_entry;
+	int unread_count;
+	char unread_text[8];
 
 	if (!list_item)
 		return;
@@ -246,7 +290,7 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
 	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
 	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
-	dot = g_object_get_data (G_OBJECT (list_item), "hc-tree-dot");
+	badge = g_object_get_data (G_OBJECT (list_item), "hc-tree-badge");
 	sess = node ? node->sess : NULL;
 	server_entry = tree_node_is_server_entry (node);
 
@@ -279,31 +323,50 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 		gtk_widget_set_tooltip_text (expander, (node && node->label && node->label[0]) ? node->label : NULL);
 	}
 
-	if (dot)
+	if (badge)
 	{
-		tree_clear_dot_classes (dot);
-		show_dot = FALSE;
+		tree_clear_badge_classes (badge);
+		show_badge = FALSE;
+		unread_count = tree_unread_count_get (sess);
 
-		if (sess && sess != current_tab)
+		if (sess && sess != current_tab && !server_entry && unread_count > 0)
 		{
 			if (sess->tab_state & TAB_STATE_NEW_HILIGHT)
 			{
-				gtk_widget_add_css_class (dot, "hc-tree-dot-hilight");
-				show_dot = TRUE;
+				gtk_widget_add_css_class (badge, "hc-tree-badge-hilight");
+				show_badge = TRUE;
 			}
 			else if (sess->tab_state & TAB_STATE_NEW_MSG)
 			{
-				gtk_widget_add_css_class (dot, "hc-tree-dot-msg");
-				show_dot = TRUE;
+				gtk_widget_add_css_class (badge, "hc-tree-badge-msg");
+				show_badge = TRUE;
 			}
 			else if (sess->tab_state & TAB_STATE_NEW_DATA)
 			{
-				gtk_widget_add_css_class (dot, "hc-tree-dot-data");
-				show_dot = TRUE;
+				gtk_widget_add_css_class (badge, "hc-tree-badge-data");
+				show_badge = TRUE;
+			}
+			else
+			{
+				gtk_widget_add_css_class (badge, "hc-tree-badge-data");
+				show_badge = TRUE;
 			}
 		}
 
-		gtk_widget_set_visible (dot, show_dot);
+		if (show_badge)
+		{
+			if (unread_count > 99)
+				g_strlcpy (unread_text, "99+", sizeof unread_text);
+			else
+				g_snprintf (unread_text, sizeof unread_text, "%d", unread_count);
+			gtk_label_set_text (GTK_LABEL (badge), unread_text);
+		}
+		else
+		{
+			gtk_label_set_text (GTK_LABEL (badge), "");
+		}
+
+		gtk_widget_set_visible (badge, show_badge);
 	}
 
 	tree_apply_state_classes (row_box, label, node);
@@ -1074,7 +1137,7 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	GtkWidget *row_box;
 	GtkWidget *icon;
 	GtkWidget *label;
-	GtkWidget *dot;
+	GtkWidget *badge;
 
 	(void) factory;
 	(void) user_data;
@@ -1101,11 +1164,11 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
 	gtk_box_append (GTK_BOX (row_box), label);
 
-	dot = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-	gtk_widget_add_css_class (dot, "hc-tree-dot");
-	gtk_widget_set_valign (dot, GTK_ALIGN_CENTER);
-	gtk_widget_set_visible (dot, FALSE);
-	gtk_box_append (GTK_BOX (row_box), dot);
+	badge = gtk_label_new (NULL);
+	gtk_widget_add_css_class (badge, "hc-tree-badge");
+	gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+	gtk_widget_set_visible (badge, FALSE);
+	gtk_box_append (GTK_BOX (row_box), badge);
 
 	gtk_tree_expander_set_child (GTK_TREE_EXPANDER (expander), row_box);
 	gtk_list_item_set_child (list_item, expander);
@@ -1113,7 +1176,7 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-row-box", row_box);
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-icon", icon);
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-label", label);
-	g_object_set_data (G_OBJECT (list_item), "hc-tree-dot", dot);
+	g_object_set_data (G_OBJECT (list_item), "hc-tree-badge", badge);
 }
 
 static void
@@ -1154,7 +1217,7 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	GtkWidget *row_box;
 	GtkWidget *label;
 	GtkWidget *icon;
-	GtkWidget *dot;
+	GtkWidget *badge;
 
 	(void) factory;
 	(void) user_data;
@@ -1176,7 +1239,7 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
 	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
 	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
-	dot = g_object_get_data (G_OBJECT (list_item), "hc-tree-dot");
+	badge = g_object_get_data (G_OBJECT (list_item), "hc-tree-badge");
 
 	gtk_tree_expander_set_list_row (GTK_TREE_EXPANDER (expander), NULL);
 	if (row_box)
@@ -1188,10 +1251,11 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	}
 	if (icon)
 		gtk_image_set_from_icon_name (GTK_IMAGE (icon), "chat-message-new-symbolic");
-	if (dot)
+	if (badge)
 	{
-		tree_clear_dot_classes (dot);
-		gtk_widget_set_visible (dot, FALSE);
+		tree_clear_badge_classes (badge);
+		gtk_label_set_text (GTK_LABEL (badge), "");
+		gtk_widget_set_visible (badge, FALSE);
 	}
 	gtk_widget_set_tooltip_text (expander, NULL);
 }
@@ -1205,6 +1269,8 @@ fe_gtk4_chanview_tree_init (void)
 	if (!tree_server_nodes)
 		tree_server_nodes = g_hash_table_new_full (g_direct_hash, g_direct_equal,
 			NULL, g_object_unref);
+	if (!tree_unread_counts)
+		tree_unread_counts = g_hash_table_new (g_direct_hash, g_direct_equal);
 
 	tree_select_syncing = FALSE;
 }
@@ -1221,6 +1287,11 @@ fe_gtk4_chanview_tree_cleanup (void)
 	{
 		g_hash_table_unref (tree_server_nodes);
 		tree_server_nodes = NULL;
+	}
+	if (tree_unread_counts)
+	{
+		g_hash_table_unref (tree_unread_counts);
+		tree_unread_counts = NULL;
 	}
 
 	g_clear_object (&tree_selection);
@@ -1389,6 +1460,9 @@ fe_gtk4_chanview_tree_remove (session *sess)
 	if (!tree_root_nodes || !tree_session_nodes || !sess)
 		return;
 
+	if (tree_unread_counts)
+		g_hash_table_remove (tree_unread_counts, sess);
+
 	node = tree_session_lookup (sess);
 	if (!node)
 	{
@@ -1454,6 +1528,8 @@ fe_gtk4_chanview_tree_select (session *sess)
 	if (!tree_selection || !tree_model || !sess)
 		return;
 
+	tree_unread_count_set (sess, 0);
+
 	node = tree_session_lookup (sess);
 	if (!node)
 		return;
@@ -1472,4 +1548,28 @@ fe_gtk4_chanview_tree_select (session *sess)
 	tree_select_syncing = TRUE;
 	gtk_single_selection_set_selected (tree_selection, pos);
 	tree_select_syncing = FALSE;
+}
+
+void
+fe_gtk4_chanview_tree_note_activity (session *sess, int color)
+{
+	if (!sess || !is_session (sess))
+		return;
+
+	if (color == FE_COLOR_NONE || sess == current_tab)
+	{
+		tree_unread_count_set (sess, 0);
+		return;
+	}
+
+	switch (color)
+	{
+	case FE_COLOR_NEW_DATA:
+	case FE_COLOR_NEW_MSG:
+	case FE_COLOR_NEW_HILIGHT:
+		tree_unread_count_bump (sess);
+		break;
+	default:
+		break;
+	}
 }

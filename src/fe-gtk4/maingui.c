@@ -1474,6 +1474,7 @@ fe_set_tab_color (struct session *sess, tabcolor col)
 		break;
 	}
 
+	fe_gtk4_chanview_note_activity (sess, col_noflags);
 	sess->last_tab_state = sess->tab_state;
 	fe_gtk4_session_sidebar_update_label (sess);
 }
