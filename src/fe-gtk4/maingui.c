@@ -68,6 +68,10 @@ maingui_install_css (void)
 	css =
 		"paned.hc-soft-paned > separator {\n"
 		"  background-color: alpha(currentColor, 0.12);\n"
+		"}\n"
+		".hc-input-row {\n"
+		"  background-color: @view_bg_color;\n"
+		"  padding: 4px 6px;\n"
 		"}\n";
 
 	maingui_css_provider = gtk_css_provider_new ();
@@ -994,7 +998,7 @@ fe_gtk4_create_main_window (void)
 		gtk_widget_set_vexpand (content_paned, TRUE);
 		gtk_box_append (GTK_BOX (main_box), content_paned);
 
-		main_nav_sidebar_page = adw_navigation_page_new (sidebar_toolbar, _("Conversations"));
+		main_nav_sidebar_page = adw_navigation_page_new (sidebar_toolbar, _(""));
 		main_nav_content_page = adw_navigation_page_new (content_toolbar, _("Chat"));
 		adw_navigation_split_view_set_sidebar (ADW_NAVIGATION_SPLIT_VIEW (content_paned), main_nav_sidebar_page);
 		adw_navigation_split_view_set_content (ADW_NAVIGATION_SPLIT_VIEW (content_paned), main_nav_content_page);
@@ -1057,7 +1061,8 @@ fe_gtk4_create_main_window (void)
 	gtk_paned_set_resize_end_child (GTK_PANED (main_right_paned), FALSE);
 	gtk_paned_set_shrink_end_child (GTK_PANED (main_right_paned), TRUE);
 
-	entry_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+	entry_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_add_css_class (entry_row, "hc-input-row");
 	gtk_box_append (GTK_BOX (main_right_box), entry_row);
 
 	input_nick_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
