@@ -1958,7 +1958,6 @@ fe_gtk4_rebuild_menu_bar (void)
 	g_object_unref (usermenu_menu);
 
 	settings_menu = g_menu_new ();
-	g_menu_append (settings_menu, _("Preferences"), "win.preferences");
 	g_menu_append (settings_menu, _("Auto Replace"), "win.settings-auto-replace");
 	g_menu_append (settings_menu, _("CTCP Replies"), "win.settings-ctcp-replies");
 	g_menu_append (settings_menu, _("Dialog Buttons"), "win.settings-dialog-buttons");
@@ -1999,6 +1998,7 @@ fe_gtk4_rebuild_menu_bar (void)
 
 	{
 		GMenu *section = g_menu_new ();
+		g_menu_append (section, _("Preferences"), "win.preferences");
 		g_menu_append (section, _("About HexChat"), "win.about");
 		g_menu_append_section (root, NULL, G_MENU_MODEL (section));
 		g_object_unref (section);

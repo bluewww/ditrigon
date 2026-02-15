@@ -845,7 +845,6 @@ fe_gtk4_create_main_window (void)
 	GtkWidget *sidebar_button = NULL;
 	GtkWidget *userlist_button = NULL;
 	GtkWidget *menu_button = NULL;
-	GtkWidget *prefs_button = NULL;
 	GtkWidget *new_item_button = NULL;
 	GSList *iter;
 
@@ -885,11 +884,6 @@ fe_gtk4_create_main_window (void)
 	gtk_widget_set_tooltip_text (sidebar_button, _("Hide Sidebar"));
 	gtk_actionable_set_action_name (GTK_ACTIONABLE (sidebar_button), "win.toggle-sidebar");
 	adw_header_bar_pack_start (ADW_HEADER_BAR (content_header), sidebar_button);
-
-	prefs_button = gtk_button_new_from_icon_name ("emblem-system-symbolic");
-	gtk_widget_set_tooltip_text (prefs_button, _("Preferences"));
-	gtk_actionable_set_action_name (GTK_ACTIONABLE (prefs_button), "win.preferences");
-	adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), prefs_button);
 
 	userlist_button = gtk_button_new_from_icon_name ("sidebar-hide-right-symbolic");
 	gtk_widget_add_css_class (userlist_button, "flat");
