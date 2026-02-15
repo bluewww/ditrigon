@@ -1,5 +1,6 @@
 /* HexChat GTK4 user list */
 #include "fe-gtk4.h"
+#include <adwaita.h>
 
 #include "../common/text.h"
 #include "../common/userlist.h"
@@ -28,6 +29,7 @@ static GtkWidget *userlist_info_label;
 static GtkWidget *userlist_search_entry;
 static GtkWidget *userlist_scroller;
 static GtkWidget *userlist_view;
+static GtkWidget *userlist_empty_page;
 static GListStore *userlist_store;
 static GtkCustomFilter *userlist_filter;
 static GtkFilterListModel *userlist_filter_model;
@@ -39,6 +41,57 @@ static gboolean userlist_pending_hide;
 static char *userlist_filter_folded;
 
 static void userlist_update_info_label (session *sess);
+
+static gboolean
+userlist_session_supports_members (session *sess)
+{
+	if (!sess)
+		return FALSE;
+
+	return sess->type == SESS_CHANNEL || sess->type == SESS_DIALOG;
+}
+
+static void
+userlist_update_surface_for_session (session *sess)
+{
+	gboolean supports_members;
+	const char *title;
+	const char *description;
+
+	supports_members = userlist_session_supports_members (sess);
+
+	if (userlist_info_label)
+		gtk_widget_set_visible (userlist_info_label, supports_members);
+	if (userlist_search_entry)
+		gtk_widget_set_visible (userlist_search_entry, supports_members);
+	if (userlist_scroller)
+		gtk_widget_set_visible (userlist_scroller, supports_members);
+	if (userlist_empty_page)
+		gtk_widget_set_visible (userlist_empty_page, !supports_members);
+
+	if (!userlist_empty_page || !ADW_IS_STATUS_PAGE (userlist_empty_page))
+		return;
+
+	if (!sess)
+	{
+		title = _("No Conversation Selected");
+		description = _("Select a channel or private conversation to view members.");
+	}
+	else if (sess->type == SESS_SERVER)
+	{
+		title = _("No User List for Server");
+		description = _("Join a channel to view its members.");
+	}
+	else
+	{
+		title = _("No User List Available");
+		description = _("Switch to a channel or private conversation to view members.");
+	}
+
+	adw_status_page_set_icon_name (ADW_STATUS_PAGE (userlist_empty_page), "system-users-symbolic");
+	adw_status_page_set_title (ADW_STATUS_PAGE (userlist_empty_page), title);
+	adw_status_page_set_description (ADW_STATUS_PAGE (userlist_empty_page), description);
+}
 
 static const char *
 userlist_role_css_class (char prefix)
@@ -606,7 +659,7 @@ userlist_update_info_label (session *sess)
 	if (!userlist_info_label)
 		return;
 
-	if (!sess || sess->total <= 0)
+	if (!sess || !userlist_session_supports_members (sess))
 	{
 		gtk_label_set_text (GTK_LABEL (userlist_info_label), "");
 		return;
@@ -670,8 +723,9 @@ userlist_rebuild_for_session (session *sess)
 		gtk_selection_model_unselect_all (GTK_SELECTION_MODEL (userlist_selection));
 	userlist_store_clear_all ();
 	userlist_select_syncing = FALSE;
+	userlist_update_surface_for_session (sess);
 
-	if (!sess)
+	if (!sess || !userlist_session_supports_members (sess))
 	{
 		userlist_update_info_label (NULL);
 		return;
@@ -960,6 +1014,7 @@ fe_gtk4_userlist_cleanup (void)
 	userlist_search_entry = NULL;
 	userlist_scroller = NULL;
 	userlist_view = NULL;
+	userlist_empty_page = NULL;
 	userlist_session = NULL;
 	userlist_select_syncing = FALSE;
 	userlist_pending_hide = FALSE;
@@ -1020,6 +1075,14 @@ fe_gtk4_userlist_create_widget (void)
 			GTK_POLICY_AUTOMATIC);
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_scroller);
 
+		userlist_empty_page = adw_status_page_new ();
+		gtk_widget_set_hexpand (userlist_empty_page, TRUE);
+		gtk_widget_set_vexpand (userlist_empty_page, TRUE);
+		gtk_widget_set_margin_start (userlist_empty_page, 8);
+		gtk_widget_set_margin_end (userlist_empty_page, 8);
+		gtk_widget_set_margin_bottom (userlist_empty_page, 8);
+		gtk_box_append (GTK_BOX (userlist_panel), userlist_empty_page);
+
 		userlist_store = g_list_store_new (HC_TYPE_USER_ITEM);
 		userlist_filter = gtk_custom_filter_new (userlist_filter_match_cb, NULL, NULL);
 		userlist_filter_model = gtk_filter_list_model_new (
@@ -1054,6 +1117,7 @@ fe_gtk4_userlist_create_widget (void)
 	}
 
 	fe_gtk4_userlist_set_visible (prefs.hex_gui_ulist_hide ? FALSE : TRUE);
+	userlist_update_surface_for_session (userlist_session);
 
 	return userlist_revealer;
 }
