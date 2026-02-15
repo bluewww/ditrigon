@@ -524,14 +524,35 @@ setup_entry_cb (GtkEditable *editable, gpointer userdata)
 typedef struct
 {
 	GtkWidget *entry;
-	GtkFontDialog *dialog;
-} SetupFontRequest;
+} SetupFontControl;
 
+#ifndef USE_LIBADWAITA
 typedef struct
 {
 	GtkWidget *entry;
-} SetupFontControl;
+	GtkFontDialog *dialog;
+} SetupFontRequest;
+#endif
 
+#ifdef USE_LIBADWAITA
+typedef struct
+{
+	const setting *set;
+	GtkWidget *switch_row;
+	GtkWidget *font_row;
+	GtkWidget *font_value_label;
+	char *custom_font;
+	gboolean updating;
+} SetupAdwFontControl;
+
+typedef struct
+{
+	GtkWidget *row;
+	GtkFontDialog *dialog;
+} SetupAdwFontRequest;
+#endif
+
+#ifndef USE_LIBADWAITA
 static void
 setup_font_request_free (SetupFontRequest *req)
 {
@@ -602,6 +623,202 @@ setup_font_browse_cb (GtkButton *button, gpointer userdata)
 	if (initial)
 		pango_font_description_free (initial);
 }
+#endif
+
+#ifdef USE_LIBADWAITA
+static gboolean
+setup_adw_font_is_default (const char *font_name)
+{
+	const char *default_font;
+
+	default_font = fe_get_default_font ();
+	if (!default_font || !default_font[0])
+		return !font_name || !font_name[0];
+
+	if (!font_name || !font_name[0])
+		return TRUE;
+
+	return g_strcmp0 (font_name, default_font) == 0;
+}
+
+static void
+setup_adw_font_control_free (gpointer data)
+{
+	SetupAdwFontControl *control;
+
+	control = data;
+	if (!control)
+		return;
+
+	g_free (control->custom_font);
+	g_free (control);
+}
+
+static void
+setup_adw_font_request_free (SetupAdwFontRequest *req)
+{
+	if (!req)
+		return;
+
+	g_clear_object (&req->dialog);
+	g_clear_object (&req->row);
+	g_free (req);
+}
+
+static void
+setup_adw_font_sync (SetupAdwFontControl *control)
+{
+	const char *font_name;
+	const char *default_font;
+	gboolean use_default;
+
+	if (!control || !control->set)
+		return;
+
+	font_name = setup_get_str (control->set);
+	default_font = fe_get_default_font ();
+	use_default = setup_adw_font_is_default (font_name);
+
+	control->updating = TRUE;
+	adw_switch_row_set_active (ADW_SWITCH_ROW (control->switch_row), use_default);
+	gtk_widget_set_sensitive (control->font_row, !use_default);
+	gtk_list_box_row_set_activatable (GTK_LIST_BOX_ROW (control->font_row), !use_default);
+	gtk_label_set_text (GTK_LABEL (control->font_value_label),
+		use_default ? (default_font && default_font[0] ? default_font : _("System Default"))
+		            : (font_name && font_name[0] ? font_name : _("System Default")));
+	control->updating = FALSE;
+
+	if (!use_default && font_name && font_name[0])
+	{
+		g_free (control->custom_font);
+		control->custom_font = g_strdup (font_name);
+	}
+}
+
+static void
+setup_adw_font_choose_finish_cb (GObject *source, GAsyncResult *result, gpointer userdata)
+{
+	SetupAdwFontRequest *req;
+	SetupAdwFontControl *control;
+	PangoFontDescription *font_desc;
+	char *font_name;
+	GError *error;
+
+	req = userdata;
+	error = NULL;
+	font_desc = gtk_font_dialog_choose_font_finish (GTK_FONT_DIALOG (source), result, &error);
+	if (!font_desc)
+	{
+		g_clear_error (&error);
+		setup_adw_font_request_free (req);
+		return;
+	}
+
+	control = g_object_get_data (G_OBJECT (req->row), "setup-adw-font-control");
+	if (!control || !control->set)
+	{
+		pango_font_description_free (font_desc);
+		setup_adw_font_request_free (req);
+		return;
+	}
+
+	font_name = pango_font_description_to_string (font_desc);
+	g_strlcpy (setup_get_str (control->set), font_name ? font_name : "",
+		(gsize) control->set->extra);
+	if (font_name && font_name[0])
+	{
+		g_free (control->custom_font);
+		control->custom_font = g_strdup (font_name);
+	}
+	g_free (font_name);
+	pango_font_description_free (font_desc);
+
+	if (control->set->apply)
+		control->set->apply ();
+	setup_adw_font_sync (control);
+	setup_adw_font_request_free (req);
+}
+
+static void
+setup_adw_font_row_activated_cb (GtkListBoxRow *row, gpointer userdata)
+{
+	SetupAdwFontControl *control;
+	SetupAdwFontRequest *req;
+	PangoFontDescription *initial;
+	const char *text;
+
+	(void) userdata;
+
+	control = g_object_get_data (G_OBJECT (row), "setup-adw-font-control");
+	if (!control || !control->set || control->updating)
+		return;
+
+	if (adw_switch_row_get_active (ADW_SWITCH_ROW (control->switch_row)))
+		return;
+
+	initial = NULL;
+	text = setup_get_str (control->set);
+	if (text && text[0])
+		initial = pango_font_description_from_string (text);
+
+	req = g_new0 (SetupAdwFontRequest, 1);
+	req->row = g_object_ref (row);
+	req->dialog = gtk_font_dialog_new ();
+	gtk_font_dialog_set_title (req->dialog, _("Select font"));
+	gtk_font_dialog_set_modal (req->dialog, TRUE);
+	gtk_font_dialog_choose_font (req->dialog,
+		prefs_window ? GTK_WINDOW (prefs_window) : NULL,
+		initial,
+		NULL,
+		setup_adw_font_choose_finish_cb,
+		req);
+
+	if (initial)
+		pango_font_description_free (initial);
+}
+
+static void
+setup_adw_font_use_default_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
+{
+	SetupAdwFontControl *control;
+	const char *default_font;
+	const char *current;
+	gboolean use_default;
+
+	(void) pspec;
+	(void) userdata;
+
+	control = g_object_get_data (G_OBJECT (object), "setup-adw-font-control");
+	if (!control || !control->set || control->updating)
+		return;
+
+	default_font = fe_get_default_font ();
+	if (!default_font || !default_font[0])
+		default_font = "Monospace 10";
+
+	current = setup_get_str (control->set);
+	use_default = adw_switch_row_get_active (ADW_SWITCH_ROW (control->switch_row));
+	if (use_default)
+	{
+		if (current && current[0] && !setup_adw_font_is_default (current))
+		{
+			g_free (control->custom_font);
+			control->custom_font = g_strdup (current);
+		}
+		g_strlcpy (setup_get_str (control->set), default_font, (gsize) control->set->extra);
+	}
+	else
+	{
+		const char *font_name = (control->custom_font && control->custom_font[0]) ?
+			control->custom_font : default_font;
+		g_strlcpy (setup_get_str (control->set), font_name, (gsize) control->set->extra);
+	}
+
+	if (control->set->apply)
+		control->set->apply ();
+	setup_adw_font_sync (control);
+}
+#endif
 
 static void
 setup_spin_cb (GtkSpinButton *spin, gpointer userdata)
@@ -824,26 +1041,43 @@ setup_create_page_adw (const setting *set)
 			break;
 		case ST_FONT:
 		{
-			GtkWidget *button;
-			SetupFontControl *font_control;
+			GtkWidget *value_label;
+			GtkWidget *arrow;
+			SetupAdwFontControl *font_control;
 
 			group = setup_ensure_adw_group (page, group);
-			row = adw_entry_row_new ();
-			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _(set[i].label));
-			gtk_editable_set_text (GTK_EDITABLE (row), setup_get_str (&set[i]));
-			g_signal_connect (row, "changed", G_CALLBACK (setup_entry_cb), (gpointer) &set[i]);
+			control = adw_switch_row_new ();
+			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (control), _("Use System Font"));
 			if (set[i].tooltip)
-				gtk_widget_set_tooltip_text (row, _(set[i].tooltip));
+				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
+			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), control);
 
-			button = gtk_button_new_from_icon_name ("font-x-generic-symbolic");
-			gtk_widget_set_tooltip_text (button, _("Browse fonts"));
-			adw_entry_row_add_suffix (ADW_ENTRY_ROW (row), button);
+			row = adw_action_row_new ();
+			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _("Custom Font"));
+			gtk_list_box_row_set_activatable (GTK_LIST_BOX_ROW (row), TRUE);
 
-			font_control = g_new0 (SetupFontControl, 1);
-			font_control->entry = row;
-			g_object_set_data_full (G_OBJECT (button), "setup-font-control", font_control, g_free);
-			g_signal_connect (button, "clicked", G_CALLBACK (setup_font_browse_cb), NULL);
+			value_label = gtk_label_new ("");
+			gtk_label_set_xalign (GTK_LABEL (value_label), 1.0f);
+			gtk_widget_add_css_class (value_label, "dim-label");
+			adw_action_row_add_suffix (ADW_ACTION_ROW (row), value_label);
 
+			arrow = gtk_image_new_from_icon_name ("go-next-symbolic");
+			gtk_widget_add_css_class (arrow, "dim-label");
+			adw_action_row_add_suffix (ADW_ACTION_ROW (row), arrow);
+
+			font_control = g_new0 (SetupAdwFontControl, 1);
+			font_control->set = &set[i];
+			font_control->switch_row = control;
+			font_control->font_row = row;
+			font_control->font_value_label = value_label;
+			g_object_set_data (G_OBJECT (control), "setup-adw-font-control", font_control);
+			g_object_set_data_full (G_OBJECT (row), "setup-adw-font-control",
+				font_control, setup_adw_font_control_free);
+			g_signal_connect (control, "notify::active",
+				G_CALLBACK (setup_adw_font_use_default_cb), NULL);
+			g_signal_connect (row, "activated",
+				G_CALLBACK (setup_adw_font_row_activated_cb), NULL);
+			setup_adw_font_sync (font_control);
 			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
 			break;
 		}
