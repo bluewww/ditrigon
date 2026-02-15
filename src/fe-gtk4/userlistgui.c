@@ -25,14 +25,20 @@ G_DEFINE_TYPE (HcUserItem, hc_user_item, G_TYPE_OBJECT)
 static GtkWidget *userlist_panel;
 static GtkWidget *userlist_revealer;
 static GtkWidget *userlist_info_label;
+static GtkWidget *userlist_search_entry;
 static GtkWidget *userlist_scroller;
 static GtkWidget *userlist_view;
 static GListStore *userlist_store;
+static GtkCustomFilter *userlist_filter;
+static GtkFilterListModel *userlist_filter_model;
 static GtkMultiSelection *userlist_selection;
 static session *userlist_session;
 static gboolean userlist_select_syncing;
 static GtkCssProvider *userlist_css_provider;
 static gboolean userlist_pending_hide;
+static char *userlist_filter_folded;
+
+static void userlist_update_info_label (session *sess);
 
 static const char *
 userlist_role_css_class (char prefix)
@@ -67,6 +73,12 @@ userlist_install_css (void)
 		return;
 
 	css =
+		".hc-user-row { min-height: 30px; padding: 2px 4px; border-radius: 8px; }\n"
+		".hc-user-host { font-size: 0.83em; }\n"
+		".hc-user-role-badge { min-width: 18px; padding: 0 6px; border-radius: 999px; font-size: 0.78em; font-weight: 700; }\n"
+		".hc-user-role-op-badge { background-color: alpha(#157915, 0.28); color: #8fe48f; }\n"
+		".hc-user-role-halfop-badge { background-color: alpha(#856117, 0.32); color: #f0cf8e; }\n"
+		".hc-user-role-voice-badge { background-color: alpha(#451984, 0.32); color: #c7a2fa; }\n"
 		".hc-user-role-op { color: #157915; }\n"
 		".hc-user-role-halfop { color: #856117; }\n"
 		".hc-user-role-voice { color: #451984; }\n";
@@ -79,27 +91,221 @@ userlist_install_css (void)
 }
 
 static void
-userlist_set_role_icon (GtkWidget *image, char prefix)
+userlist_set_presence_icon (GtkWidget *image, gboolean away)
 {
-	const char *role_class;
-
 	if (!image)
 		return;
 
-	gtk_image_set_from_icon_name (GTK_IMAGE (image), "user-available-symbolic");
-	gtk_widget_remove_css_class (image, "hc-user-role-op");
-	gtk_widget_remove_css_class (image, "hc-user-role-halfop");
-	gtk_widget_remove_css_class (image, "hc-user-role-voice");
+	gtk_image_set_from_icon_name (GTK_IMAGE (image),
+		away ? "user-away-symbolic" : "user-available-symbolic");
 	gtk_widget_remove_css_class (image, "dim-label");
+	if (away)
+		gtk_widget_add_css_class (image, "dim-label");
+}
 
-	role_class = userlist_role_css_class (prefix);
-	if (role_class)
+static const char *
+userlist_role_badge_class (char prefix)
+{
+	switch (prefix)
 	{
-		gtk_widget_add_css_class (image, role_class);
+	case '@':
+	case '&':
+	case '~':
+	case '!':
+		return "hc-user-role-op-badge";
+	case '%':
+		return "hc-user-role-halfop-badge";
+	case '+':
+		return "hc-user-role-voice-badge";
+	default:
+		return NULL;
+	}
+}
+
+static const char *
+userlist_role_badge_text (char prefix)
+{
+	switch (prefix)
+	{
+	case '@':
+	case '&':
+	case '~':
+	case '!':
+		return "@";
+	case '%':
+		return "%";
+	case '+':
+		return "+";
+	default:
+		return NULL;
+	}
+}
+
+static void
+userlist_set_role_badge (GtkWidget *badge, char prefix)
+{
+	const char *text;
+	const char *klass;
+
+	if (!badge)
+		return;
+
+	gtk_widget_remove_css_class (badge, "hc-user-role-op-badge");
+	gtk_widget_remove_css_class (badge, "hc-user-role-halfop-badge");
+	gtk_widget_remove_css_class (badge, "hc-user-role-voice-badge");
+
+	text = userlist_role_badge_text (prefix);
+	klass = userlist_role_badge_class (prefix);
+	if (!text || !klass)
+	{
+		gtk_label_set_text (GTK_LABEL (badge), "");
+		gtk_widget_set_visible (badge, FALSE);
 		return;
 	}
 
-	gtk_widget_add_css_class (image, "dim-label");
+	gtk_label_set_text (GTK_LABEL (badge), text);
+	gtk_widget_add_css_class (badge, klass);
+	gtk_widget_set_visible (badge, TRUE);
+}
+
+static GListModel *
+userlist_visible_model (void)
+{
+	if (userlist_filter_model)
+		return G_LIST_MODEL (userlist_filter_model);
+	if (userlist_store)
+		return G_LIST_MODEL (userlist_store);
+	return NULL;
+}
+
+static gboolean
+userlist_filter_active (void)
+{
+	return userlist_filter_folded && userlist_filter_folded[0];
+}
+
+static gboolean
+userlist_filter_match_cb (gpointer item, gpointer user_data)
+{
+	HcUserItem *user_item;
+	char *nick_folded;
+	char *host_folded;
+	gboolean match;
+
+	(void) user_data;
+
+	if (!userlist_filter_folded || !userlist_filter_folded[0])
+		return TRUE;
+
+	user_item = (HcUserItem *) item;
+	if (!user_item)
+		return FALSE;
+
+	nick_folded = g_utf8_casefold (user_item->display ? user_item->display : "", -1);
+	host_folded = g_utf8_casefold (user_item->host ? user_item->host : "", -1);
+	match = (g_strstr_len (nick_folded, -1, userlist_filter_folded) != NULL) ||
+		(g_strstr_len (host_folded, -1, userlist_filter_folded) != NULL);
+	g_free (nick_folded);
+	g_free (host_folded);
+	return match;
+}
+
+static gboolean
+userlist_find_visible_position_by_user (struct User *user, guint *position)
+{
+	GListModel *model;
+	guint i;
+	guint n_items;
+
+	if (!user)
+		return FALSE;
+
+	model = userlist_visible_model ();
+	if (!model)
+		return FALSE;
+
+	n_items = g_list_model_get_n_items (model);
+	for (i = 0; i < n_items; i++)
+	{
+		HcUserItem *item;
+
+		item = g_list_model_get_item (model, i);
+		if (!item)
+			continue;
+		if (item->user == user)
+		{
+			if (position)
+				*position = i;
+			g_object_unref (item);
+			return TRUE;
+		}
+		g_object_unref (item);
+	}
+
+	return FALSE;
+}
+
+static void
+userlist_sync_visible_selection_from_users (void)
+{
+	GListModel *model;
+	guint i;
+	guint n_items;
+
+	if (!userlist_selection)
+		return;
+
+	model = userlist_visible_model ();
+	if (!model)
+		return;
+
+	userlist_select_syncing = TRUE;
+	gtk_selection_model_unselect_all (GTK_SELECTION_MODEL (userlist_selection));
+	n_items = g_list_model_get_n_items (model);
+	for (i = 0; i < n_items; i++)
+	{
+		HcUserItem *item;
+
+		item = g_list_model_get_item (model, i);
+		if (!item || !item->user)
+		{
+			if (item)
+				g_object_unref (item);
+			continue;
+		}
+		if (item->user->selected)
+			gtk_selection_model_select_item (GTK_SELECTION_MODEL (userlist_selection), i, TRUE);
+		g_object_unref (item);
+	}
+	userlist_select_syncing = FALSE;
+}
+
+static void
+userlist_search_changed_cb (GtkEditable *editable, gpointer user_data)
+{
+	const char *text;
+	char *folded;
+
+	(void) user_data;
+
+	text = gtk_editable_get_text (editable);
+	folded = g_utf8_casefold (text ? text : "", -1);
+	g_strstrip (folded);
+
+	g_free (userlist_filter_folded);
+	if (folded[0])
+		userlist_filter_folded = folded;
+	else
+	{
+		g_free (folded);
+		userlist_filter_folded = NULL;
+	}
+
+	if (userlist_filter)
+		gtk_filter_changed (GTK_FILTER (userlist_filter), GTK_FILTER_CHANGE_DIFFERENT);
+
+	userlist_sync_visible_selection_from_users ();
+	userlist_update_info_label (userlist_session);
 }
 
 static void
@@ -302,6 +508,7 @@ static gboolean
 userlist_remove_row_by_user (struct User *user, gboolean *was_selected)
 {
 	guint position;
+	guint visible_position;
 	gboolean selected;
 
 	if (!userlist_store || !user)
@@ -310,9 +517,10 @@ userlist_remove_row_by_user (struct User *user, gboolean *was_selected)
 	if (!userlist_find_position_by_user (user, &position))
 		return FALSE;
 
-	selected = FALSE;
-	if (userlist_selection)
-		selected = gtk_selection_model_is_selected (GTK_SELECTION_MODEL (userlist_selection), position);
+	selected = user->selected ? TRUE : FALSE;
+	if (userlist_selection && userlist_find_visible_position_by_user (user, &visible_position))
+		selected = gtk_selection_model_is_selected (
+			GTK_SELECTION_MODEL (userlist_selection), visible_position);
 	if (was_selected)
 		*was_selected = selected;
 	g_list_store_remove (userlist_store, position);
@@ -357,6 +565,7 @@ userlist_insert_row (session *sess, struct User *user, gboolean selected)
 {
 	HcUserItem *item;
 	guint position;
+	guint visible_position;
 
 	if (!userlist_store || !user)
 		return;
@@ -366,8 +575,12 @@ userlist_insert_row (session *sess, struct User *user, gboolean selected)
 	g_list_store_insert (userlist_store, position, item);
 	g_object_unref (item);
 
-	if (selected && userlist_selection)
-		gtk_selection_model_select_item (GTK_SELECTION_MODEL (userlist_selection), position, TRUE);
+	if (selected && userlist_selection &&
+		userlist_find_visible_position_by_user (user, &visible_position))
+	{
+		gtk_selection_model_select_item (
+			GTK_SELECTION_MODEL (userlist_selection), visible_position, TRUE);
+	}
 }
 
 static void
@@ -386,7 +599,9 @@ userlist_row_upsert (session *sess, struct User *user, gboolean force_selected)
 static void
 userlist_update_info_label (session *sess)
 {
+	GListModel *model;
 	char tbuf[256];
+	int shown;
 
 	if (!userlist_info_label)
 		return;
@@ -397,11 +612,25 @@ userlist_update_info_label (session *sess)
 		return;
 	}
 
-	g_snprintf (tbuf, sizeof (tbuf),
-		_("Users: %d, <span foreground=\"#157915\">%d@</span>,"
-		  "<span foreground=\"#856117\">%d%%</span>,"
-		  "<span foreground=\"#451984\">%d+</span>"),
-		sess->total, sess->ops, sess->hops, sess->voices);
+	model = userlist_visible_model ();
+	shown = model ? (int) g_list_model_get_n_items (model) : sess->total;
+
+	if (userlist_filter_active ())
+	{
+		g_snprintf (tbuf, sizeof (tbuf),
+			_("Users: %d/%d, <span foreground=\"#157915\">%d@</span>,"
+			  "<span foreground=\"#856117\">%d%%</span>,"
+			  "<span foreground=\"#451984\">%d+</span>"),
+			shown, sess->total, sess->ops, sess->hops, sess->voices);
+	}
+	else
+	{
+		g_snprintf (tbuf, sizeof (tbuf),
+			_("Users: %d, <span foreground=\"#157915\">%d@</span>,"
+			  "<span foreground=\"#856117\">%d%%</span>,"
+			  "<span foreground=\"#451984\">%d+</span>"),
+			sess->total, sess->ops, sess->hops, sess->voices);
+	}
 	tbuf[sizeof (tbuf) - 1] = 0;
 	gtk_label_set_markup (GTK_LABEL (userlist_info_label), tbuf);
 }
@@ -460,43 +689,72 @@ userlist_rebuild_for_session (session *sess)
 	}
 	g_slist_free (list);
 
+	userlist_sync_visible_selection_from_users ();
 	userlist_update_info_label (sess);
 }
 
 static void
 userlist_apply_row (GtkListItem *list_item, HcUserItem *item)
 {
-	GtkWidget *image;
-	GtkWidget *label;
+	GtkWidget *presence_image;
+	GtkWidget *name_label;
+	GtkWidget *host_label;
+	GtkWidget *badge_label;
 	char *markup;
-	char *host_text;
+	const char *host_text;
+	const char *role_class;
 
-	image = g_object_get_data (G_OBJECT (list_item), "hc-user-image");
-	label = g_object_get_data (G_OBJECT (list_item), "hc-user-label");
-	if (!image || !label)
+	presence_image = g_object_get_data (G_OBJECT (list_item), "hc-user-presence");
+	name_label = g_object_get_data (G_OBJECT (list_item), "hc-user-name");
+	host_label = g_object_get_data (G_OBJECT (list_item), "hc-user-host");
+	badge_label = g_object_get_data (G_OBJECT (list_item), "hc-user-badge");
+	if (!presence_image || !name_label || !host_label || !badge_label)
 		return;
 
 	if (!item)
 	{
-		gtk_widget_set_visible (image, TRUE);
-		userlist_set_role_icon (image, 0);
-		gtk_label_set_text (GTK_LABEL (label), "");
-		gtk_widget_set_tooltip_text (GTK_WIDGET (label), NULL);
+		userlist_set_presence_icon (presence_image, FALSE);
+		gtk_label_set_text (GTK_LABEL (name_label), "");
+		gtk_label_set_text (GTK_LABEL (host_label), "");
+		gtk_widget_set_visible (host_label, FALSE);
+		userlist_set_role_badge (badge_label, 0);
+		gtk_widget_set_tooltip_text (GTK_WIDGET (name_label), NULL);
 		return;
 	}
 
-	gtk_widget_set_visible (image, TRUE);
-	userlist_set_role_icon (image, item->prefix);
+	userlist_set_presence_icon (presence_image, item->user && item->user->away);
 
 	markup = user_markup_text (item->user, item->display);
-	gtk_label_set_markup (GTK_LABEL (label), markup);
+	gtk_label_set_markup (GTK_LABEL (name_label), markup);
 	g_free (markup);
+
+	gtk_widget_remove_css_class (name_label, "hc-user-role-op");
+	gtk_widget_remove_css_class (name_label, "hc-user-role-halfop");
+	gtk_widget_remove_css_class (name_label, "hc-user-role-voice");
+	role_class = userlist_role_css_class (item->prefix);
+	if (role_class)
+		gtk_widget_add_css_class (name_label, role_class);
 
 	if (prefs.hex_gui_ulist_show_hosts && item->host && item->host[0])
 		host_text = item->host;
+	else if (prefs.hex_away_track && item->user && item->user->away)
+		host_text = _("Away");
 	else
 		host_text = NULL;
-	gtk_widget_set_tooltip_text (GTK_WIDGET (label), host_text);
+
+	if (host_text)
+	{
+		gtk_label_set_text (GTK_LABEL (host_label), host_text);
+		gtk_widget_set_visible (host_label, TRUE);
+	}
+	else
+	{
+		gtk_label_set_text (GTK_LABEL (host_label), "");
+		gtk_widget_set_visible (host_label, FALSE);
+	}
+	gtk_widget_set_tooltip_text (GTK_WIDGET (name_label),
+		(item->host && item->host[0]) ? item->host : NULL);
+	userlist_set_role_badge (badge_label, item->prefix);
 }
 
 static void
@@ -506,28 +764,55 @@ static void
 userlist_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
 	GtkWidget *row;
-	GtkWidget *image;
-	GtkWidget *label;
+	GtkWidget *presence_image;
+	GtkWidget *content_box;
+	GtkWidget *name_label;
+	GtkWidget *host_label;
+	GtkWidget *badge_label;
 	GtkGesture *gesture;
 
 	(void) factory;
 	(void) user_data;
 
-	row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+	gtk_widget_add_css_class (row, "hc-user-row");
 	gtk_widget_set_margin_start (row, 6);
 	gtk_widget_set_margin_end (row, 6);
 	gtk_widget_set_margin_top (row, 2);
 	gtk_widget_set_margin_bottom (row, 2);
-	image = gtk_image_new ();
-	gtk_widget_set_valign (image, GTK_ALIGN_CENTER);
-	label = gtk_label_new ("");
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_widget_set_hexpand (label, TRUE);
-	gtk_box_append (GTK_BOX (row), image);
-	gtk_box_append (GTK_BOX (row), label);
 
-	g_object_set_data (G_OBJECT (list_item), "hc-user-image", image);
-	g_object_set_data (G_OBJECT (list_item), "hc-user-label", label);
+	presence_image = gtk_image_new ();
+	gtk_widget_set_valign (presence_image, GTK_ALIGN_CENTER);
+	gtk_box_append (GTK_BOX (row), presence_image);
+
+	content_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+	gtk_widget_set_hexpand (content_box, TRUE);
+	gtk_widget_set_valign (content_box, GTK_ALIGN_CENTER);
+	gtk_box_append (GTK_BOX (row), content_box);
+
+	name_label = gtk_label_new ("");
+	gtk_label_set_xalign (GTK_LABEL (name_label), 0.0f);
+	gtk_label_set_ellipsize (GTK_LABEL (name_label), PANGO_ELLIPSIZE_END);
+	gtk_box_append (GTK_BOX (content_box), name_label);
+
+	host_label = gtk_label_new ("");
+	gtk_label_set_xalign (GTK_LABEL (host_label), 0.0f);
+	gtk_label_set_ellipsize (GTK_LABEL (host_label), PANGO_ELLIPSIZE_END);
+	gtk_widget_add_css_class (host_label, "dim-label");
+	gtk_widget_add_css_class (host_label, "caption");
+	gtk_widget_add_css_class (host_label, "hc-user-host");
+	gtk_box_append (GTK_BOX (content_box), host_label);
+
+	badge_label = gtk_label_new ("");
+	gtk_widget_set_valign (badge_label, GTK_ALIGN_CENTER);
+	gtk_widget_add_css_class (badge_label, "hc-user-role-badge");
+	gtk_widget_set_visible (badge_label, FALSE);
+	gtk_box_append (GTK_BOX (row), badge_label);
+
+	g_object_set_data (G_OBJECT (list_item), "hc-user-presence", presence_image);
+	g_object_set_data (G_OBJECT (list_item), "hc-user-name", name_label);
+	g_object_set_data (G_OBJECT (list_item), "hc-user-host", host_label);
+	g_object_set_data (G_OBJECT (list_item), "hc-user-badge", badge_label);
 	gesture = gtk_gesture_click_new ();
 	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
 	g_signal_connect (gesture, "pressed",
@@ -574,16 +859,18 @@ userlist_selection_changed_cb (GtkSelectionModel *model, guint position, guint n
 static void
 userlist_activate_cb (GtkListView *list, guint position, gpointer user_data)
 {
+	GListModel *model;
 	HcUserItem *item;
 	char *cmd;
 
 	(void) list;
 	(void) user_data;
 
-	if (!prefs.hex_gui_ulist_doubleclick[0] || !current_sess || !userlist_store)
+	model = userlist_visible_model ();
+	if (!prefs.hex_gui_ulist_doubleclick[0] || !current_sess || !model)
 		return;
 
-	item = g_list_model_get_item (G_LIST_MODEL (userlist_store), position);
+	item = g_list_model_get_item (model, position);
 	if (!item || !item->user)
 	{
 		if (item)
@@ -660,12 +947,17 @@ fe_gtk4_userlist_init (void)
 void
 fe_gtk4_userlist_cleanup (void)
 {
+	g_clear_object (&userlist_filter_model);
+	g_clear_object (&userlist_filter);
 	g_clear_object (&userlist_selection);
 	g_clear_object (&userlist_store);
 	g_clear_object (&userlist_css_provider);
+	g_free (userlist_filter_folded);
+	userlist_filter_folded = NULL;
 	userlist_panel = NULL;
 	userlist_revealer = NULL;
 	userlist_info_label = NULL;
+	userlist_search_entry = NULL;
 	userlist_scroller = NULL;
 	userlist_view = NULL;
 	userlist_session = NULL;
@@ -711,6 +1003,14 @@ fe_gtk4_userlist_create_widget (void)
 		gtk_label_set_use_markup (GTK_LABEL (userlist_info_label), TRUE);
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_info_label);
 
+		userlist_search_entry = gtk_search_entry_new ();
+		gtk_widget_set_margin_start (userlist_search_entry, 6);
+		gtk_widget_set_margin_end (userlist_search_entry, 6);
+		gtk_widget_set_margin_bottom (userlist_search_entry, 6);
+		gtk_entry_set_placeholder_text (GTK_ENTRY (userlist_search_entry), _("Search Users"));
+		gtk_editable_set_text (GTK_EDITABLE (userlist_search_entry), "");
+		gtk_box_append (GTK_BOX (userlist_panel), userlist_search_entry);
+
 		userlist_scroller = gtk_scrolled_window_new ();
 		gtk_widget_set_hexpand (userlist_scroller, FALSE);
 		gtk_widget_set_vexpand (userlist_scroller, TRUE);
@@ -720,8 +1020,12 @@ fe_gtk4_userlist_create_widget (void)
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_scroller);
 
 		userlist_store = g_list_store_new (HC_TYPE_USER_ITEM);
+		userlist_filter = gtk_custom_filter_new (userlist_filter_match_cb, NULL, NULL);
+		userlist_filter_model = gtk_filter_list_model_new (
+			G_LIST_MODEL (g_object_ref (userlist_store)),
+			GTK_FILTER (g_object_ref (userlist_filter)));
 		userlist_selection = gtk_multi_selection_new (
-			G_LIST_MODEL (g_object_ref (userlist_store)));
+			G_LIST_MODEL (g_object_ref (userlist_filter_model)));
 
 		factory = gtk_signal_list_item_factory_new ();
 		g_signal_connect (factory, "setup", G_CALLBACK (userlist_factory_setup_cb), NULL);
@@ -738,6 +1042,8 @@ fe_gtk4_userlist_create_widget (void)
 		g_signal_connect (userlist_selection, "selection-changed",
 			G_CALLBACK (userlist_selection_changed_cb), NULL);
 		g_signal_connect (userlist_view, "activate", G_CALLBACK (userlist_activate_cb), NULL);
+		g_signal_connect (userlist_search_entry, "changed",
+			G_CALLBACK (userlist_search_changed_cb), NULL);
 
 		gtk_revealer_set_child (GTK_REVEALER (userlist_revealer), userlist_panel);
 	}
@@ -869,6 +1175,7 @@ fe_userlist_clear (struct session *sess)
 void
 fe_userlist_set_selected (struct session *sess)
 {
+	GListModel *model;
 	guint i;
 	guint n_items;
 
@@ -877,6 +1184,34 @@ fe_userlist_set_selected (struct session *sess)
 
 	if (sess != userlist_session || !userlist_store || !userlist_selection)
 		return;
+
+	model = userlist_visible_model ();
+	if (!model)
+		return;
+
+	if (userlist_filter_active ())
+	{
+		n_items = g_list_model_get_n_items (model);
+		for (i = 0; i < n_items; i++)
+		{
+			HcUserItem *item;
+			gboolean selected;
+
+			item = g_list_model_get_item (model, i);
+			if (!item || !item->user)
+			{
+				if (item)
+					g_object_unref (item);
+				continue;
+			}
+
+			selected = gtk_selection_model_is_selected (
+				GTK_SELECTION_MODEL (userlist_selection), i);
+			item->user->selected = selected ? 1 : 0;
+			g_object_unref (item);
+		}
+		return;
+	}
 
 	n_items = userlist_store_n_items ();
 	for (i = 0; i < n_items; i++)
@@ -930,13 +1265,13 @@ fe_uselect (struct session *sess, char *word[], int do_clear, int scroll_to)
 		user->selected = 1;
 		if (sess == userlist_session && userlist_selection)
 		{
-			guint position;
+			guint visible_position;
 
-			if (userlist_find_position_by_user (user, &position))
+			if (userlist_find_visible_position_by_user (user, &visible_position))
 			{
 				userlist_select_syncing = TRUE;
 				gtk_selection_model_select_item (
-					GTK_SELECTION_MODEL (userlist_selection), position, TRUE);
+					GTK_SELECTION_MODEL (userlist_selection), visible_position, TRUE);
 				userlist_select_syncing = FALSE;
 			}
 		}

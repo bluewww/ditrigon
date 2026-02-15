@@ -255,6 +255,8 @@ typedef struct
 	int childcount;
 } HcNickMenuLevel;
 
+static GtkWidget *active_nick_popover;
+
 static void
 nick_menu_context_free (gpointer data)
 {
@@ -414,34 +416,92 @@ nick_menu_extract_icon (const char *name, char **label, char **icon)
 }
 
 static GtkWidget *
+nick_menu_new_row_content (const char *label, const char *icon, gboolean submenu)
+{
+	GtkWidget *row;
+	GtkWidget *image;
+	GtkWidget *text;
+	GtkWidget *arrow;
+	char *clean;
+
+	row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+	clean = strip_mnemonic (label ? label : "");
+
+	if (icon && icon[0])
+	{
+		image = gtk_image_new_from_icon_name (icon);
+		gtk_widget_set_valign (image, GTK_ALIGN_CENTER);
+		gtk_box_append (GTK_BOX (row), image);
+	}
+
+	text = gtk_label_new (clean);
+	gtk_label_set_xalign (GTK_LABEL (text), 0.0f);
+	gtk_widget_set_hexpand (text, TRUE);
+	gtk_box_append (GTK_BOX (row), text);
+
+	if (submenu)
+	{
+		arrow = gtk_image_new_from_icon_name ("go-next-symbolic");
+		gtk_widget_add_css_class (arrow, "dim-label");
+		gtk_widget_set_valign (arrow, GTK_ALIGN_CENTER);
+		gtk_box_append (GTK_BOX (row), arrow);
+	}
+
+	g_free (clean);
+	return row;
+}
+
+static GtkWidget *
 nick_menu_new_button (const char *label, const char *icon)
 {
 	GtkWidget *button;
+	GtkWidget *row;
 
-	if (!icon || !icon[0])
-	{
-		button = gtk_button_new_with_mnemonic (label ? label : "");
-	}
-	else
-	{
-		GtkWidget *row;
-		GtkWidget *image;
-		GtkWidget *text;
-
-		button = gtk_button_new ();
-		row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-		image = gtk_image_new_from_icon_name (icon);
-		text = gtk_label_new (label ? label : "");
-		gtk_label_set_use_underline (GTK_LABEL (text), TRUE);
-		gtk_label_set_xalign (GTK_LABEL (text), 0.0f);
-		gtk_box_append (GTK_BOX (row), image);
-		gtk_box_append (GTK_BOX (row), text);
-		gtk_button_set_child (GTK_BUTTON (button), row);
-	}
-
+	button = gtk_button_new ();
+	row = nick_menu_new_row_content (label, icon, FALSE);
+	gtk_button_set_child (GTK_BUTTON (button), row);
+	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
 	return button;
+}
+
+static GtkWidget *
+nick_menu_new_submenu_button (const char *label, const char *icon)
+{
+	GtkWidget *button;
+	GtkWidget *row;
+
+	button = gtk_menu_button_new ();
+	row = nick_menu_new_row_content (label, icon, TRUE);
+	gtk_menu_button_set_child (GTK_MENU_BUTTON (button), row);
+	gtk_widget_add_css_class (button, "flat");
+	gtk_widget_set_hexpand (button, TRUE);
+	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+	return button;
+}
+
+static void
+nick_menu_popover_closed_cb (GtkPopover *popover, gpointer user_data)
+{
+	(void) user_data;
+
+	if (active_nick_popover == GTK_WIDGET (popover))
+		active_nick_popover = NULL;
+
+	if (gtk_widget_get_parent (GTK_WIDGET (popover)))
+		gtk_widget_unparent (GTK_WIDGET (popover));
+}
+
+static void
+nick_menu_close_active (void)
+{
+	if (!active_nick_popover)
+		return;
+
+	if (gtk_widget_get_parent (active_nick_popover))
+		gtk_widget_unparent (active_nick_popover);
+	active_nick_popover = NULL;
 }
 
 static void
@@ -529,6 +589,9 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 {
 	GtkWidget *popover;
 	GtkWidget *root;
+	GtkWidget *header;
+	GtkWidget *header_name;
+	GtkWidget *header_context;
 	GPtrArray *levels;
 	HcNickMenuContext *ctx;
 	GSList *list;
@@ -538,11 +601,15 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	if (!parent || !sess || !nick || !nick[0] || !is_session (sess))
 		return;
 
+	nick_menu_close_active ();
+
 	popover = gtk_popover_new ();
+	active_nick_popover = popover;
 	gtk_widget_set_parent (popover, parent);
-	g_signal_connect_swapped (popover, "closed",
-		G_CALLBACK (gtk_widget_unparent), popover);
-	gtk_popover_set_autohide (GTK_POPOVER (popover), FALSE);
+	g_signal_connect (popover, "closed",
+		G_CALLBACK (nick_menu_popover_closed_cb), NULL);
+	gtk_popover_set_autohide (GTK_POPOVER (popover), TRUE);
+	gtk_popover_set_cascade_popdown (GTK_POPOVER (popover), TRUE);
 
 	ctx = g_new0 (HcNickMenuContext, 1);
 	ctx->root_popover = popover;
@@ -556,7 +623,24 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	gtk_widget_set_margin_end (root, 6);
 	gtk_widget_set_margin_top (root, 6);
 	gtk_widget_set_margin_bottom (root, 6);
+	gtk_widget_add_css_class (root, "menu");
 	gtk_popover_set_child (GTK_POPOVER (popover), root);
+
+	header = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+	gtk_widget_set_margin_start (header, 6);
+	gtk_widget_set_margin_end (header, 6);
+	gtk_widget_set_margin_bottom (header, 4);
+	header_name = gtk_label_new (nick);
+	gtk_label_set_xalign (GTK_LABEL (header_name), 0.0f);
+	gtk_widget_add_css_class (header_name, "heading");
+	header_context = gtk_label_new (sess->channel[0] ? sess->channel : "");
+	gtk_label_set_xalign (GTK_LABEL (header_context), 0.0f);
+	gtk_widget_add_css_class (header_context, "dim-label");
+	gtk_box_append (GTK_BOX (header), header_name);
+	if (sess->channel[0])
+		gtk_box_append (GTK_BOX (header), header_context);
+	gtk_box_append (GTK_BOX (root), header);
+	gtk_box_append (GTK_BOX (root), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
 
 	{
 		GtkWidget *info_button;
@@ -565,10 +649,7 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 		info_popover = nick_menu_create_info_popover (root, sess, nick);
 		if (info_popover)
 		{
-			info_button = gtk_menu_button_new ();
-			gtk_button_set_label (GTK_BUTTON (info_button), nick);
-			gtk_widget_set_hexpand (info_button, TRUE);
-			gtk_widget_set_halign (info_button, GTK_ALIGN_FILL);
+			info_button = nick_menu_new_submenu_button (_("User Details"), "avatar-default-symbolic");
 			gtk_menu_button_set_popover (GTK_MENU_BUTTON (info_button), info_popover);
 			gtk_box_append (GTK_BOX (root), info_button);
 			gtk_box_append (GTK_BOX (root), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
@@ -600,11 +681,10 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 			GtkWidget *sub_popover;
 			GtkWidget *sub_box;
 			HcNickMenuLevel *sub_level;
+			const char *sub_label;
 
-			sub_button = gtk_menu_button_new ();
-			gtk_button_set_label (GTK_BUTTON (sub_button), pop->cmd ? pop->cmd : "");
-			gtk_widget_set_hexpand (sub_button, TRUE);
-			gtk_widget_set_halign (sub_button, GTK_ALIGN_FILL);
+			sub_label = pop->cmd ? pop->cmd : "";
+			sub_button = nick_menu_new_submenu_button (sub_label, NULL);
 
 			sub_popover = gtk_popover_new ();
 			sub_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
@@ -612,7 +692,10 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 			gtk_widget_set_margin_end (sub_box, 6);
 			gtk_widget_set_margin_top (sub_box, 6);
 			gtk_widget_set_margin_bottom (sub_box, 6);
+			gtk_widget_add_css_class (sub_box, "menu");
 			gtk_popover_set_child (GTK_POPOVER (sub_popover), sub_box);
+			gtk_popover_set_autohide (GTK_POPOVER (sub_popover), TRUE);
+			gtk_popover_set_cascade_popdown (GTK_POPOVER (sub_popover), TRUE);
 			gtk_menu_button_set_popover (GTK_MENU_BUTTON (sub_button), sub_popover);
 			gtk_box_append (GTK_BOX (current->box), sub_button);
 			current->childcount++;
