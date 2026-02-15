@@ -57,7 +57,7 @@ typedef struct
 } HcServerToggleData;
 
 static gboolean tree_group_by_server (void);
-static gboolean tree_node_has_children (HcChanNode *node);
+static const char *tree_server_state_text (server *serv);
 
 static void
 tree_load_css (void)
@@ -76,7 +76,10 @@ tree_load_css (void)
 	gtk_css_provider_load_from_string (provider,
 		".hc-tree-row { border-radius: 8px; min-height: 28px; padding: 1px 2px; }"
 		".hc-tree-label { padding: 1px 0; }"
+		".hc-tree-subtitle { padding: 0; font-size: 0.82em; }"
 		".hc-tree-icon { opacity: 0.72; }"
+		".hc-tree-section { border-radius: 0; min-height: 22px; padding: 10px 4px 2px 4px; }"
+		".hc-tree-section-label { color: alpha(@theme_fg_color, 0.70); font-size: 0.83em; font-weight: 700; }"
 		".hc-tree-badge { min-width: 16px; padding: 0 6px; border-radius: 999px; margin: 0 4px 0 4px; font-size: 0.85em; font-weight: 700; }"
 		".hc-tree-server { color: alpha(@theme_fg_color, 0.90); font-weight: 600; }"
 		".hc-tree-data { color: @theme_fg_color; font-weight: 600; }"
@@ -129,6 +132,15 @@ tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
 {
 	static const char *const classes[] =
 	{
+		"hc-tree-section",
+		"hc-tree-server",
+		"hc-tree-data",
+		"hc-tree-msg",
+		"hc-tree-hilight"
+	};
+	static const char *const label_classes[] =
+	{
+		"hc-tree-section-label",
 		"hc-tree-server",
 		"hc-tree-data",
 		"hc-tree-msg",
@@ -140,8 +152,12 @@ tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
 	{
 		if (row_box)
 			gtk_widget_remove_css_class (row_box, classes[i]);
+	}
+
+	for (i = 0; i < G_N_ELEMENTS (label_classes); i++)
+	{
 		if (label)
-			gtk_widget_remove_css_class (label, classes[i]);
+			gtk_widget_remove_css_class (label, label_classes[i]);
 	}
 }
 
@@ -212,7 +228,7 @@ tree_apply_state_classes (GtkWidget *row_box, GtkWidget *label, HcChanNode *node
 	sess = node ? node->sess : NULL;
 	tree_clear_state_classes (row_box, label);
 
-	if ((sess && sess->type == SESS_SERVER) || (node && node->children && !sess))
+	if (sess && sess->type == SESS_SERVER)
 	{
 		if (row_box)
 			gtk_widget_add_css_class (row_box, "hc-tree-server");
@@ -249,24 +265,12 @@ tree_apply_state_classes (GtkWidget *row_box, GtkWidget *label, HcChanNode *node
 }
 
 static gboolean
-tree_node_has_children (HcChanNode *node)
-{
-	if (!node || !node->children)
-		return FALSE;
-
-	return g_list_model_get_n_items (G_LIST_MODEL (node->children)) > 0;
-}
-
-static gboolean
 tree_node_is_server_entry (HcChanNode *node)
 {
 	if (!node)
 		return FALSE;
 
-	if (node->sess && node->sess->type == SESS_SERVER)
-		return TRUE;
-
-	return node->children && !node->sess;
+	return node->children != NULL;
 }
 
 static void
@@ -276,11 +280,14 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	GtkWidget *row_box;
 	GtkWidget *icon;
 	GtkWidget *label;
+	GtkWidget *subtitle;
 	GtkWidget *badge;
 	session *sess;
 	gboolean show_badge;
 	gboolean server_entry;
+	gboolean server_session_entry;
 	int unread_count;
+	char *tooltip_text;
 	char unread_text[8];
 
 	if (!list_item)
@@ -290,15 +297,47 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
 	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
 	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
+	subtitle = g_object_get_data (G_OBJECT (list_item), "hc-tree-subtitle");
 	badge = g_object_get_data (G_OBJECT (list_item), "hc-tree-badge");
 	sess = node ? node->sess : NULL;
 	server_entry = tree_node_is_server_entry (node);
+	server_session_entry = (sess && sess->type == SESS_SERVER && !server_entry);
+	tooltip_text = NULL;
+
+	if (row_box)
+	{
+		gtk_widget_set_margin_start (row_box, server_entry ? 0 : 8);
+		gtk_widget_set_margin_end (row_box, 0);
+	}
 
 	if (label)
 	{
 		gtk_label_set_text (GTK_LABEL (label), node && node->label ? node->label : "");
-		gtk_widget_set_tooltip_text (label, (node && node->label && node->label[0]) ? node->label : NULL);
 	}
+
+	if (subtitle)
+	{
+		if (server_session_entry)
+		{
+			const char *state_text = tree_server_state_text (sess->server);
+
+			gtk_label_set_text (GTK_LABEL (subtitle), state_text);
+			gtk_widget_set_visible (subtitle, TRUE);
+			if (node && node->label && node->label[0])
+				tooltip_text = g_strdup_printf ("%s (%s)", node->label, state_text);
+		}
+		else
+		{
+			gtk_label_set_text (GTK_LABEL (subtitle), "");
+			gtk_widget_set_visible (subtitle, FALSE);
+		}
+	}
+
+	if (!tooltip_text && node && node->label && node->label[0])
+		tooltip_text = g_strdup (node->label);
+
+	if (label)
+		gtk_widget_set_tooltip_text (label, tooltip_text);
 
 	if (icon)
 	{
@@ -318,9 +357,8 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 
 	if (expander)
 	{
-		gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander),
-			tree_node_has_children (node) ? FALSE : TRUE);
-		gtk_widget_set_tooltip_text (expander, (node && node->label && node->label[0]) ? node->label : NULL);
+		gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander), TRUE);
+		gtk_widget_set_tooltip_text (expander, tooltip_text);
 	}
 
 	if (badge)
@@ -370,6 +408,16 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	}
 
 	tree_apply_state_classes (row_box, label, node);
+
+	if (server_entry)
+	{
+		if (row_box)
+			gtk_widget_add_css_class (row_box, "hc-tree-section");
+		if (label)
+			gtk_widget_add_css_class (label, "hc-tree-section-label");
+	}
+
+	g_free (tooltip_text);
 }
 
 static session *
@@ -699,6 +747,10 @@ tree_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, 
 
 	node = (HcChanNode *) gtk_tree_list_row_get_item (row);
 	sess = node ? node->sess : NULL;
+	if ((!sess || !is_session (sess)) && node && node->serv &&
+		node->serv->server_session && is_session (node->serv->server_session))
+		sess = node->serv->server_session;
+
 	if (sess && is_session (sess))
 	{
 		tree_show_context_menu (tree_view, x, y, sess);
@@ -894,6 +946,38 @@ tree_server_label (server *serv)
 	return g_strdup (network);
 }
 
+static const char *
+tree_server_state_text (server *serv)
+{
+	if (!serv)
+		return _("Disconnected");
+
+	if (serv->connected && serv->end_of_motd)
+		return _("Connected");
+
+	if (serv->connecting || (serv->connected && !serv->end_of_motd))
+		return _("Connecting");
+
+	return _("Disconnected");
+}
+
+static char *
+tree_server_session_label (server *serv)
+{
+	const char *target;
+
+	if (!serv)
+		return g_strdup (_("Server"));
+
+	target = serv->servername[0] ? serv->servername : serv->hostname;
+	if (!target || !target[0])
+		target = server_get_network (serv, TRUE);
+	if (!target || !target[0])
+		target = _("Server");
+
+	return g_strdup (target);
+}
+
 static char *
 tree_session_label (session *sess)
 {
@@ -905,6 +989,9 @@ tree_session_label (session *sess)
 
 	if (sess->type == SESS_SERVER)
 	{
+		if (tree_group_by_server ())
+			return tree_server_session_label (sess->server);
+
 		network = server_get_network (sess->server, TRUE);
 		if (!network || !network[0])
 			network = sess->server && sess->server->servername[0] ? sess->server->servername : _("Server");
@@ -1003,7 +1090,6 @@ static HcChanNode *
 tree_ensure_server_node (server *serv)
 {
 	HcChanNode *node;
-	session *server_sess;
 	char *label;
 
 	node = tree_server_lookup (serv);
@@ -1016,18 +1102,6 @@ tree_ensure_server_node (server *serv)
 
 	tree_store_append_node (tree_root_nodes, node);
 	tree_server_store (serv, node);
-
-	server_sess = serv->server_session;
-	if (server_sess && is_session (server_sess))
-	{
-		char *sess_label;
-
-		node->sess = server_sess;
-		sess_label = tree_session_label (server_sess);
-		hc_chan_node_set_label (node, sess_label);
-		g_free (sess_label);
-		tree_session_store (server_sess, node);
-	}
 
 	g_object_unref (node);
 	return tree_server_lookup (serv);
@@ -1074,34 +1148,6 @@ tree_selection_notify_cb (GObject *object, GParamSpec *pspec, gpointer user_data
 }
 
 static void
-tree_activate_cb (GtkListView *list, guint position, gpointer user_data)
-{
-	GtkTreeListRow *row;
-	HcChanNode *node;
-
-	(void) list;
-	(void) user_data;
-
-	if (!tree_model)
-		return;
-
-	row = g_list_model_get_item (G_LIST_MODEL (tree_model), position);
-	if (!row)
-		return;
-
-	node = (HcChanNode *) gtk_tree_list_row_get_item (row);
-	if (gtk_tree_list_row_is_expandable (row) && tree_node_has_children (node))
-	{
-		gboolean expanded;
-
-		expanded = gtk_tree_list_row_get_expanded (row);
-		gtk_tree_list_row_set_expanded (row, !expanded);
-	}
-
-	g_object_unref (row);
-}
-
-static void
 tree_children_changed_cb (GListModel *model, guint position, guint removed, guint added, gpointer user_data)
 {
 	GtkListItem *list_item;
@@ -1136,15 +1182,18 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	GtkWidget *expander;
 	GtkWidget *row_box;
 	GtkWidget *icon;
+	GtkWidget *label_box;
 	GtkWidget *label;
+	GtkWidget *subtitle;
 	GtkWidget *badge;
 
 	(void) factory;
 	(void) user_data;
 
 	expander = gtk_tree_expander_new ();
-	gtk_tree_expander_set_indent_for_depth (GTK_TREE_EXPANDER (expander), TRUE);
-	gtk_tree_expander_set_indent_for_icon (GTK_TREE_EXPANDER (expander), TRUE);
+	gtk_tree_expander_set_indent_for_depth (GTK_TREE_EXPANDER (expander), FALSE);
+	gtk_tree_expander_set_indent_for_icon (GTK_TREE_EXPANDER (expander), FALSE);
+	gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander), TRUE);
 	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
 	gtk_widget_add_css_class (row_box, "hc-tree-row");
 	gtk_widget_set_hexpand (row_box, TRUE);
@@ -1155,6 +1204,12 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	gtk_widget_set_valign (icon, GTK_ALIGN_CENTER);
 	gtk_box_append (GTK_BOX (row_box), icon);
 
+	label_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+	gtk_widget_set_hexpand (label_box, TRUE);
+	gtk_widget_set_halign (label_box, GTK_ALIGN_FILL);
+	gtk_widget_set_valign (label_box, GTK_ALIGN_CENTER);
+	gtk_box_append (GTK_BOX (row_box), label_box);
+
 	label = gtk_label_new ("");
 	gtk_widget_add_css_class (label, "hc-tree-label");
 	gtk_widget_set_hexpand (label, TRUE);
@@ -1162,7 +1217,17 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
 	gtk_label_set_single_line_mode (GTK_LABEL (label), TRUE);
 	gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
-	gtk_box_append (GTK_BOX (row_box), label);
+	gtk_box_append (GTK_BOX (label_box), label);
+
+	subtitle = gtk_label_new ("");
+	gtk_widget_add_css_class (subtitle, "hc-tree-subtitle");
+	gtk_widget_add_css_class (subtitle, "dim-label");
+	gtk_widget_set_halign (subtitle, GTK_ALIGN_FILL);
+	gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
+	gtk_label_set_single_line_mode (GTK_LABEL (subtitle), TRUE);
+	gtk_label_set_ellipsize (GTK_LABEL (subtitle), PANGO_ELLIPSIZE_END);
+	gtk_widget_set_visible (subtitle, FALSE);
+	gtk_box_append (GTK_BOX (label_box), subtitle);
 
 	badge = gtk_label_new (NULL);
 	gtk_widget_add_css_class (badge, "hc-tree-badge");
@@ -1176,6 +1241,7 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-row-box", row_box);
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-icon", icon);
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-label", label);
+	g_object_set_data (G_OBJECT (list_item), "hc-tree-subtitle", subtitle);
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-badge", badge);
 }
 
@@ -1216,6 +1282,7 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	GtkWidget *expander;
 	GtkWidget *row_box;
 	GtkWidget *label;
+	GtkWidget *subtitle;
 	GtkWidget *icon;
 	GtkWidget *badge;
 
@@ -1238,6 +1305,7 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 
 	row_box = g_object_get_data (G_OBJECT (list_item), "hc-tree-row-box");
 	label = g_object_get_data (G_OBJECT (list_item), "hc-tree-label");
+	subtitle = g_object_get_data (G_OBJECT (list_item), "hc-tree-subtitle");
 	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
 	badge = g_object_get_data (G_OBJECT (list_item), "hc-tree-badge");
 
@@ -1248,6 +1316,11 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	{
 		gtk_label_set_text (GTK_LABEL (label), "");
 		gtk_widget_set_tooltip_text (label, NULL);
+	}
+	if (subtitle)
+	{
+		gtk_label_set_text (GTK_LABEL (subtitle), "");
+		gtk_widget_set_visible (subtitle, FALSE);
 	}
 	if (icon)
 		gtk_image_set_from_icon_name (GTK_IMAGE (icon), "chat-message-new-symbolic");
@@ -1321,7 +1394,7 @@ fe_gtk4_chanview_tree_create_widget (void)
 		tree_root_nodes = g_list_store_new (HC_TYPE_CHAN_NODE);
 		tree_model = gtk_tree_list_model_new (
 			G_LIST_MODEL (g_object_ref (tree_root_nodes)),
-			FALSE, FALSE, tree_create_child_model_cb, NULL, NULL);
+			FALSE, TRUE, tree_create_child_model_cb, NULL, NULL);
 		tree_selection = gtk_single_selection_new (
 			G_LIST_MODEL (g_object_ref (tree_model)));
 		gtk_single_selection_set_autoselect (tree_selection, FALSE);
@@ -1343,7 +1416,6 @@ fe_gtk4_chanview_tree_create_widget (void)
 
 		g_signal_connect (tree_selection, "notify::selected",
 			G_CALLBACK (tree_selection_notify_cb), NULL);
-		g_signal_connect (tree_view, "activate", G_CALLBACK (tree_activate_cb), NULL);
 		{
 			GtkGesture *gesture = gtk_gesture_click_new ();
 			gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
@@ -1362,23 +1434,32 @@ void
 fe_gtk4_chanview_tree_update_label (session *sess)
 {
 	HcChanNode *node;
+	HcChanNode *server_node;
 	char *label;
+	gboolean grouped;
 
 	if (!sess)
 		return;
 
+	grouped = tree_group_by_server ();
 	node = tree_session_lookup (sess);
-	if (!node && tree_group_by_server () && sess->type == SESS_SERVER && sess->server)
-		node = tree_server_lookup (sess->server);
 	if (!node)
 		return;
 
-	if (sess->type == SESS_SERVER && node->sess == NULL)
-		label = tree_server_label (sess->server);
-	else
-		label = tree_session_label (sess);
+	label = tree_session_label (sess);
 
 	hc_chan_node_set_label (node, label);
+	g_free (label);
+
+	if (!grouped || !sess->server)
+		return;
+
+	server_node = tree_server_lookup (sess->server);
+	if (!server_node)
+		return;
+
+	label = tree_server_label (sess->server);
+	hc_chan_node_set_label (server_node, label);
 	g_free (label);
 }
 
@@ -1419,11 +1500,12 @@ fe_gtk4_chanview_tree_add (session *sess)
 		if (!server_node)
 			return;
 
-		server_node->sess = sess;
 		label = tree_session_label (sess);
-		hc_chan_node_set_label (server_node, label);
+		node = hc_chan_node_new (label, sess, sess->server, FALSE);
 		g_free (label);
-		tree_session_store (sess, server_node);
+		tree_store_append_node (server_node->children, node);
+		tree_session_store (sess, node);
+		g_object_unref (node);
 		return;
 	}
 
@@ -1453,8 +1535,6 @@ fe_gtk4_chanview_tree_remove (session *sess)
 	HcChanNode *node;
 	HcChanNode *server_node;
 	gboolean grouped;
-	gboolean has_children;
-	char *label;
 	guint n_children;
 
 	if (!tree_root_nodes || !tree_session_nodes || !sess)
@@ -1470,36 +1550,11 @@ fe_gtk4_chanview_tree_remove (session *sess)
 		return;
 	}
 
-	grouped = tree_group_by_server ();
-	if (grouped && sess->type == SESS_SERVER && sess->server)
-	{
-		server_node = tree_server_lookup (sess->server);
-		if (server_node == node)
-		{
-			has_children = server_node->children &&
-				g_list_model_get_n_items (G_LIST_MODEL (server_node->children)) > 0;
-			if (has_children)
-			{
-				server_node->sess = NULL;
-				label = tree_server_label (sess->server);
-				hc_chan_node_set_label (server_node, label);
-				g_free (label);
-				g_hash_table_remove (tree_session_nodes, sess);
-				return;
-			}
-
-			if (server_node->owner)
-				tree_store_remove_node (server_node->owner, server_node);
-			g_hash_table_remove (tree_session_nodes, sess);
-			g_hash_table_remove (tree_server_nodes, sess->server);
-			return;
-		}
-	}
-
 	if (node->owner)
 		tree_store_remove_node (node->owner, node);
 	g_hash_table_remove (tree_session_nodes, sess);
 
+	grouped = tree_group_by_server ();
 	if (!grouped || !sess->server)
 		return;
 
@@ -1509,7 +1564,7 @@ fe_gtk4_chanview_tree_remove (session *sess)
 
 	n_children = server_node->children ?
 		g_list_model_get_n_items (G_LIST_MODEL (server_node->children)) : 0;
-	if (server_node->sess || n_children > 0)
+	if (n_children > 0)
 		return;
 
 	if (server_node->owner)
