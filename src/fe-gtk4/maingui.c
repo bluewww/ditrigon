@@ -20,6 +20,7 @@ static GtkWidget *main_center_box;
 static GtkWidget *topic_row;
 static GtkWidget *topic_entry;
 static GtkWidget *entry_row;
+static GtkWidget *input_composer_box;
 static GtkWidget *input_nick_box;
 static GtkWidget *input_nick_button;
 static GtkWidget *input_send_button;
@@ -107,6 +108,7 @@ maingui_build_chat_layout_from_ui (GtkWidget **chat_scroll_slot,
 	topic_row = maingui_ui_get_widget_typed (builder, "topic_row", GTK_TYPE_BOX);
 	topic_entry = maingui_ui_get_widget_typed (builder, "topic_entry", GTK_TYPE_ENTRY);
 	entry_row = maingui_ui_get_widget_typed (builder, "entry_row", GTK_TYPE_BOX);
+	input_composer_box = maingui_ui_get_widget_typed (builder, "input_composer_box", GTK_TYPE_BOX);
 	input_nick_box = maingui_ui_get_widget_typed (builder, "input_nick_box", GTK_TYPE_BOX);
 	input_send_button = maingui_ui_get_widget_typed (builder, "input_send_button", GTK_TYPE_BUTTON);
 
@@ -195,7 +197,60 @@ maingui_install_css (void)
 		"}\n"
 		".hc-input-row {\n"
 		"  background-color: @view_bg_color;\n"
-		"  padding: 4px 6px;\n"
+		"  padding: 4px 6px 6px 6px;\n"
+		"  border-top: 1px solid alpha(currentColor, 0.04);\n"
+		"}\n"
+		".hc-input-composer {\n"
+		"  border-radius: 10px;\n"
+		"  border: 1px solid alpha(currentColor, 0.06);\n"
+		"  padding: 2px 6px;\n"
+		"  background-color: alpha(currentColor, 0.07);\n"
+		"}\n"
+		".hc-input-composer:focus-within {\n"
+		"  background-color: alpha(currentColor, 0.09);\n"
+		"  border-color: alpha(currentColor, 0.12);\n"
+		"  box-shadow: none;\n"
+		"}\n"
+		".hc-input-nick {\n"
+		"  border-radius: 10px;\n"
+		"  padding: 0 7px;\n"
+		"  min-height: 28px;\n"
+		"  font-weight: 700;\n"
+		"}\n"
+		".hc-input-nick:hover {\n"
+		"  background-color: alpha(currentColor, 0.08);\n"
+		"}\n"
+		".hc-command-entry {\n"
+		"  min-height: 28px;\n"
+		"  box-shadow: none;\n"
+		"  outline: none;\n"
+		"}\n"
+		".hc-command-entry:focus,\n"
+		".hc-command-entry:focus-within {\n"
+		"  box-shadow: none;\n"
+		"  outline: none;\n"
+		"}\n"
+		".hc-command-entry > text {\n"
+		"  background-color: transparent;\n"
+		"  box-shadow: none;\n"
+		"  outline: none;\n"
+		"}\n"
+		".hc-command-entry:focus > text,\n"
+		".hc-command-entry:focus-within > text {\n"
+		"  box-shadow: none;\n"
+		"  outline: none;\n"
+		"}\n"
+		".hc-input-send {\n"
+		"  min-width: 28px;\n"
+		"  min-height: 28px;\n"
+		"}\n"
+		".hc-input-send:enabled {\n"
+		"  background-color: alpha(@accent_bg_color, 0.24);\n"
+		"  color: @accent_fg_color;\n"
+		"}\n"
+		".hc-input-send:disabled {\n"
+		"  background-color: transparent;\n"
+		"  color: alpha(currentColor, 0.45);\n"
 		"}\n";
 
 	maingui_css_provider = gtk_css_provider_new ();
@@ -719,6 +774,7 @@ fe_gtk4_maingui_cleanup (void)
 	main_nav_sidebar_page = NULL;
 	main_nav_content_page = NULL;
 	entry_row = NULL;
+	input_composer_box = NULL;
 	input_nick_box = NULL;
 	input_nick_button = NULL;
 	input_send_button = NULL;
@@ -781,6 +837,26 @@ send_command (const char *cmd)
 }
 
 static void
+entry_update_send_sensitivity (void)
+{
+	const char *text;
+
+	if (!input_send_button || !command_entry)
+		return;
+
+	text = gtk_editable_get_text (GTK_EDITABLE (command_entry));
+	gtk_widget_set_sensitive (input_send_button, (text && text[0]) ? TRUE : FALSE);
+}
+
+static void
+entry_changed_cb (GtkEditable *editable, gpointer userdata)
+{
+	(void) editable;
+	(void) userdata;
+	entry_update_send_sensitivity ();
+}
+
+static void
 entry_send_cb (GtkWidget *button, gpointer userdata)
 {
 	const char *text;
@@ -798,6 +874,7 @@ entry_send_cb (GtkWidget *button, gpointer userdata)
 	send_command (text);
 	gtk_editable_set_text (GTK_EDITABLE (command_entry), "");
 	gtk_widget_grab_focus (command_entry);
+	entry_update_send_sensitivity ();
 }
 
 static void
@@ -926,13 +1003,21 @@ fe_gtk4_create_main_window (void)
 	input_nick_button = gtk_button_new_with_label ("");
 	gtk_button_set_has_frame (GTK_BUTTON (input_nick_button), FALSE);
 	gtk_widget_set_can_focus (input_nick_button, FALSE);
+	gtk_widget_add_css_class (input_nick_button, "flat");
+	gtk_widget_add_css_class (input_nick_button, "hc-input-nick");
+	gtk_widget_set_valign (input_nick_button, GTK_ALIGN_CENTER);
+	gtk_widget_set_tooltip_text (input_nick_button, _("Change Nickname"));
 	gtk_box_append (GTK_BOX (input_nick_box), input_nick_button);
 	g_signal_connect (input_nick_button, "clicked", G_CALLBACK (nick_button_clicked_cb), NULL);
 
 	command_entry = sexy_spell_entry_new ();
 	gtk_widget_set_hexpand (command_entry, TRUE);
+	gtk_widget_add_css_class (command_entry, "hc-command-entry");
+	gtk_entry_set_has_frame (GTK_ENTRY (command_entry), FALSE);
+	gtk_entry_set_placeholder_text (GTK_ENTRY (command_entry), _("Type a message"));
 	gtk_box_append (GTK_BOX (command_entry_slot), command_entry);
 	g_signal_connect (command_entry, "activate", G_CALLBACK (entry_activate_cb), NULL);
+	g_signal_connect (command_entry, "changed", G_CALLBACK (entry_changed_cb), NULL);
 	{
 		GtkEventController *key_controller = gtk_event_controller_key_new ();
 		g_signal_connect (key_controller, "key-pressed",
@@ -947,12 +1032,18 @@ fe_gtk4_create_main_window (void)
 	if (!input_send_button)
 	{
 		input_send_button = gtk_button_new_from_icon_name ("mail-send-symbolic");
-		gtk_box_append (GTK_BOX (entry_row), input_send_button);
+		if (input_composer_box)
+			gtk_box_append (GTK_BOX (input_composer_box), input_send_button);
+		else
+			gtk_box_append (GTK_BOX (entry_row), input_send_button);
 	}
 	gtk_widget_set_tooltip_text (input_send_button, _("Send Message"));
-	gtk_widget_set_size_request (input_send_button, 30, -1);
 	gtk_widget_add_css_class (input_send_button, "flat");
+	gtk_widget_add_css_class (input_send_button, "circular");
+	gtk_widget_add_css_class (input_send_button, "hc-input-send");
+	gtk_widget_set_valign (input_send_button, GTK_ALIGN_CENTER);
 	g_signal_connect (input_send_button, "clicked", G_CALLBACK (entry_send_cb), NULL);
+	entry_update_send_sensitivity ();
 
 	entry_update_nick (current_tab);
 

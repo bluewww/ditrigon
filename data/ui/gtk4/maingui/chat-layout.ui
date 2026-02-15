@@ -71,15 +71,25 @@
           </object>
         </child>
         <child>
-          <object class="GtkBox" id="command_entry_slot">
+          <object class="GtkBox" id="input_composer_box">
             <property name="orientation">horizontal</property>
-            <property name="spacing">0</property>
+            <property name="spacing">6</property>
             <property name="hexpand">True</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkButton" id="input_send_button">
-            <property name="icon-name">mail-send-symbolic</property>
+            <style>
+              <class name="hc-input-composer"/>
+            </style>
+            <child>
+              <object class="GtkBox" id="command_entry_slot">
+                <property name="orientation">horizontal</property>
+                <property name="spacing">0</property>
+                <property name="hexpand">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="input_send_button">
+                <property name="icon-name">mail-send-symbolic</property>
+              </object>
+            </child>
           </object>
         </child>
       </object>
