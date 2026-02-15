@@ -1,5 +1,6 @@
 /* HexChat GTK4 menu model and window actions */
 #include "fe-gtk4.h"
+#include <adwaita.h>
 #include "../common/url.h"
 #include "../common/userlist.h"
 
@@ -1762,31 +1763,38 @@ win_action_window_search_prev (GSimpleAction *action, GVariant *parameter, gpoin
 }
 
 static void
-win_action_help_contents (GSimpleAction *action, GVariant *parameter, gpointer userdata)
+win_action_about (GSimpleAction *action, GVariant *parameter, gpointer userdata)
 {
-	(void) action;
-	(void) parameter;
-	(void) userdata;
-
-	fe_open_url ("https://hexchat.readthedocs.io/");
-}
-
-static void
-win_action_help_about (GSimpleAction *action, GVariant *parameter, gpointer userdata)
-{
-	GtkAlertDialog *dialog;
-	char detail[256];
+	static const char *developers[] =
+	{
+		"HexChat contributors",
+		NULL
+	};
+	AdwAboutDialog *about;
+	AdwDialog *dialog;
 
 	(void) action;
 	(void) parameter;
 	(void) userdata;
 
-	g_snprintf (detail, sizeof (detail), "%s %s\n%s", PACKAGE_NAME, PACKAGE_VERSION,
-		_("GTK4 staged frontend"));
-	dialog = gtk_alert_dialog_new (PACKAGE_NAME);
-	gtk_alert_dialog_set_detail (dialog, detail);
-	gtk_alert_dialog_show (dialog, GTK_WINDOW (main_window));
-	g_object_unref (dialog);
+	dialog = adw_about_dialog_new ();
+	about = ADW_ABOUT_DIALOG (dialog);
+
+	adw_about_dialog_set_application_name (about, "HexChat");
+	adw_about_dialog_set_application_icon (about, "io.github.Hexchat");
+	adw_about_dialog_set_version (about, PACKAGE_VERSION);
+	adw_about_dialog_set_developer_name (about, "HexChat");
+	adw_about_dialog_set_developers (about, developers);
+	adw_about_dialog_set_comments (about, _("IRC Client"));
+	adw_about_dialog_set_website (about, "https://hexchat.github.io");
+	adw_about_dialog_set_support_url (about, "https://hexchat.readthedocs.io/en/latest/");
+	adw_about_dialog_set_issue_url (about, "https://github.com/hexchat/hexchat/issues");
+	adw_about_dialog_add_link (about, _("Donate"), "https://goo.gl/jESZvU");
+	adw_about_dialog_set_license_type (about, GTK_LICENSE_GPL_2_0);
+	adw_about_dialog_set_translator_credits (about, _("translator-credits"));
+	adw_about_dialog_set_copyright (about, "Copyright \302\251 1998 HexChat contributors");
+
+	adw_dialog_present (dialog, main_window);
 }
 
 static void
@@ -1881,7 +1889,6 @@ fe_gtk4_rebuild_menu_bar (void)
 	GMenu *settings_menu;
 	GMenu *window_menu;
 	GMenu *search_menu;
-	GMenu *help_menu;
 	GHashTable *submenus;
 	GList *values;
 	GList *cur;
@@ -1990,11 +1997,12 @@ fe_gtk4_rebuild_menu_bar (void)
 	g_menu_append_submenu (root, _("Window"), G_MENU_MODEL (window_menu));
 	g_object_unref (window_menu);
 
-	help_menu = g_menu_new ();
-	g_menu_append (help_menu, _("Contents"), "win.help-contents");
-	g_menu_append (help_menu, _("About"), "win.help-about");
-	g_menu_append_submenu (root, _("Help"), G_MENU_MODEL (help_menu));
-	g_object_unref (help_menu);
+	{
+		GMenu *section = g_menu_new ();
+		g_menu_append (section, _("About HexChat"), "win.about");
+		g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+		g_object_unref (section);
+	}
 
 	remove_dynamic_actions ();
 	submenus = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
@@ -2250,8 +2258,7 @@ fe_gtk4_menu_register_actions (void)
 		{ "window-search", win_action_window_search, NULL, NULL, NULL },
 		{ "window-search-next", win_action_window_search_next, NULL, NULL, NULL },
 		{ "window-search-prev", win_action_window_search_prev, NULL, NULL, NULL },
-		{ "help-contents", win_action_help_contents, NULL, NULL, NULL },
-		{ "help-about", win_action_help_about, NULL, NULL, NULL },
+		{ "about", win_action_about, NULL, NULL, NULL },
 	};
 
 	if (!window_actions)
