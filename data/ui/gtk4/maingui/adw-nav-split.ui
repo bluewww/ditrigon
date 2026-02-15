@@ -21,6 +21,7 @@
               <object class="AdwHeaderBar" id="sidebar_header">
                 <property name="show-start-title-buttons">True</property>
                 <property name="show-end-title-buttons">False</property>
+                <property name="show-title">False</property>
               </object>
             </child>
             <property name="content">

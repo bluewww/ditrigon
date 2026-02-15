@@ -39,6 +39,7 @@ static AdwNavigationPage *main_nav_content_page;
 #define GUI_PANE_RIGHT_DEFAULT 100
 #define GUI_PANE_CENTER_MIN GUI_PANE_LEFT_DEFAULT
 #define NAV_SPLIT_COLLAPSE_CONDITION "max-width: 560sp"
+#define NAV_SPLIT_COLLAPSE_WIDTH_HINT 560
 #define MAINGUI_UI_BASE "/org/hexchat/ui/gtk4/maingui"
 
 static int done_intro;
@@ -508,6 +509,7 @@ void
 fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
 {
 	AdwNavigationSplitView *split;
+	int width;
 
 	left_sidebar_visible = visible ? TRUE : FALSE;
 
@@ -521,10 +523,13 @@ fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
 	if (left_sidebar_visible)
 	{
 		adw_navigation_split_view_set_collapsed (split, FALSE);
+		adw_navigation_split_view_set_show_content (split, TRUE);
 		if (adw_navigation_split_view_get_collapsed (split))
-			adw_navigation_split_view_set_show_content (split, FALSE);
-		else
-			adw_navigation_split_view_set_show_content (split, TRUE);
+		{
+			width = gtk_widget_get_width (main_nav_split ? main_nav_split : GTK_WIDGET (split));
+			if (width <= NAV_SPLIT_COLLAPSE_WIDTH_HINT)
+				adw_navigation_split_view_set_show_content (split, FALSE);
+		}
 	}
 	else
 	{
