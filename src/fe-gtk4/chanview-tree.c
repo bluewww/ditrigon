@@ -913,6 +913,15 @@ tree_session_store (session *sess, HcChanNode *node)
 	g_hash_table_replace (tree_session_nodes, sess, g_object_ref (node));
 }
 
+static void
+tree_refresh_node (HcChanNode *node)
+{
+	if (!node)
+		return;
+
+	g_object_notify_by_pspec (G_OBJECT (node), chan_node_props[PROP_LABEL]);
+}
+
 static HcChanNode *
 tree_server_lookup (server *serv)
 {
@@ -952,10 +961,10 @@ tree_server_state_text (server *serv)
 	if (!serv)
 		return _("Disconnected");
 
-	if (serv->connected && serv->end_of_motd)
+	if (serv->connected)
 		return _("Connected");
 
-	if (serv->connecting || (serv->connected && !serv->end_of_motd))
+	if (serv->connecting)
 		return _("Connecting");
 
 	return _("Disconnected");
@@ -1450,6 +1459,7 @@ fe_gtk4_chanview_tree_update_label (session *sess)
 
 	hc_chan_node_set_label (node, label);
 	g_free (label);
+	tree_refresh_node (node);
 
 	if (!grouped || !sess->server)
 		return;
@@ -1461,6 +1471,8 @@ fe_gtk4_chanview_tree_update_label (session *sess)
 	label = tree_server_label (sess->server);
 	hc_chan_node_set_label (server_node, label);
 	g_free (label);
+	if (server_node != node)
+		tree_refresh_node (server_node);
 }
 
 void
