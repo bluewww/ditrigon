@@ -13,6 +13,43 @@ typedef struct
 	gboolean reverse;
 } HcTextStyle;
 
+typedef struct
+{
+	const char *stamp;
+	gsize stamp_len;
+	const char *prefix;
+	gsize prefix_len;
+	const char *body;
+	gsize body_len;
+	gboolean has_columns;
+} HcLineColumns;
+
+typedef struct
+{
+	GString *plain;
+	GArray *raw_map; /* guint byte offset in raw text for each plain byte (+sentinel at end). */
+} HcVisibleMap;
+
+#define HC_WRAP_RIGHT_PAD_PX 8
+#define HC_WRAP_MIN_CONTENT_PX 80
+#define HC_PREFIX_MAX_CHARS 32
+#define HC_PREFIX_MAX_WORDS 2
+#define HC_PREFIX_TWO_WORD_MAX_CHARS 16
+#define HC_SPACE_WIDTH_FALLBACK_PX 6
+#define HC_IRC_COLOR_COUNT 32
+#define HC_COLOR_KEY_MASK G_MAXUINT8
+#define HC_ASCII_PRINTABLE_MIN ((unsigned char) ' ')
+#define HC_UTF8_LEAD_MIN 128
+
+#define HC_IRC_CTRL_BOLD ((unsigned char) '\x02')
+#define HC_IRC_CTRL_COLOR ((unsigned char) '\x03')
+#define HC_IRC_CTRL_HEX_COLOR ((unsigned char) '\x04')
+#define HC_IRC_CTRL_BELL ((unsigned char) '\x07')
+#define HC_IRC_CTRL_RESET ((unsigned char) '\x0f')
+#define HC_IRC_CTRL_REVERSE ((unsigned char) '\x16')
+#define HC_IRC_CTRL_ITALIC ((unsigned char) '\x1d')
+#define HC_IRC_CTRL_UNDERLINE ((unsigned char) '\x1f')
+
 static GHashTable *session_logs;
 static GHashTable *color_tags;
 static GtkTextTag *tag_stamp;
@@ -21,6 +58,9 @@ static GtkTextTag *tag_italic;
 static GtkTextTag *tag_underline;
 static GtkTextTag *tag_link_hover;
 static GtkTextTag *tag_font;
+static PangoFontDescription *xtext_font_desc;
+static int xtext_space_width_px;
+static int xtext_message_col_px;
 static char *xtext_search_text;
 static GtkTextMark *xtext_search_mark;
 static GtkTextMark *xtext_hover_start_mark;
@@ -30,8 +70,12 @@ static int xtext_secondary_pending_type;
 static char *xtext_secondary_pending_target;
 static double xtext_secondary_pending_x;
 static double xtext_secondary_pending_y;
+static guint xtext_resize_tick_id;
+static guint xtext_resize_idle_id;
+static int xtext_last_view_width;
 
 static void xtext_render_raw_append (const char *raw);
+static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
 
 static gboolean
 xtext_is_space_char (gunichar ch)
@@ -494,8 +538,8 @@ xtext_color_to_rgba (int color_index, GdkRGBA *rgba)
 	idx = color_index;
 	if (idx < 0)
 		idx = 0;
-	if (idx > 31)
-		idx %= 32;
+	if (idx >= HC_IRC_COLOR_COUNT)
+		idx %= HC_IRC_COLOR_COUNT;
 
 	rgba->red = ((double) colors[idx].red) / 65535.0;
 	rgba->green = ((double) colors[idx].green) / 65535.0;
@@ -528,11 +572,11 @@ xtext_get_color_tag (int fg, int bg)
 		return NULL;
 
 	if (fg >= 0)
-		fg %= 32;
+		fg %= HC_IRC_COLOR_COUNT;
 	if (bg >= 0)
-		bg %= 32;
+		bg %= HC_IRC_COLOR_COUNT;
 
-	key = (((guint) (fg + 1)) & 0xffu) | ((((guint) (bg + 1)) & 0xffu) << 8);
+	key = (((guint) (fg + 1)) & HC_COLOR_KEY_MASK) | ((((guint) (bg + 1)) & HC_COLOR_KEY_MASK) << 8);
 	tag = color_tags ? g_hash_table_lookup (color_tags, GUINT_TO_POINTER (key)) : NULL;
 	if (tag)
 		return tag;
@@ -560,6 +604,398 @@ xtext_get_color_tag (int fg, int bg)
 	g_hash_table_insert (color_tags, GUINT_TO_POINTER (key), tag);
 
 	return tag;
+}
+
+static void
+xtext_tabs_to_spaces (char *text)
+{
+	char *p;
+
+	if (!text)
+		return;
+
+	for (p = text; *p; p++)
+	{
+		if (*p == '\t')
+			*p = ' ';
+	}
+}
+
+static int
+xtext_measure_plain_width (const char *text, gsize len)
+{
+	PangoLayout *layout;
+	char *tmp;
+	int width;
+
+	if (!log_view || !text || len == 0)
+		return 0;
+
+	tmp = g_strndup (text, len);
+	xtext_tabs_to_spaces (tmp);
+
+	layout = gtk_widget_create_pango_layout (log_view, tmp);
+	if (xtext_font_desc)
+		pango_layout_set_font_description (layout, xtext_font_desc);
+	pango_layout_get_pixel_size (layout, &width, NULL);
+	g_object_unref (layout);
+	g_free (tmp);
+
+	return width;
+}
+
+static int
+xtext_message_wrap_width_px (void)
+{
+	int avail;
+
+	if (!log_view || !prefs.hex_text_wordwrap || xtext_message_col_px <= 0)
+		return 0;
+
+	avail = gtk_widget_get_width (log_view) - xtext_message_col_px - HC_WRAP_RIGHT_PAD_PX;
+	if (avail < HC_WRAP_MIN_CONTENT_PX)
+		return 0;
+
+	return avail;
+}
+
+static gboolean
+xtext_prefix_looks_reasonable (const char *text, gsize len)
+{
+	char *clean;
+	char *trimmed;
+	int words;
+	glong chars;
+	gboolean in_word;
+	const char *p;
+	const char *end;
+
+	if (!text || len == 0)
+		return FALSE;
+
+	clean = strip_color (text, (int) len, STRIP_ALL);
+	if (!clean)
+		return FALSE;
+
+	trimmed = g_strstrip (clean);
+	if (!trimmed[0])
+	{
+		g_free (clean);
+		return FALSE;
+	}
+
+	chars = g_utf8_strlen (trimmed, -1);
+	if (chars <= 0 || chars > HC_PREFIX_MAX_CHARS)
+	{
+		g_free (clean);
+		return FALSE;
+	}
+
+	words = 0;
+	in_word = FALSE;
+	p = trimmed;
+	end = trimmed + strlen (trimmed);
+	while (p < end)
+	{
+		gunichar ch;
+		gboolean is_space;
+		const char *next;
+
+		ch = g_utf8_get_char (p);
+		is_space = g_unichar_isspace (ch) ? TRUE : FALSE;
+		if (is_space)
+		{
+			in_word = FALSE;
+		}
+		else if (!in_word)
+		{
+			words++;
+			in_word = TRUE;
+			if (words > HC_PREFIX_MAX_WORDS)
+				break;
+		}
+
+		next = g_utf8_next_char (p);
+		p = next > p ? next : p + 1;
+	}
+
+	if (words < 1 || words > HC_PREFIX_MAX_WORDS)
+	{
+		g_free (clean);
+		return FALSE;
+	}
+	if (words == HC_PREFIX_MAX_WORDS && chars > HC_PREFIX_TWO_WORD_MAX_CHARS)
+	{
+		g_free (clean);
+		return FALSE;
+	}
+
+	g_free (clean);
+	return TRUE;
+}
+
+static int
+xtext_line_left_width_px (const HcLineColumns *cols)
+{
+	int width;
+	char *prefix_clean;
+
+	if (!cols || !cols->has_columns)
+		return 0;
+
+	width = 0;
+	if (cols->stamp_len > 0)
+		width += xtext_measure_plain_width (cols->stamp, cols->stamp_len);
+	if (cols->prefix_len == 0)
+		return width + xtext_space_width_px;
+
+	if (width > 0)
+		width += xtext_space_width_px;
+
+	prefix_clean = strip_color (cols->prefix, (int) cols->prefix_len, STRIP_ALL);
+	if (!prefix_clean)
+		return width + xtext_space_width_px;
+	xtext_tabs_to_spaces (prefix_clean);
+	width += xtext_measure_plain_width (prefix_clean, strlen (prefix_clean));
+	g_free (prefix_clean);
+
+	return width + xtext_space_width_px;
+}
+
+static void
+xtext_split_line_columns (const char *line, gsize len, HcLineColumns *cols)
+{
+	const char *tab1;
+	const char *tab2;
+	const char *rest;
+	gsize rest_len;
+
+	memset (cols, 0, sizeof (*cols));
+	if (!line || len == 0)
+		return;
+
+	tab1 = memchr (line, '\t', len);
+	if (!tab1)
+		return;
+
+	rest = tab1 + 1;
+	rest_len = len - (gsize) (rest - line);
+
+	if (prefs.hex_stamp_text)
+	{
+		cols->stamp = line;
+		cols->stamp_len = (gsize) (tab1 - line);
+		cols->body = rest;
+		cols->body_len = rest_len;
+		cols->has_columns = TRUE;
+
+		if (!prefs.hex_text_indent)
+			return;
+
+		tab2 = memchr (rest, '\t', rest_len);
+		if (!tab2)
+			return;
+		if (!xtext_prefix_looks_reasonable (rest, (gsize) (tab2 - rest)))
+			return;
+
+		cols->prefix = rest;
+		cols->prefix_len = (gsize) (tab2 - rest);
+		cols->body = tab2 + 1;
+		cols->body_len = len - (gsize) (cols->body - line);
+		return;
+	}
+
+	if (!prefs.hex_text_indent)
+		return;
+
+	cols->prefix = line;
+	cols->prefix_len = (gsize) (tab1 - line);
+	cols->body = rest;
+	cols->body_len = rest_len;
+	cols->has_columns = TRUE;
+}
+
+static int
+xtext_compute_message_column_px (const char *raw)
+{
+	const char *cursor;
+	int col_px;
+	int max_indent_px;
+
+	if (!raw || !raw[0] || !log_view)
+		return 0;
+
+	col_px = 0;
+	max_indent_px = prefs.hex_text_max_indent > 0 ? prefs.hex_text_max_indent : G_MAXINT;
+
+	cursor = raw;
+	while (*cursor)
+	{
+		const char *nl;
+		gsize len;
+		HcLineColumns cols;
+
+		nl = strchr (cursor, '\n');
+		len = nl ? (gsize) (nl - cursor) : strlen (cursor);
+		xtext_split_line_columns (cursor, len, &cols);
+		if (cols.has_columns)
+			col_px = MAX (col_px, xtext_line_left_width_px (&cols));
+
+		if (!nl)
+			break;
+		cursor = nl + 1;
+	}
+
+	if (col_px > max_indent_px)
+		col_px = max_indent_px;
+	if (col_px < 0)
+		col_px = 0;
+
+	return col_px;
+}
+
+static void
+xtext_set_message_tab_stop (int px)
+{
+	PangoTabArray *tabs;
+
+	if (!log_view)
+		return;
+
+	if (px <= 0)
+	{
+		gtk_text_view_set_tabs (GTK_TEXT_VIEW (log_view), NULL);
+		xtext_message_col_px = 0;
+		return;
+	}
+
+	tabs = pango_tab_array_new (1, TRUE);
+	pango_tab_array_set_tab (tabs, 0, PANGO_TAB_LEFT, px);
+	gtk_text_view_set_tabs (GTK_TEXT_VIEW (log_view), tabs);
+	pango_tab_array_free (tabs);
+	xtext_message_col_px = px;
+}
+
+static HcVisibleMap *
+xtext_visible_map_build (const char *text, gsize len)
+{
+	HcVisibleMap *map;
+	const char *p;
+	const char *end;
+
+	map = g_new0 (HcVisibleMap, 1);
+	map->plain = g_string_sized_new (len ? len : 8);
+	map->raw_map = g_array_sized_new (FALSE, FALSE, sizeof (guint), len + 1);
+
+	p = text;
+	end = text + len;
+	while (p < end)
+	{
+		unsigned char ch;
+		const char *next;
+
+		ch = (unsigned char) *p;
+		switch (ch)
+		{
+		case HC_IRC_CTRL_BOLD:
+		case HC_IRC_CTRL_ITALIC:
+		case HC_IRC_CTRL_UNDERLINE:
+		case HC_IRC_CTRL_REVERSE:
+		case HC_IRC_CTRL_RESET:
+		case HC_IRC_CTRL_BELL:
+			p++;
+			continue;
+		case HC_IRC_CTRL_COLOR:
+		{
+			int dummy;
+			gsize j;
+
+			j = (gsize) ((p + 1) - text);
+			if (xtext_parse_color_number (text, len, &j, &dummy))
+			{
+				if (j < len && text[j] == ',')
+				{
+					j++;
+					(void) xtext_parse_color_number (text, len, &j, &dummy);
+				}
+			}
+			p = text + j;
+			continue;
+		}
+		case HC_IRC_CTRL_HEX_COLOR:
+		{
+			gsize j;
+
+			j = (gsize) ((p + 1) - text);
+			while (j < len && (g_ascii_isxdigit (text[j]) || text[j] == ','))
+				j++;
+			p = text + j;
+			continue;
+		}
+		case '\t':
+		{
+			guint pos;
+
+			pos = (guint) (p - text);
+			g_string_append_c (map->plain, ' ');
+			g_array_append_val (map->raw_map, pos);
+			p++;
+			continue;
+		}
+		default:
+			break;
+		}
+
+		if (ch < HC_ASCII_PRINTABLE_MIN)
+		{
+			p++;
+			continue;
+		}
+
+		{
+			gsize char_len;
+			gsize k;
+			gsize offset;
+
+			next = g_utf8_next_char (p);
+			char_len = (gsize) (next - p);
+			if (char_len == 0 || p + char_len > end)
+				char_len = 1;
+
+			offset = (gsize) (p - text);
+			g_string_append_len (map->plain, p, char_len);
+			for (k = 0; k < char_len; k++)
+			{
+				guint pos;
+
+				pos = (guint) (offset + k);
+				g_array_append_val (map->raw_map, pos);
+			}
+			p += char_len;
+		}
+	}
+
+	{
+		guint end_pos;
+
+		end_pos = (guint) len;
+		g_array_append_val (map->raw_map, end_pos);
+	}
+
+	return map;
+}
+
+static void
+xtext_visible_map_free (HcVisibleMap *map)
+{
+	if (!map)
+		return;
+
+	if (map->plain)
+		g_string_free (map->plain, TRUE);
+	if (map->raw_map)
+		g_array_free (map->raw_map, TRUE);
+	g_free (map);
 }
 
 static void
@@ -636,6 +1072,43 @@ xtext_insert_segment (GtkTextIter *iter, const char *text, gsize len, const HcTe
 	}
 }
 
+static void
+xtext_insert_plain_text (GtkTextIter *iter, const char *text, gsize len, gboolean with_stamp_tag)
+{
+	GtkTextTag *first_tag;
+	GtkTextTag *second_tag;
+
+	if (!log_buffer || !iter || !text || len == 0)
+		return;
+
+	first_tag = with_stamp_tag ? tag_stamp : NULL;
+	second_tag = tag_font;
+
+	if (!first_tag && !second_tag)
+	{
+		gtk_text_buffer_insert (log_buffer, iter, text, (int) len);
+		return;
+	}
+	if (first_tag && second_tag)
+	{
+		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len, first_tag, second_tag, NULL);
+		return;
+	}
+
+	gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+		first_tag ? first_tag : second_tag, NULL);
+}
+
+static void
+xtext_insert_plain_char (GtkTextIter *iter, char ch)
+{
+	char s[2];
+
+	s[0] = ch;
+	s[1] = 0;
+	xtext_insert_plain_text (iter, s, 1, FALSE);
+}
+
 static gboolean
 xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value)
 {
@@ -658,12 +1131,13 @@ xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value)
 		return FALSE;
 
 	*index = i;
-	*value = number % 32;
+	*value = number % HC_IRC_COLOR_COUNT;
 	return TRUE;
 }
 
 static void
-xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
+xtext_render_formatted_stateful (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag,
+	HcTextStyle *style_io)
 {
 	HcTextStyle style;
 	gsize i;
@@ -672,47 +1146,54 @@ xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextT
 	if (!text || len == 0)
 		return;
 
-	xtext_reset_style (&style);
+	if (style_io)
+		style = *style_io;
+	else
+		xtext_reset_style (&style);
 	seg_start = 0;
 	i = 0;
 
 	while (i < len)
 	{
 		unsigned char ch;
+		gsize next_i;
 
 		ch = (unsigned char) text[i];
-
-		if (ch == 0x02 || ch == 0x1d || ch == 0x1f || ch == 0x16 || ch == 0x0f || ch == 0x03 || ch == 0x04)
+		switch (ch)
+		{
+		case HC_IRC_CTRL_BOLD:
+		case HC_IRC_CTRL_ITALIC:
+		case HC_IRC_CTRL_UNDERLINE:
+		case HC_IRC_CTRL_REVERSE:
+		case HC_IRC_CTRL_RESET:
+		case HC_IRC_CTRL_COLOR:
+		case HC_IRC_CTRL_HEX_COLOR:
 		{
 			if (i > seg_start)
 				xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
-
-			if (ch == 0x02)
+			switch (ch)
 			{
+			case HC_IRC_CTRL_BOLD:
 				style.bold = !style.bold;
 				i++;
-			}
-			else if (ch == 0x1d)
-			{
+				break;
+			case HC_IRC_CTRL_ITALIC:
 				style.italic = !style.italic;
 				i++;
-			}
-			else if (ch == 0x1f)
-			{
+				break;
+			case HC_IRC_CTRL_UNDERLINE:
 				style.underline = !style.underline;
 				i++;
-			}
-			else if (ch == 0x16)
-			{
+				break;
+			case HC_IRC_CTRL_REVERSE:
 				style.reverse = !style.reverse;
 				i++;
-			}
-			else if (ch == 0x0f)
-			{
+				break;
+			case HC_IRC_CTRL_RESET:
 				xtext_reset_style (&style);
 				i++;
-			}
-			else if (ch == 0x03)
+				break;
+			case HC_IRC_CTRL_COLOR:
 			{
 				int fg;
 				int bg;
@@ -724,22 +1205,22 @@ xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextT
 					style.fg = -1;
 					style.bg = -1;
 					i = j;
+					break;
 				}
-				else
+
+				style.fg = fg;
+				if (j < len && text[j] == ',')
 				{
-					style.fg = fg;
-					if (j < len && text[j] == ',')
-					{
-						j++;
-						if (xtext_parse_color_number (text, len, &j, &bg))
-							style.bg = bg;
-						else
-							style.bg = -1;
-					}
-					i = j;
+					j++;
+					if (xtext_parse_color_number (text, len, &j, &bg))
+						style.bg = bg;
+					else
+						style.bg = -1;
 				}
+				i = j;
+				break;
 			}
-			else
+			default:
 			{
 				gsize j;
 
@@ -750,13 +1231,26 @@ xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextT
 				style.fg = -1;
 				style.bg = -1;
 				i = j;
+				break;
 			}
-
+			}
 			seg_start = i;
 			continue;
 		}
+			case '\t':
+			{
+				if (i > seg_start)
+					xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
+				xtext_insert_segment (iter, " ", 1, &style, layout_tag);
+				i++;
+				seg_start = i;
+				continue;
+			}
+			default:
+				break;
+			}
 
-		if (ch < 0x20 && ch != '\t')
+		if (ch < HC_ASCII_PRINTABLE_MIN)
 		{
 			if (i > seg_start)
 				xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
@@ -765,78 +1259,137 @@ xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextT
 			continue;
 		}
 
-		i++;
+		next_i = i + 1;
+		if (ch >= HC_UTF8_LEAD_MIN)
+		{
+			next_i = i + (gsize) g_utf8_skip[ch];
+			if (next_i <= i || next_i > len)
+				next_i = i + 1;
+		}
+		i = next_i;
 	}
 
 	if (i > seg_start)
 		xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
+
+	if (style_io)
+		*style_io = style;
+}
+
+static void
+xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
+{
+	xtext_render_formatted_stateful (iter, text, len, layout_tag, NULL);
+}
+
+static void
+xtext_render_formatted_wrapped (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
+{
+	int wrap_width;
+	HcVisibleMap *map;
+	PangoLayout *layout;
+	int line_count;
+	int line_idx;
+	gsize raw_start;
+	HcTextStyle style;
+
+	wrap_width = xtext_message_wrap_width_px ();
+	if (wrap_width <= 0 || !text || len == 0)
+	{
+		xtext_render_formatted (iter, text, len, layout_tag);
+		return;
+	}
+
+	map = xtext_visible_map_build (text, len);
+	if (!map || map->plain->len == 0)
+	{
+		xtext_visible_map_free (map);
+		xtext_render_formatted (iter, text, len, layout_tag);
+		return;
+	}
+
+	layout = gtk_widget_create_pango_layout (log_view, map->plain->str);
+	if (xtext_font_desc)
+		pango_layout_set_font_description (layout, xtext_font_desc);
+	pango_layout_set_wrap (layout, PANGO_WRAP_WORD_CHAR);
+	pango_layout_set_width (layout, wrap_width * PANGO_SCALE);
+
+	line_count = pango_layout_get_line_count (layout);
+	if (line_count <= 1)
+	{
+		g_object_unref (layout);
+		xtext_visible_map_free (map);
+		xtext_render_formatted (iter, text, len, layout_tag);
+		return;
+	}
+
+	raw_start = 0;
+	xtext_reset_style (&style);
+	for (line_idx = 1; line_idx < line_count; line_idx++)
+	{
+		PangoLayoutLine *line;
+		int start_index;
+		gsize raw_break;
+
+		line = pango_layout_get_line_readonly (layout, line_idx);
+		if (!line)
+			continue;
+		start_index = line->start_index;
+		if (start_index <= 0 || (gsize) start_index >= map->raw_map->len)
+			continue;
+
+		raw_break = g_array_index (map->raw_map, guint, (gsize) start_index);
+		if (raw_break <= raw_start || raw_break > len)
+			continue;
+
+		xtext_render_formatted_stateful (iter, text + raw_start, raw_break - raw_start, layout_tag, &style);
+		xtext_insert_plain_char (iter, '\n');
+		xtext_insert_plain_char (iter, '\t');
+		raw_start = raw_break;
+	}
+
+	if (raw_start < len)
+		xtext_render_formatted_stateful (iter, text + raw_start, len - raw_start, layout_tag, &style);
+
+	g_object_unref (layout);
+	xtext_visible_map_free (map);
 }
 
 static void
 xtext_render_line (GtkTextIter *iter, const char *line, gsize len, gboolean append_newline)
 {
-	gsize tab_pos;
-	gboolean has_tab;
+	HcLineColumns cols;
 
 	if (!iter)
 		return;
 
-	has_tab = FALSE;
-	tab_pos = 0;
-	while (tab_pos < len)
+	xtext_split_line_columns (line, len, &cols);
+	if (cols.has_columns)
 	{
-		if (line[tab_pos] == '\t')
-		{
-			has_tab = TRUE;
-			break;
-		}
-		tab_pos++;
-	}
+		if (cols.stamp && cols.stamp_len > 0)
+			xtext_insert_plain_text (iter, cols.stamp, cols.stamp_len, TRUE);
 
-	if (has_tab)
-	{
-		if (tab_pos > 0)
+		if (cols.prefix && cols.prefix_len > 0)
 		{
-			if (tag_stamp)
-			{
-				if (tag_font)
-					gtk_text_buffer_insert_with_tags (log_buffer, iter, line, (int) tab_pos,
-						tag_stamp, tag_font, NULL);
-				else
-					gtk_text_buffer_insert_with_tags (log_buffer, iter, line, (int) tab_pos,
-						tag_stamp, NULL);
-			}
-			else
-			{
-				if (tag_font)
-					gtk_text_buffer_insert_with_tags (log_buffer, iter, line, (int) tab_pos,
-						tag_font, NULL);
-				else
-					gtk_text_buffer_insert (log_buffer, iter, line, (int) tab_pos);
-			}
+			if (cols.stamp && cols.stamp_len > 0)
+				xtext_insert_plain_char (iter, ' ');
+			xtext_render_formatted (iter, cols.prefix, cols.prefix_len, NULL);
 		}
 
-		if (tab_pos + 1 < len)
+		if (cols.body && cols.body_len > 0)
 		{
-			if (tag_font)
-				gtk_text_buffer_insert_with_tags (log_buffer, iter, " ", 1, tag_font, NULL);
+			xtext_insert_plain_char (iter, '\t');
+			if (prefs.hex_text_wordwrap)
+				xtext_render_formatted_wrapped (iter, cols.body, cols.body_len, NULL);
 			else
-				gtk_text_buffer_insert (log_buffer, iter, " ", 1);
-			xtext_render_formatted (iter, line + tab_pos + 1, len - tab_pos - 1, NULL);
+				xtext_render_formatted (iter, cols.body, cols.body_len, NULL);
 		}
 	}
 	else
-	{
 		xtext_render_formatted (iter, line, len, NULL);
-	}
 
 	if (append_newline)
-	{
-		if (tag_font)
-			gtk_text_buffer_insert_with_tags (log_buffer, iter, "\n", 1, tag_font, NULL);
-		else
-			gtk_text_buffer_insert (log_buffer, iter, "\n", 1);
-	}
+		xtext_insert_plain_char (iter, '\n');
 }
 
 static void
@@ -879,9 +1432,15 @@ xtext_render_raw_all (const char *raw)
 {
 	GtkTextIter start;
 	GtkTextIter end;
+	int col_px;
+	const char *text;
 
 	if (!log_buffer)
 		return;
+
+	text = raw ? raw : "";
+	col_px = xtext_compute_message_column_px (text);
+	xtext_set_message_tab_stop (col_px);
 
 	xtext_link_hover_clear ();
 
@@ -889,7 +1448,7 @@ xtext_render_raw_all (const char *raw)
 	gtk_text_buffer_delete (log_buffer, &start, &end);
 
 	gtk_text_buffer_get_end_iter (log_buffer, &end);
-	xtext_render_raw_at_iter (&end, raw ? raw : "");
+	xtext_render_raw_at_iter (&end, text);
 }
 
 static void
@@ -917,6 +1476,95 @@ xtext_scroll_to_end (void)
 }
 
 static void
+xtext_show_session_rendered (session *sess, gboolean keep_scroll)
+{
+	GString *log;
+	GtkAdjustment *vadj;
+	double old_value;
+	double upper;
+	double page;
+	double max_value;
+	gboolean was_at_end;
+
+	if (!log_buffer)
+		return;
+
+	log = NULL;
+	if (session_logs && sess)
+		log = g_hash_table_lookup (session_logs, sess);
+
+	vadj = NULL;
+	old_value = 0.0;
+	was_at_end = TRUE;
+	if (keep_scroll && log_view)
+	{
+		vadj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (log_view));
+		if (vadj)
+		{
+			old_value = gtk_adjustment_get_value (vadj);
+			upper = gtk_adjustment_get_upper (vadj);
+			page = gtk_adjustment_get_page_size (vadj);
+			was_at_end = (old_value + page) >= (upper - 2.0);
+		}
+	}
+
+	xtext_render_raw_all (log ? log->str : "");
+
+	if (!keep_scroll || was_at_end || !vadj)
+	{
+		xtext_scroll_to_end ();
+		return;
+	}
+
+	upper = gtk_adjustment_get_upper (vadj);
+	page = gtk_adjustment_get_page_size (vadj);
+	max_value = upper - page;
+	if (max_value < 0.0)
+		max_value = 0.0;
+	if (old_value > max_value)
+		old_value = max_value;
+	if (old_value < 0.0)
+		old_value = 0.0;
+
+	gtk_adjustment_set_value (vadj, old_value);
+}
+
+static gboolean
+xtext_resize_refresh_idle_cb (gpointer user_data)
+{
+	(void) user_data;
+	xtext_resize_idle_id = 0;
+
+	if (!log_view || !current_tab || !is_session (current_tab))
+		return G_SOURCE_REMOVE;
+
+	xtext_show_session_rendered (current_tab, TRUE);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean
+xtext_resize_tick_cb (GtkWidget *widget, GdkFrameClock *frame_clock, gpointer user_data)
+{
+	int width;
+
+	(void) frame_clock;
+	(void) user_data;
+
+	if (!widget || widget != log_view)
+		return G_SOURCE_CONTINUE;
+
+	width = gtk_widget_get_width (widget);
+	if (width <= 0 || width == xtext_last_view_width)
+		return G_SOURCE_CONTINUE;
+
+	xtext_last_view_width = width;
+	if (xtext_resize_idle_id == 0)
+		xtext_resize_idle_id = g_idle_add (xtext_resize_refresh_idle_cb, NULL);
+
+	return G_SOURCE_CONTINUE;
+}
+
+static void
 xtext_apply_font_pref (void)
 {
 	PangoFontDescription *desc;
@@ -929,7 +1577,17 @@ xtext_apply_font_pref (void)
 		desc = pango_font_description_from_string (prefs.hex_text_font);
 
 	gtk_text_view_set_monospace (GTK_TEXT_VIEW (log_view), desc ? FALSE : TRUE);
+	gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (log_view),
+		prefs.hex_text_wordwrap ? GTK_WRAP_WORD_CHAR : GTK_WRAP_NONE);
 	g_object_set (tag_font, "font-desc", desc, NULL);
+
+	if (xtext_font_desc)
+		pango_font_description_free (xtext_font_desc);
+	xtext_font_desc = desc ? pango_font_description_copy (desc) : NULL;
+
+	xtext_space_width_px = xtext_measure_plain_width (" ", 1);
+	if (xtext_space_width_px <= 0)
+		xtext_space_width_px = HC_SPACE_WIDTH_FALLBACK_PX;
 
 	if (desc)
 		pango_font_description_free (desc);
@@ -986,6 +1644,9 @@ fe_gtk4_xtext_init (void)
 			NULL, session_log_free);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
+	if (xtext_space_width_px <= 0)
+		xtext_space_width_px = HC_SPACE_WIDTH_FALLBACK_PX;
+	xtext_message_col_px = 0;
 }
 
 void
@@ -1001,6 +1662,11 @@ fe_gtk4_xtext_cleanup (void)
 		g_hash_table_unref (color_tags);
 		color_tags = NULL;
 	}
+	if (xtext_font_desc)
+	{
+		pango_font_description_free (xtext_font_desc);
+		xtext_font_desc = NULL;
+	}
 
 	tag_stamp = NULL;
 	tag_bold = NULL;
@@ -1015,6 +1681,19 @@ fe_gtk4_xtext_cleanup (void)
 	xtext_secondary_pending_clear ();
 	g_free (xtext_search_text);
 	xtext_search_text = NULL;
+	if (xtext_resize_idle_id != 0)
+	{
+		g_source_remove (xtext_resize_idle_id);
+		xtext_resize_idle_id = 0;
+	}
+	if (log_view && xtext_resize_tick_id != 0)
+	{
+		gtk_widget_remove_tick_callback (log_view, xtext_resize_tick_id);
+		xtext_resize_tick_id = 0;
+	}
+	xtext_space_width_px = 0;
+	xtext_message_col_px = 0;
+	xtext_last_view_width = -1;
 }
 
 GtkWidget *
@@ -1026,12 +1705,24 @@ fe_gtk4_xtext_create_widget (void)
 	scroll = gtk_scrolled_window_new ();
 	gtk_widget_set_hexpand (scroll, TRUE);
 	gtk_widget_set_vexpand (scroll, TRUE);
+	if (log_view && xtext_resize_tick_id != 0)
+	{
+		gtk_widget_remove_tick_callback (log_view, xtext_resize_tick_id);
+		xtext_resize_tick_id = 0;
+	}
+	if (xtext_resize_idle_id != 0)
+	{
+		g_source_remove (xtext_resize_idle_id);
+		xtext_resize_idle_id = 0;
+	}
+	xtext_last_view_width = -1;
 
 	log_view = gtk_text_view_new ();
 	gtk_text_view_set_editable (GTK_TEXT_VIEW (log_view), FALSE);
 	gtk_text_view_set_cursor_visible (GTK_TEXT_VIEW (log_view), FALSE);
 	gtk_text_view_set_monospace (GTK_TEXT_VIEW (log_view), TRUE);
 	gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (log_view), GTK_WRAP_WORD_CHAR);
+	gtk_text_view_set_tabs (GTK_TEXT_VIEW (log_view), NULL);
 	{
 		GtkGesture *gesture;
 		GtkEventController *motion;
@@ -1083,6 +1774,8 @@ fe_gtk4_xtext_create_widget (void)
 	xtext_search_mark = NULL;
 	xtext_hover_start_mark = NULL;
 	xtext_hover_end_mark = NULL;
+	xtext_message_col_px = 0;
+	xtext_resize_tick_id = gtk_widget_add_tick_callback (log_view, xtext_resize_tick_cb, NULL, NULL);
 	xtext_apply_font_pref ();
 
 	return scroll;
@@ -1133,6 +1826,19 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 
 	if (sess == current_tab)
 	{
+		if (log)
+		{
+			int added_col_px;
+
+			added_col_px = xtext_compute_message_column_px (text);
+			if (added_col_px > xtext_message_col_px)
+			{
+				/* Re-render to apply a wider tab stop uniformly. */
+				fe_gtk4_xtext_show_session (sess);
+				return;
+			}
+		}
+
 		xtext_render_raw_append (text);
 		xtext_scroll_to_end ();
 	}
@@ -1141,17 +1847,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 void
 fe_gtk4_xtext_show_session (session *sess)
 {
-	GString *log;
-
-	if (!log_buffer)
-		return;
-
-	log = NULL;
-	if (session_logs && sess)
-		log = g_hash_table_lookup (session_logs, sess);
-
-	xtext_render_raw_all (log ? log->str : "");
-	xtext_scroll_to_end ();
+	xtext_show_session_rendered (sess, FALSE);
 }
 
 void
