@@ -710,7 +710,6 @@ fe_gtk4_userlist_create_widget (void)
 		gtk_widget_set_margin_bottom (userlist_info_label, 6);
 		gtk_label_set_use_markup (GTK_LABEL (userlist_info_label), TRUE);
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_info_label);
-		gtk_box_append (GTK_BOX (userlist_panel), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
 
 		userlist_scroller = gtk_scrolled_window_new ();
 		gtk_widget_set_hexpand (userlist_scroller, FALSE);

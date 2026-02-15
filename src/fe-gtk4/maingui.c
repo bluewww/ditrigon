@@ -180,7 +180,17 @@ maingui_install_css (void)
 
 	css =
 		"paned.hc-soft-paned > separator {\n"
-		"  background-color: alpha(currentColor, 0.12);\n"
+		"  background-color: transparent;\n"
+		"  border: none;\n"
+		"  box-shadow: none;\n"
+		"  min-width: 8px;\n"
+		"  background-image: linear-gradient(to right,\n"
+		"    transparent 0%,\n"
+		"    transparent 45%,\n"
+		"    alpha(currentColor, 0.07) 45%,\n"
+		"    alpha(currentColor, 0.07) 55%,\n"
+		"    transparent 55%,\n"
+		"    transparent 100%);\n"
 		"}\n"
 		".hc-input-row {\n"
 		"  background-color: @view_bg_color;\n"
