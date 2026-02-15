@@ -996,17 +996,18 @@ fe_gtk4_userlist_create_widget (void)
 
 		userlist_info_label = gtk_label_new (NULL);
 		gtk_label_set_xalign (GTK_LABEL (userlist_info_label), 0.0f);
-		gtk_widget_set_margin_start (userlist_info_label, 6);
-		gtk_widget_set_margin_end (userlist_info_label, 6);
-		gtk_widget_set_margin_top (userlist_info_label, 6);
-		gtk_widget_set_margin_bottom (userlist_info_label, 6);
+		gtk_widget_set_margin_start (userlist_info_label, 8);
+		gtk_widget_set_margin_end (userlist_info_label, 8);
+		gtk_widget_set_margin_top (userlist_info_label, 8);
+		gtk_widget_set_margin_bottom (userlist_info_label, 4);
 		gtk_label_set_use_markup (GTK_LABEL (userlist_info_label), TRUE);
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_info_label);
 
 		userlist_search_entry = gtk_search_entry_new ();
-		gtk_widget_set_margin_start (userlist_search_entry, 6);
-		gtk_widget_set_margin_end (userlist_search_entry, 6);
-		gtk_widget_set_margin_bottom (userlist_search_entry, 6);
+		gtk_widget_set_margin_start (userlist_search_entry, 8);
+		gtk_widget_set_margin_end (userlist_search_entry, 8);
+		gtk_widget_set_margin_top (userlist_search_entry, 2);
+		gtk_widget_set_margin_bottom (userlist_search_entry, 8);
 		gtk_entry_set_placeholder_text (GTK_ENTRY (userlist_search_entry), _("Search Users"));
 		gtk_editable_set_text (GTK_EDITABLE (userlist_search_entry), "");
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_search_entry);
