@@ -35,13 +35,33 @@ static AdwNavigationPage *main_nav_sidebar_page;
 static AdwNavigationPage *main_nav_content_page;
 
 #define GUI_PANE_LEFT_DEFAULT 128
-#define GUI_PANE_RIGHT_DEFAULT 100
+#define GUI_PANE_RIGHT_DEFAULT 200
+#define GUI_PANE_RIGHT_MIN 180
+#define GUI_PANE_RIGHT_MAX 300
 #define GUI_PANE_CENTER_MIN GUI_PANE_LEFT_DEFAULT
 #define NAV_SPLIT_COLLAPSE_CONDITION "max-width: 560sp"
 #define NAV_SPLIT_COLLAPSE_WIDTH_HINT 560
 #define MAINGUI_UI_BASE "/org/hexchat/ui/gtk4/maingui"
 
 static int done_intro;
+
+static int
+maingui_right_pane_min_size (void)
+{
+	return MAX (prefs.hex_gui_pane_right_size_min, GUI_PANE_RIGHT_MIN);
+}
+
+static int
+maingui_right_pane_clamp_size (int size)
+{
+	int min_right;
+	int max_right;
+
+	min_right = maingui_right_pane_min_size ();
+	max_right = MAX (GUI_PANE_RIGHT_MAX, min_right);
+
+	return CLAMP (size, min_right, max_right);
+}
 
 static GtkBuilder *
 maingui_ui_builder_new (const char *resource_path)
@@ -692,6 +712,7 @@ right_pane_pos_cb (GtkPaned *pane, GParamSpec *pspec, gpointer user_data)
 	int width;
 	int pos;
 	int right_size;
+	int wanted_right;
 
 	(void) pspec;
 	(void) user_data;
@@ -704,9 +725,13 @@ right_pane_pos_cb (GtkPaned *pane, GParamSpec *pspec, gpointer user_data)
 	if (width <= 0 || pos < 0)
 		return;
 
-	right_size = width - pos;
-	if (right_size < prefs.hex_gui_pane_right_size_min)
-		right_size = prefs.hex_gui_pane_right_size_min;
+	wanted_right = width - pos;
+	right_size = maingui_right_pane_clamp_size (wanted_right);
+	if (right_size != wanted_right)
+	{
+		pos = CLAMP (width - right_size, 0, MAX (0, width - 1));
+		gtk_paned_set_position (pane, pos);
+	}
 	prefs.hex_gui_pane_right_size = right_size;
 }
 
@@ -729,11 +754,9 @@ fe_gtk4_maingui_animate_userlist_split (gboolean visible)
 	if (pos < 0)
 		pos = width;
 
-	right_size = MAX (prefs.hex_gui_pane_right_size, prefs.hex_gui_pane_right_size_min);
-	if (right_size <= 0)
-		right_size = GUI_PANE_RIGHT_DEFAULT;
+	right_size = maingui_right_pane_clamp_size (prefs.hex_gui_pane_right_size);
 	if (right_size >= width)
-		right_size = MAX (prefs.hex_gui_pane_right_size_min, GUI_PANE_RIGHT_DEFAULT);
+		right_size = MIN (width, MAX (maingui_right_pane_min_size (), GUI_PANE_RIGHT_DEFAULT));
 
 	if (visible)
 		target_pos = CLAMP (width - right_size, 0, MAX (0, width - 1));
@@ -770,11 +793,9 @@ apply_initial_panes_cb (gpointer userdata)
 	if (content_width <= 0 || width <= 0)
 		return G_SOURCE_CONTINUE;
 
-	right_size = MAX (prefs.hex_gui_pane_right_size, prefs.hex_gui_pane_right_size_min);
-	if (right_size <= 0)
-		right_size = GUI_PANE_RIGHT_DEFAULT;
+	right_size = maingui_right_pane_clamp_size (prefs.hex_gui_pane_right_size);
 	if (right_size >= width)
-		right_size = MAX (prefs.hex_gui_pane_right_size_min, GUI_PANE_RIGHT_DEFAULT);
+		right_size = MIN (width, MAX (maingui_right_pane_min_size (), GUI_PANE_RIGHT_DEFAULT));
 
 	left_size = prefs.hex_gui_pane_left_size;
 	if (left_size <= 0)

@@ -823,16 +823,16 @@ load_default_config(void)
 	prefs.hex_gui_lagometer = 1;
 	prefs.hex_gui_lang = get_default_language();
 	prefs.hex_gui_pane_left_size = 128;		/* with treeview icons we need a bit bigger space */
-	prefs.hex_gui_pane_right_size = 100;
-	prefs.hex_gui_pane_right_size_min = 80;
+	prefs.hex_gui_pane_right_size = 200;
+	prefs.hex_gui_pane_right_size_min = 180;
 	prefs.hex_gui_tab_layout = 2;			/* 0=Tabs 1=Reserved 2=Tree */
 	prefs.hex_gui_tab_newtofront = 2;
 	prefs.hex_gui_tab_pos = 1;
 	prefs.hex_gui_tab_trunc = 20;
 	prefs.hex_gui_throttlemeter = 1;
 	prefs.hex_gui_ulist_pos = 3;
-	prefs.hex_gui_win_height = 400;
-	prefs.hex_gui_win_width = 640;
+	prefs.hex_gui_win_height = 800;
+	prefs.hex_gui_win_width = 1280;
 	prefs.hex_irc_ban_type = 1;
 	prefs.hex_irc_join_delay = 5;
 	prefs.hex_net_ping_timeout = 60;
@@ -996,6 +996,14 @@ load_config (void)
 		prefs.hex_gui_win_height = 138;
 	if (prefs.hex_gui_win_width < 106)
 		prefs.hex_gui_win_width = 106;
+	if (prefs.hex_gui_pane_right_size_min < 180)
+		prefs.hex_gui_pane_right_size_min = 180;
+	if (prefs.hex_gui_pane_right_size_min > 300)
+		prefs.hex_gui_pane_right_size_min = 300;
+	if (prefs.hex_gui_pane_right_size > 300)
+		prefs.hex_gui_pane_right_size = 300;
+	if (prefs.hex_gui_pane_right_size < prefs.hex_gui_pane_right_size_min)
+		prefs.hex_gui_pane_right_size = prefs.hex_gui_pane_right_size_min;
 
 	sp = strchr (prefs.hex_irc_user_name, ' ');
 	if (sp)
