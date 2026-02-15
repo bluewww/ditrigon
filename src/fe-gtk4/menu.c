@@ -2085,16 +2085,8 @@ void
 fe_gtk4_rebuild_menu_bar (void)
 {
 	GMenu *root;
-	GMenu *hexchat_menu;
-	GMenu *new_menu;
-	GMenu *view_menu;
-	GMenu *chan_switch_menu;
-	GMenu *meter_menu;
-	GMenu *server_menu;
-	GMenu *usermenu_menu;
-	GMenu *settings_menu;
-	GMenu *window_menu;
-	GMenu *search_menu;
+	GMenu *section;
+	GMenu *submenu;
 	GHashTable *submenus;
 	GList *values;
 	GList *cur;
@@ -2105,110 +2097,65 @@ fe_gtk4_rebuild_menu_bar (void)
 
 	root = g_menu_new ();
 
-	hexchat_menu = g_menu_new ();
-	g_menu_append (hexchat_menu, _("Network List"), "win.network-list");
-	new_menu = g_menu_new ();
-	g_menu_append (new_menu, _("Server Tab"), "win.new-server");
-	g_menu_append (new_menu, _("Channel Tab"), "win.new-channel");
-	g_menu_append (new_menu, _("Server Window"), "win.new-server-window");
-	g_menu_append (new_menu, _("Channel Window"), "win.new-channel-window");
-	g_menu_append_submenu (hexchat_menu, _("New"), G_MENU_MODEL (new_menu));
-	g_object_unref (new_menu);
-	g_menu_append (hexchat_menu, _("Load Plugin or Script..."), "win.load-plugin");
-	g_menu_append (hexchat_menu, _("Detach"), "win.detach");
-	g_menu_append (hexchat_menu, _("Close"), "win.close");
-	g_menu_append (hexchat_menu, _("Plugins and Scripts"), "win.plugin-list");
-	g_menu_append (hexchat_menu, _("Quit"), "win.quit");
-	g_menu_append_submenu (root, _("HexChat"), G_MENU_MODEL (hexchat_menu));
-	g_object_unref (hexchat_menu);
+	section = g_menu_new ();
+	g_menu_append (section, _("Connect to a Network..."), "win.network-list");
+	g_menu_append (section, _("Join a Channel..."), "win.server-join");
+	g_menu_append (section, _("Channel List"), "win.server-list");
+	g_menu_append (section, _("Marked Away"), "win.server-away");
+	g_menu_append (section, _("Reconnect"), "win.server-reconnect");
+	g_menu_append (section, _("Disconnect"), "win.server-disconnect");
+	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
 
-	view_menu = g_menu_new ();
-	if (!fe_gtk4_adw_use_hamburger_menu ())
-		g_menu_append (view_menu, _("Menu Bar"), "win.toggle-menubar");
-	g_menu_append (view_menu, _("Sidebar"), "win.toggle-sidebar");
-	g_menu_append (view_menu, _("Topic Bar"), "win.toggle-topicbar");
-	g_menu_append (view_menu, _("User List"), "win.toggle-userlist");
-	g_menu_append (view_menu, _("User List Buttons"), "win.toggle-userlist-buttons");
-	g_menu_append (view_menu, _("Mode Buttons"), "win.toggle-mode-buttons");
+	section = g_menu_new ();
+	g_menu_append (section, _("Sidebar"), "win.toggle-sidebar");
+	g_menu_append (section, _("User List"), "win.toggle-userlist");
+	g_menu_append (section, _("Topic Bar"), "win.toggle-topicbar");
+	g_menu_append (section, _("Fullscreen"), "win.toggle-fullscreen");
+	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
 
-	chan_switch_menu = g_menu_new ();
-	g_menu_append (chan_switch_menu, _("Tabs"), "win.layout-tabs");
-	g_menu_append (chan_switch_menu, _("Tree"), "win.layout-tree");
-	g_menu_append_submenu (view_menu, _("Channel Switcher"), G_MENU_MODEL (chan_switch_menu));
-	g_object_unref (chan_switch_menu);
+	section = g_menu_new ();
+	g_menu_append (section, _("Search in Chat..."), "win.window-search");
+	g_menu_append (section, _("Copy Selection"), "win.window-copy-selection");
+	g_menu_append (section, _("Save Transcript..."), "win.window-save-text");
+	g_menu_append (section, _("Clear Text"), "win.clear-log");
+	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
 
-	meter_menu = g_menu_new ();
-	g_menu_append (meter_menu, _("Off"), "win.metres-off");
-	g_menu_append (meter_menu, _("Graph"), "win.metres-graph");
-	g_menu_append (meter_menu, _("Text"), "win.metres-text");
-	g_menu_append (meter_menu, _("Both"), "win.metres-both");
-	g_menu_append_submenu (view_menu, _("Network Meters"), G_MENU_MODEL (meter_menu));
-	g_object_unref (meter_menu);
+	section = g_menu_new ();
+	g_menu_append (section, _("File Transfers"), "win.window-dcc-files");
+	g_menu_append (section, _("Direct Chat"), "win.window-dcc-chat");
+	g_menu_append (section, _("URL Grabber"), "win.window-urlgrab");
+	g_menu_append (section, _("Raw Log"), "win.window-rawlog");
+	g_menu_append (section, _("Plugins and Scripts"), "win.plugin-list");
+	g_menu_append (section, _("Load Plugin or Script..."), "win.load-plugin");
+	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
 
-	g_menu_append (view_menu, _("Fullscreen"), "win.toggle-fullscreen");
-	g_menu_append_submenu (root, _("View"), G_MENU_MODEL (view_menu));
-	g_object_unref (view_menu);
+	section = g_menu_new ();
+	submenu = g_menu_new ();
+	g_menu_append (submenu, _("Ban List"), "win.window-ban-list");
+	g_menu_append (submenu, _("Ignore List"), "win.window-ignore");
+	g_menu_append (submenu, _("Friends List"), "win.window-friends");
+	g_menu_append (submenu, _("Character Chart"), "win.window-char-chart");
+	g_menu_append_submenu (section, _("More Tools"), G_MENU_MODEL (submenu));
+	g_object_unref (submenu);
+	submenu = g_menu_new ();
+	g_menu_append (submenu, _("Keyboard Shortcuts"), "win.settings-keyboard-shortcuts");
+	g_menu_append (submenu, _("Edit Usermenu..."), "win.settings-usermenu");
+	g_menu_append (submenu, _("User Commands"), "win.settings-user-commands");
+	g_menu_append_submenu (section, _("Customization"), G_MENU_MODEL (submenu));
+	g_object_unref (submenu);
+	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
 
-	server_menu = g_menu_new ();
-	g_menu_append (server_menu, _("Disconnect"), "win.server-disconnect");
-	g_menu_append (server_menu, _("Reconnect"), "win.server-reconnect");
-	g_menu_append (server_menu, _("Join a Channel..."), "win.server-join");
-	g_menu_append (server_menu, _("Channel List"), "win.server-list");
-	g_menu_append (server_menu, _("Marked Away"), "win.server-away");
-	g_menu_append_submenu (root, _("Server"), G_MENU_MODEL (server_menu));
-	g_object_unref (server_menu);
-
-	usermenu_menu = g_menu_new ();
-	g_menu_append (usermenu_menu, _("Edit This Menu..."), "win.settings-usermenu");
-	g_menu_append_submenu (root, _("Usermenu"), G_MENU_MODEL (usermenu_menu));
-	g_object_unref (usermenu_menu);
-
-	settings_menu = g_menu_new ();
-	g_menu_append (settings_menu, _("Auto Replace"), "win.settings-auto-replace");
-	g_menu_append (settings_menu, _("CTCP Replies"), "win.settings-ctcp-replies");
-	g_menu_append (settings_menu, _("Dialog Buttons"), "win.settings-dialog-buttons");
-	g_menu_append (settings_menu, _("Keyboard Shortcuts"), "win.settings-keyboard-shortcuts");
-	g_menu_append (settings_menu, _("Text Events"), "win.settings-text-events");
-	g_menu_append (settings_menu, _("URL Handlers"), "win.settings-url-handlers");
-	g_menu_append (settings_menu, _("User Commands"), "win.settings-user-commands");
-	g_menu_append (settings_menu, _("User List Buttons"), "win.settings-userlist-buttons");
-	g_menu_append (settings_menu, _("User List Popup"), "win.settings-userlist-popup");
-	g_menu_append_submenu (root, _("Settings"), G_MENU_MODEL (settings_menu));
-	g_object_unref (settings_menu);
-
-	window_menu = g_menu_new ();
-	g_menu_append (window_menu, _("Show Window"), "win.show-window");
-	g_menu_append (window_menu, _("Hide Window"), "win.hide-window");
-	g_menu_append (window_menu, _("Ban List"), "win.window-ban-list");
-	g_menu_append (window_menu, _("Character Chart"), "win.window-char-chart");
-	g_menu_append (window_menu, _("Direct Chat"), "win.window-dcc-chat");
-	g_menu_append (window_menu, _("File Transfers"), "win.window-dcc-files");
-	g_menu_append (window_menu, _("Friends List"), "win.window-friends");
-	g_menu_append (window_menu, _("Ignore List"), "win.window-ignore");
-	g_menu_append (window_menu, _("Plugins and Scripts"), "win.plugin-list");
-	g_menu_append (window_menu, _("Raw Log"), "win.window-rawlog");
-	g_menu_append (window_menu, _("URL Grabber"), "win.window-urlgrab");
-	g_menu_append (window_menu, _("Reset Marker Line"), "win.window-reset-marker");
-	g_menu_append (window_menu, _("Move to Marker Line"), "win.window-move-marker");
-	g_menu_append (window_menu, _("Copy Selection"), "win.window-copy-selection");
-	g_menu_append (window_menu, _("Clear Text"), "win.clear-log");
-	g_menu_append (window_menu, _("Save Text..."), "win.window-save-text");
-	search_menu = g_menu_new ();
-	g_menu_append (search_menu, _("Search Text..."), "win.window-search");
-	g_menu_append (search_menu, _("Search Next"), "win.window-search-next");
-	g_menu_append (search_menu, _("Search Previous"), "win.window-search-prev");
-	g_menu_append_submenu (window_menu, _("Search"), G_MENU_MODEL (search_menu));
-	g_object_unref (search_menu);
-	g_menu_append_submenu (root, _("Window"), G_MENU_MODEL (window_menu));
-	g_object_unref (window_menu);
-
-	{
-		GMenu *section = g_menu_new ();
-		g_menu_append (section, _("Preferences"), "win.preferences");
-		g_menu_append (section, _("About HexChat"), "win.about");
-		g_menu_append_section (root, NULL, G_MENU_MODEL (section));
-		g_object_unref (section);
-	}
+	section = g_menu_new ();
+	g_menu_append (section, _("Preferences"), "win.preferences");
+	g_menu_append (section, _("About HexChat"), "win.about");
+	g_menu_append (section, _("Quit"), "win.quit");
+	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
 
 	remove_dynamic_actions ();
 	submenus = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
