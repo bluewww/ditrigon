@@ -3,7 +3,7 @@
   <requires lib="gtk" version="4.0"/>
   <requires lib="Adw" version="1.0"/>
 
-  <object class="AdwNavigationSplitView" id="content_paned">
+  <object class="AdwOverlaySplitView" id="content_paned">
     <property name="hexpand">True</property>
     <property name="vexpand">True</property>
     <property name="sidebar-width-unit">sp</property>

@@ -227,7 +227,7 @@ fe_gtk4_chanview_set_layout (int layout)
 			gtk_paned_set_position (GTK_PANED (content_paned), 0);
 		}
 	}
-	else if (ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned))
+	else if (ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned) || ADW_IS_OVERLAY_SPLIT_VIEW (content_paned))
 	{
 		gtk_widget_set_visible (session_scroller, TRUE);
 		fe_gtk4_maingui_set_left_sidebar_visible (fe_gtk4_maingui_get_left_sidebar_visible ());

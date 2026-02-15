@@ -146,7 +146,7 @@ maingui_build_navigation_split_from_ui (GtkWidget **sidebar_header,
 		*content_title = NULL;
 
 	builder = maingui_ui_builder_new (MAINGUI_UI_BASE "/adw-nav-split.ui");
-	split = maingui_ui_get_widget_typed (builder, "content_paned", ADW_TYPE_NAVIGATION_SPLIT_VIEW);
+	split = maingui_ui_get_widget_typed (builder, "content_paned", ADW_TYPE_OVERLAY_SPLIT_VIEW);
 	main_nav_sidebar_page = ADW_NAVIGATION_PAGE (
 		maingui_ui_get_object_typed (builder, "main_nav_sidebar_page", ADW_TYPE_NAVIGATION_PAGE));
 	main_nav_content_page = ADW_NAVIGATION_PAGE (
@@ -308,13 +308,16 @@ userlist_split_animation_cb (gpointer userdata)
 static gboolean
 maingui_uses_navigation_split (void)
 {
-	return content_paned && ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned);
+	return content_paned &&
+		(ADW_IS_OVERLAY_SPLIT_VIEW (content_paned) || ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned));
 }
 
 static void
 nav_split_state_notify_cb (GObject *object, GParamSpec *pspec, gpointer user_data)
 {
 	gboolean visible;
+	gboolean collapsed;
+	const char *prop_name;
 	int width;
 	double fraction;
 
@@ -322,24 +325,60 @@ nav_split_state_notify_cb (GObject *object, GParamSpec *pspec, gpointer user_dat
 	(void) pspec;
 	(void) user_data;
 
-	if (!main_nav_split || !ADW_IS_NAVIGATION_SPLIT_VIEW (main_nav_split))
+	if (!main_nav_split)
 		return;
 
-	if (adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split)))
-		visible = !adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
-	else
-		visible = TRUE;
-
-	if (pane_positions_ready && !adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split)))
+	prop_name = pspec ? g_param_spec_get_name (pspec) : NULL;
+	width = gtk_widget_get_width (main_nav_split);
+	if (ADW_IS_OVERLAY_SPLIT_VIEW (main_nav_split))
 	{
-		width = gtk_widget_get_width (main_nav_split);
-		fraction = adw_navigation_split_view_get_sidebar_width_fraction (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
+		collapsed = adw_overlay_split_view_get_collapsed (ADW_OVERLAY_SPLIT_VIEW (main_nav_split));
+		visible = adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (main_nav_split));
+
+		/* On automatic collapse (window gets narrow), keep sidebar hidden.
+		 * Overlay mode should be opened only via the explicit sidebar button.
+		 */
+		if (collapsed && visible && g_strcmp0 (prop_name, "collapsed") == 0)
+		{
+			adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (main_nav_split), FALSE);
+			visible = FALSE;
+		}
+
+		/* In wide mode, reflect the persistent sidebar preference. */
+		if (!collapsed && (visible != left_sidebar_visible))
+		{
+			adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (main_nav_split),
+				left_sidebar_visible ? TRUE : FALSE);
+			visible = left_sidebar_visible;
+		}
+	}
+	else if (ADW_IS_NAVIGATION_SPLIT_VIEW (main_nav_split))
+	{
+		collapsed = adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
+		if (collapsed)
+			visible = !adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
+		else
+			visible = TRUE;
+	}
+	else
+	{
+		return;
+	}
+
+	if (pane_positions_ready && !collapsed)
+	{
+		if (ADW_IS_OVERLAY_SPLIT_VIEW (main_nav_split))
+			fraction = adw_overlay_split_view_get_sidebar_width_fraction (ADW_OVERLAY_SPLIT_VIEW (main_nav_split));
+		else
+			fraction = adw_navigation_split_view_get_sidebar_width_fraction (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
 		if (width > 0 && fraction > 0.0)
 			prefs.hex_gui_pane_left_size = CLAMP ((int) (width * fraction), 1, MAX (1, width - 1));
 	}
 
-	left_sidebar_visible = visible ? TRUE : FALSE;
-	fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+	if (!ADW_IS_OVERLAY_SPLIT_VIEW (main_nav_split))
+		left_sidebar_visible = visible ? TRUE : FALSE;
+
+	fe_gtk4_adw_sync_sidebar_button (visible ? TRUE : FALSE);
 }
 
 static void
@@ -558,11 +597,24 @@ void
 fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
 {
 	AdwNavigationSplitView *split;
-	int width;
 
 	left_sidebar_visible = visible ? TRUE : FALSE;
 
 	if (!content_paned || !maingui_uses_navigation_split ())
+	{
+		fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+		return;
+	}
+
+	if (ADW_IS_OVERLAY_SPLIT_VIEW (content_paned))
+	{
+		adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (content_paned),
+			left_sidebar_visible ? TRUE : FALSE);
+		fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+		return;
+	}
+
+	if (!ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned))
 	{
 		fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
 		return;
@@ -573,12 +625,6 @@ fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
 	{
 		adw_navigation_split_view_set_collapsed (split, FALSE);
 		adw_navigation_split_view_set_show_content (split, TRUE);
-		if (adw_navigation_split_view_get_collapsed (split))
-		{
-			width = gtk_widget_get_width (main_nav_split ? main_nav_split : GTK_WIDGET (split));
-			if (width <= NAV_SPLIT_COLLAPSE_WIDTH_HINT)
-				adw_navigation_split_view_set_show_content (split, FALSE);
-		}
 	}
 	else
 	{
@@ -592,7 +638,13 @@ fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
 gboolean
 fe_gtk4_maingui_get_left_sidebar_visible (void)
 {
-	if (content_paned && maingui_uses_navigation_split ())
+	if (!content_paned || !maingui_uses_navigation_split ())
+		return left_sidebar_visible;
+
+	if (ADW_IS_OVERLAY_SPLIT_VIEW (content_paned))
+		return adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (content_paned)) ? TRUE : FALSE;
+
+	if (ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned))
 	{
 		if (adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (content_paned)))
 			return adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (content_paned)) ? FALSE : TRUE;
@@ -728,9 +780,19 @@ apply_initial_panes_cb (gpointer userdata)
 	if (maingui_uses_navigation_split ())
 	{
 		left_fraction = (double) left_size / (double) content_width;
-		left_fraction = CLAMP (left_fraction, 0.16, 0.38);
-		adw_navigation_split_view_set_sidebar_width_fraction (
-			ADW_NAVIGATION_SPLIT_VIEW (content_paned), left_fraction);
+		if (ADW_IS_OVERLAY_SPLIT_VIEW (content_paned))
+		{
+			left_fraction = CLAMP (left_fraction, 0.16, 0.28);
+			adw_overlay_split_view_set_sidebar_width_fraction (
+				ADW_OVERLAY_SPLIT_VIEW (content_paned), left_fraction);
+			adw_overlay_split_view_set_pin_sidebar (ADW_OVERLAY_SPLIT_VIEW (content_paned), TRUE);
+		}
+		else
+		{
+			left_fraction = CLAMP (left_fraction, 0.16, 0.38);
+			adw_navigation_split_view_set_sidebar_width_fraction (
+				ADW_NAVIGATION_SPLIT_VIEW (content_paned), left_fraction);
+		}
 		fe_gtk4_maingui_set_left_sidebar_visible (left_sidebar_visible);
 	}
 
@@ -1014,15 +1076,16 @@ fe_gtk4_create_main_window (void)
 	gtk_actionable_set_action_name (GTK_ACTIONABLE (userlist_button), "win.toggle-userlist");
 	adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), userlist_button);
 
-	adw_navigation_split_view_set_sidebar_width_unit (ADW_NAVIGATION_SPLIT_VIEW (content_paned), ADW_LENGTH_UNIT_SP);
-	adw_navigation_split_view_set_min_sidebar_width (ADW_NAVIGATION_SPLIT_VIEW (content_paned), 180.0);
-	adw_navigation_split_view_set_max_sidebar_width (ADW_NAVIGATION_SPLIT_VIEW (content_paned), 360.0);
-	adw_navigation_split_view_set_sidebar_width_fraction (ADW_NAVIGATION_SPLIT_VIEW (content_paned), 0.24);
+	adw_overlay_split_view_set_sidebar_width_unit (ADW_OVERLAY_SPLIT_VIEW (content_paned), ADW_LENGTH_UNIT_SP);
+	adw_overlay_split_view_set_min_sidebar_width (ADW_OVERLAY_SPLIT_VIEW (content_paned), 150.0);
+	adw_overlay_split_view_set_max_sidebar_width (ADW_OVERLAY_SPLIT_VIEW (content_paned), 250.0);
+	adw_overlay_split_view_set_sidebar_width_fraction (ADW_OVERLAY_SPLIT_VIEW (content_paned), 0.22);
+	adw_overlay_split_view_set_pin_sidebar (ADW_OVERLAY_SPLIT_VIEW (content_paned), TRUE);
 
 	fe_gtk4_adw_bind_header_controls (content_title, sidebar_button, userlist_button, menu_button);
 	g_signal_connect (content_paned, "notify::collapsed",
 		G_CALLBACK (nav_split_state_notify_cb), NULL);
-	g_signal_connect (content_paned, "notify::show-content",
+	g_signal_connect (content_paned, "notify::show-sidebar",
 		G_CALLBACK (nav_split_state_notify_cb), NULL);
 	g_signal_connect (content_paned, "notify::sidebar-width-fraction",
 		G_CALLBACK (nav_split_state_notify_cb), NULL);
