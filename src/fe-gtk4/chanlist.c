@@ -10,6 +10,8 @@
 
 #include "../common/text.h"
 
+#define CHANLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/chanlist-window.ui"
+
 enum
 {
 	COL_CHANNEL,
@@ -833,19 +835,14 @@ fe_is_chanwindow (struct server *serv)
 static void
 chanlist_open (server *serv, const char *filter, int do_refresh)
 {
-	GtkWidget *root;
-	GtkWidget *view_box;
-	GtkWidget *header;
-	GtkWidget *table;
-	GtkWidget *hbox;
-	GtkWidget *wid;
-	GtkWidget *separator;
+	GtkStringList *search_model;
+	GtkBuilder *builder;
 	char tbuf[256];
 	const char *search_modes[] =
 	{
-		N_("Simple Search"),
-		N_("Pattern Match (Wildcards)"),
-		N_("Regular Expression"),
+		_("Simple Search"),
+		_("Pattern Match (Wildcards)"),
+		_("Regular Expression"),
 		NULL
 	};
 	gboolean server_changed;
@@ -883,162 +880,64 @@ chanlist_open (server *serv, const char *filter, int do_refresh)
 
 	if (!chanlist.window)
 	{
-		chanlist.window = gtk_window_new ();
-		gtk_window_set_default_size (GTK_WINDOW (chanlist.window), 760, 520);
+		builder = fe_gtk4_builder_new_from_resource (CHANLIST_UI_PATH);
+
+		chanlist.window = fe_gtk4_builder_get_widget (builder, "chanlist_window", GTK_TYPE_WINDOW);
+		chanlist.label = fe_gtk4_builder_get_widget (builder, "chanlist_label", GTK_TYPE_LABEL);
+		chanlist.list = fe_gtk4_builder_get_widget (builder, "chanlist_list", GTK_TYPE_LIST_BOX);
+		chanlist.sort_button[COL_CHANNEL] = fe_gtk4_builder_get_widget (builder, "chanlist_sort_channel_button", GTK_TYPE_BUTTON);
+		chanlist.sort_button[COL_USERS] = fe_gtk4_builder_get_widget (builder, "chanlist_sort_users_button", GTK_TYPE_BUTTON);
+		chanlist.sort_button[COL_TOPIC] = fe_gtk4_builder_get_widget (builder, "chanlist_sort_topic_button", GTK_TYPE_BUTTON);
+		chanlist.search = fe_gtk4_builder_get_widget (builder, "chanlist_search_button", GTK_TYPE_BUTTON);
+		chanlist.refresh = fe_gtk4_builder_get_widget (builder, "chanlist_refresh_button", GTK_TYPE_BUTTON);
+		chanlist.savelist = fe_gtk4_builder_get_widget (builder, "chanlist_save_button", GTK_TYPE_BUTTON);
+		chanlist.join = fe_gtk4_builder_get_widget (builder, "chanlist_join_button", GTK_TYPE_BUTTON);
+		chanlist.min_spin = fe_gtk4_builder_get_widget (builder, "chanlist_min_spin", GTK_TYPE_SPIN_BUTTON);
+		chanlist.max_spin = fe_gtk4_builder_get_widget (builder, "chanlist_max_spin", GTK_TYPE_SPIN_BUTTON);
+		chanlist.match_channel = fe_gtk4_builder_get_widget (builder, "chanlist_match_channel", GTK_TYPE_CHECK_BUTTON);
+		chanlist.match_topic = fe_gtk4_builder_get_widget (builder, "chanlist_match_topic", GTK_TYPE_CHECK_BUTTON);
+		chanlist.search_type = fe_gtk4_builder_get_widget (builder, "chanlist_search_type", GTK_TYPE_DROP_DOWN);
+		chanlist.wild = fe_gtk4_builder_get_widget (builder, "chanlist_find_entry", GTK_TYPE_ENTRY);
+
+		g_object_ref_sink (chanlist.window);
+		g_object_unref (builder);
+
 		if (main_window)
 			gtk_window_set_transient_for (GTK_WINDOW (chanlist.window), GTK_WINDOW (main_window));
 
-		root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-		gtk_widget_set_margin_start (root, 10);
-		gtk_widget_set_margin_end (root, 10);
-		gtk_widget_set_margin_top (root, 10);
-		gtk_widget_set_margin_bottom (root, 10);
-		gtk_window_set_child (GTK_WINDOW (chanlist.window), root);
+		search_model = gtk_string_list_new (search_modes);
+		gtk_drop_down_set_model (GTK_DROP_DOWN (chanlist.search_type), G_LIST_MODEL (search_model));
+		g_object_unref (search_model);
 
-		wid = gtk_label_new (NULL);
-		gtk_label_set_xalign (GTK_LABEL (wid), 0.0f);
-		gtk_box_append (GTK_BOX (root), wid);
-		chanlist.label = wid;
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (chanlist.min_spin), chanlist.minusers);
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (chanlist.max_spin), chanlist.maxusers);
+		gtk_drop_down_set_selected (GTK_DROP_DOWN (chanlist.search_type),
+			(guint) chanlist.search_type_index);
 
-		view_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
-		gtk_widget_set_hexpand (view_box, TRUE);
-		gtk_widget_set_vexpand (view_box, TRUE);
-		gtk_box_append (GTK_BOX (root), view_box);
-
-		header = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-		gtk_widget_add_css_class (header, "toolbar");
-		gtk_box_append (GTK_BOX (view_box), header);
-
-		wid = gtk_button_new_with_label (_("Channel"));
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_CHANNEL));
-		gtk_widget_set_hexpand (wid, TRUE);
-		gtk_widget_set_halign (wid, GTK_ALIGN_FILL);
-		gtk_box_append (GTK_BOX (header), wid);
-		chanlist.sort_button[COL_CHANNEL] = wid;
-
-		wid = gtk_button_new_with_label (_("Users"));
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_USERS));
-		gtk_box_append (GTK_BOX (header), wid);
-		chanlist.sort_button[COL_USERS] = wid;
-
-		wid = gtk_button_new_with_label (_("Topic"));
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_TOPIC));
-		gtk_widget_set_hexpand (wid, TRUE);
-		gtk_widget_set_halign (wid, GTK_ALIGN_FILL);
-		gtk_box_append (GTK_BOX (header), wid);
-		chanlist.sort_button[COL_TOPIC] = wid;
-
-		wid = gtk_scrolled_window_new ();
-		gtk_widget_set_hexpand (wid, TRUE);
-		gtk_widget_set_vexpand (wid, TRUE);
-		gtk_box_append (GTK_BOX (view_box), wid);
-
-		chanlist.list = gtk_list_box_new ();
-		gtk_list_box_set_selection_mode (GTK_LIST_BOX (chanlist.list), GTK_SELECTION_SINGLE);
 		gtk_list_box_set_sort_func (GTK_LIST_BOX (chanlist.list), chanlist_list_sort_cb, NULL, NULL);
-		gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (wid), chanlist.list);
 		g_signal_connect (chanlist.list, "row-activated", G_CALLBACK (chanlist_row_activated_cb), NULL);
 
-		table = gtk_grid_new ();
-		gtk_grid_set_column_spacing (GTK_GRID (table), 12);
-		gtk_grid_set_row_spacing (GTK_GRID (table), 6);
-		gtk_box_append (GTK_BOX (root), table);
+		g_signal_connect (chanlist.sort_button[COL_CHANNEL], "clicked",
+			G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_CHANNEL));
+		g_signal_connect (chanlist.sort_button[COL_USERS], "clicked",
+			G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_USERS));
+		g_signal_connect (chanlist.sort_button[COL_TOPIC], "clicked",
+			G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_TOPIC));
 
-		wid = gtk_button_new_with_label (_("_Search"));
-		gtk_button_set_use_underline (GTK_BUTTON (wid), TRUE);
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_search_pressed), NULL);
-		gtk_grid_attach (GTK_GRID (table), wid, 3, 3, 1, 1);
-		chanlist.search = wid;
-
-		wid = gtk_button_new_with_label (_("_Download List"));
-		gtk_button_set_use_underline (GTK_BUTTON (wid), TRUE);
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_refresh), NULL);
-		gtk_grid_attach (GTK_GRID (table), wid, 3, 2, 1, 1);
-		chanlist.refresh = wid;
-
-		wid = gtk_button_new_with_label (_("Save _List..."));
-		gtk_button_set_use_underline (GTK_BUTTON (wid), TRUE);
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_save), NULL);
-		gtk_grid_attach (GTK_GRID (table), wid, 3, 1, 1, 1);
-		chanlist.savelist = wid;
-
-		wid = gtk_button_new_with_label (_("_Join Channel"));
-		gtk_button_set_use_underline (GTK_BUTTON (wid), TRUE);
-		g_signal_connect (wid, "clicked", G_CALLBACK (chanlist_join), NULL);
-		gtk_grid_attach (GTK_GRID (table), wid, 3, 0, 1, 1);
-		chanlist.join = wid;
-
-		wid = gtk_label_new (_("Show only:"));
-		gtk_label_set_xalign (GTK_LABEL (wid), 0.0f);
-		gtk_grid_attach (GTK_GRID (table), wid, 0, 3, 1, 1);
-
-		hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-		gtk_grid_attach (GTK_GRID (table), hbox, 1, 3, 1, 1);
-
-		wid = gtk_label_new (_("channels with"));
-		gtk_box_append (GTK_BOX (hbox), wid);
-
-		wid = gtk_spin_button_new_with_range (1, 999999, 1);
-		gtk_spin_button_set_value (GTK_SPIN_BUTTON (wid), chanlist.minusers);
-		g_signal_connect (wid, "value-changed", G_CALLBACK (chanlist_minusers), NULL);
-		gtk_box_append (GTK_BOX (hbox), wid);
-		chanlist.min_spin = wid;
-
-		wid = gtk_label_new (_("to"));
-		gtk_box_append (GTK_BOX (hbox), wid);
-
-		wid = gtk_spin_button_new_with_range (1, 999999, 1);
-		gtk_spin_button_set_value (GTK_SPIN_BUTTON (wid), chanlist.maxusers);
-		g_signal_connect (wid, "value-changed", G_CALLBACK (chanlist_maxusers), NULL);
-		gtk_box_append (GTK_BOX (hbox), wid);
-		chanlist.max_spin = wid;
-
-		wid = gtk_label_new (_("users."));
-		gtk_box_append (GTK_BOX (hbox), wid);
-
-		wid = gtk_label_new (_("Look in:"));
-		gtk_label_set_xalign (GTK_LABEL (wid), 0.0f);
-		gtk_grid_attach (GTK_GRID (table), wid, 0, 2, 1, 1);
-
-		hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-		gtk_grid_attach (GTK_GRID (table), hbox, 1, 2, 1, 1);
-
-		wid = gtk_check_button_new_with_label (_("Channel name"));
-		gtk_check_button_set_active (GTK_CHECK_BUTTON (wid), TRUE);
-		g_signal_connect (wid, "toggled", G_CALLBACK (chanlist_match_channel_button_toggled), NULL);
-		gtk_box_append (GTK_BOX (hbox), wid);
-		chanlist.match_channel = wid;
-
-		wid = gtk_check_button_new_with_label (_("Topic"));
-		gtk_check_button_set_active (GTK_CHECK_BUTTON (wid), TRUE);
-		g_signal_connect (wid, "toggled", G_CALLBACK (chanlist_match_topic_button_toggled), NULL);
-		gtk_box_append (GTK_BOX (hbox), wid);
-		chanlist.match_topic = wid;
-
-		wid = gtk_label_new (_("Search type:"));
-		gtk_label_set_xalign (GTK_LABEL (wid), 0.0f);
-		gtk_grid_attach (GTK_GRID (table), wid, 0, 1, 1, 1);
-
-		wid = gtk_drop_down_new_from_strings (search_modes);
-		gtk_drop_down_set_selected (GTK_DROP_DOWN (wid), (guint) chanlist.search_type_index);
-		g_signal_connect (wid, "notify::selected", G_CALLBACK (chanlist_combo_cb), NULL);
-		gtk_grid_attach (GTK_GRID (table), wid, 1, 1, 1, 1);
-		chanlist.search_type = wid;
-
-		wid = gtk_label_new (_("Find:"));
-		gtk_label_set_xalign (GTK_LABEL (wid), 0.0f);
-		gtk_grid_attach (GTK_GRID (table), wid, 0, 0, 1, 1);
-
-		wid = gtk_entry_new ();
-		gtk_entry_set_max_length (GTK_ENTRY (wid), 255);
-		g_signal_connect (wid, "changed", G_CALLBACK (chanlist_find_cb), NULL);
-		g_signal_connect (wid, "activate", G_CALLBACK (chanlist_search_pressed), NULL);
-		gtk_widget_set_hexpand (wid, TRUE);
-		gtk_grid_attach (GTK_GRID (table), wid, 1, 0, 1, 1);
-		chanlist.wild = wid;
-
-		separator = gtk_separator_new (GTK_ORIENTATION_VERTICAL);
-		gtk_grid_attach (GTK_GRID (table), separator, 2, 0, 1, 4);
+		g_signal_connect (chanlist.search, "clicked", G_CALLBACK (chanlist_search_pressed), NULL);
+		g_signal_connect (chanlist.refresh, "clicked", G_CALLBACK (chanlist_refresh), NULL);
+		g_signal_connect (chanlist.savelist, "clicked", G_CALLBACK (chanlist_save), NULL);
+		g_signal_connect (chanlist.join, "clicked", G_CALLBACK (chanlist_join), NULL);
+		g_signal_connect (chanlist.min_spin, "value-changed", G_CALLBACK (chanlist_minusers), NULL);
+		g_signal_connect (chanlist.max_spin, "value-changed", G_CALLBACK (chanlist_maxusers), NULL);
+		g_signal_connect (chanlist.match_channel, "toggled",
+			G_CALLBACK (chanlist_match_channel_button_toggled), NULL);
+		g_signal_connect (chanlist.match_topic, "toggled",
+			G_CALLBACK (chanlist_match_topic_button_toggled), NULL);
+		g_signal_connect (chanlist.search_type, "notify::selected",
+			G_CALLBACK (chanlist_combo_cb), NULL);
+		g_signal_connect (chanlist.wild, "changed", G_CALLBACK (chanlist_find_cb), NULL);
+		g_signal_connect (chanlist.wild, "activate", G_CALLBACK (chanlist_search_pressed), NULL);
 
 		g_signal_connect (chanlist.window, "close-request",
 			G_CALLBACK (chanlist_close_request_cb), NULL);

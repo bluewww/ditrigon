@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+
+  <object class="GtkWindow" id="notify_add_window">
+    <property name="default-width">420</property>
+    <property name="default-height">180</property>
+    <property name="modal">True</property>
+    <property name="child">
+      <object class="GtkBox" id="notify_add_root">
+        <property name="orientation">vertical</property>
+        <property name="spacing">8</property>
+        <property name="margin-start">12</property>
+        <property name="margin-end">12</property>
+        <property name="margin-top">12</property>
+        <property name="margin-bottom">12</property>
+        <child>
+          <object class="GtkLabel" id="notify_add_name_label">
+            <property name="xalign">0</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkEntry" id="notify_add_name_entry"/>
+        </child>
+        <child>
+          <object class="GtkLabel" id="notify_add_network_label">
+            <property name="xalign">0</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkEntry" id="notify_add_network_entry"/>
+        </child>
+        <child>
+          <object class="GtkBox" id="notify_add_buttons">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">6</property>
+            <property name="halign">end</property>
+            <child>
+              <object class="GtkButton" id="notify_add_cancel_button"/>
+            </child>
+            <child>
+              <object class="GtkButton" id="notify_add_ok_button"/>
+            </child>
+          </object>
+        </child>
+      </object>
+    </property>
+  </object>
+</interface>

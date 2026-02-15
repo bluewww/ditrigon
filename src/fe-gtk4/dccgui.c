@@ -4,6 +4,9 @@
 #include "../common/dcc.h"
 #include "../common/network.h"
 
+#define DCC_FILE_UI_PATH "/org/hexchat/ui/gtk4/dialogs/dcc-file-window.ui"
+#define DCC_CHAT_UI_PATH "/org/hexchat/ui/gtk4/dialogs/dcc-chat-window.ui"
+
 typedef struct
 {
 	GtkWidget *window;
@@ -687,11 +690,9 @@ fe_dcc_send_filereq (struct session *sess, char *nick, int maxcps, int passive)
 int
 fe_dcc_open_recv_win (int passive)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
 	GtkWidget *open_button;
 	GtkWidget *close_button;
+	GtkBuilder *builder;
 
 	if (dcc_file_window.window)
 	{
@@ -700,67 +701,45 @@ fe_dcc_open_recv_win (int passive)
 		return TRUE;
 	}
 
-	dcc_file_window.window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (dcc_file_window.window), _("Uploads and Downloads"));
-	gtk_window_set_default_size (GTK_WINDOW (dcc_file_window.window), 760, 420);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (dcc_file_window.window), GTK_WINDOW (main_window));
+	builder = fe_gtk4_builder_new_from_resource (DCC_FILE_UI_PATH);
+	dcc_file_window.window = fe_gtk4_builder_get_widget (builder, "dcc_file_window", GTK_TYPE_WINDOW);
+	dcc_file_window.list = fe_gtk4_builder_get_widget (builder, "dcc_file_list", GTK_TYPE_LIST_BOX);
+	dcc_file_window.accept_button = fe_gtk4_builder_get_widget (builder, "dcc_file_accept_button", GTK_TYPE_BUTTON);
+	dcc_file_window.resume_button = fe_gtk4_builder_get_widget (builder, "dcc_file_resume_button", GTK_TYPE_BUTTON);
+	dcc_file_window.abort_button = fe_gtk4_builder_get_widget (builder, "dcc_file_abort_button", GTK_TYPE_BUTTON);
+	dcc_file_window.clear_button = fe_gtk4_builder_get_widget (builder, "dcc_file_clear_button", GTK_TYPE_BUTTON);
+	open_button = fe_gtk4_builder_get_widget (builder, "dcc_file_open_button", GTK_TYPE_BUTTON);
+	close_button = fe_gtk4_builder_get_widget (builder, "dcc_file_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (dcc_file_window.window);
+	g_object_unref (builder);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (dcc_file_window.window), root);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	dcc_file_window.list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (dcc_file_window.list), GTK_SELECTION_MULTIPLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), dcc_file_window.list);
+	gtk_button_set_label (GTK_BUTTON (dcc_file_window.accept_button), _("Accept"));
+	gtk_button_set_label (GTK_BUTTON (dcc_file_window.resume_button), _("Resume"));
+	gtk_button_set_label (GTK_BUTTON (dcc_file_window.abort_button), _("Abort"));
+	gtk_button_set_label (GTK_BUTTON (dcc_file_window.clear_button), _("Clear"));
+	gtk_button_set_label (GTK_BUTTON (open_button), _("Open Folder..."));
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 	g_signal_connect (dcc_file_window.list, "selected-rows-changed",
 		G_CALLBACK (dcc_file_selected_changed_cb), NULL);
 	g_signal_connect (dcc_file_window.list, "row-activated",
 		G_CALLBACK (dcc_file_row_activated_cb), NULL);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	dcc_file_window.accept_button = gtk_button_new_with_label (_("Accept"));
 	g_signal_connect (dcc_file_window.accept_button, "clicked",
 		G_CALLBACK (dcc_file_accept_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), dcc_file_window.accept_button);
-
-	dcc_file_window.resume_button = gtk_button_new_with_label (_("Resume"));
 	g_signal_connect (dcc_file_window.resume_button, "clicked",
 		G_CALLBACK (dcc_file_resume_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), dcc_file_window.resume_button);
-
-	dcc_file_window.abort_button = gtk_button_new_with_label (_("Abort"));
 	g_signal_connect (dcc_file_window.abort_button, "clicked",
 		G_CALLBACK (dcc_file_abort_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), dcc_file_window.abort_button);
-
-	dcc_file_window.clear_button = gtk_button_new_with_label (_("Clear"));
 	g_signal_connect (dcc_file_window.clear_button, "clicked",
 		G_CALLBACK (dcc_file_clear_completed_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), dcc_file_window.clear_button);
-
-	open_button = gtk_button_new_with_label (_("Open Folder..."));
 	g_signal_connect (open_button, "clicked", G_CALLBACK (dcc_open_folder_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), open_button);
-
-	close_button = gtk_button_new_with_label (_("Close"));
 	g_signal_connect_swapped (close_button, "clicked",
 		G_CALLBACK (gtk_window_close), dcc_file_window.window);
-	gtk_box_append (GTK_BOX (buttons), close_button);
-
 	g_signal_connect (dcc_file_window.window, "close-request",
 		G_CALLBACK (dcc_file_close_request_cb), NULL);
+
+	gtk_window_set_title (GTK_WINDOW (dcc_file_window.window), _("Uploads and Downloads"));
+	if (main_window)
+		gtk_window_set_transient_for (GTK_WINDOW (dcc_file_window.window), GTK_WINDOW (main_window));
 
 	dcc_file_refresh ();
 	if (!passive)
@@ -778,10 +757,8 @@ fe_dcc_open_send_win (int passive)
 int
 fe_dcc_open_chat_win (int passive)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
 	GtkWidget *close_button;
+	GtkBuilder *builder;
 
 	if (dcc_chat_window.window)
 	{
@@ -790,53 +767,34 @@ fe_dcc_open_chat_win (int passive)
 		return TRUE;
 	}
 
-	dcc_chat_window.window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (dcc_chat_window.window), _("DCC Chat List"));
-	gtk_window_set_default_size (GTK_WINDOW (dcc_chat_window.window), 640, 320);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (dcc_chat_window.window), GTK_WINDOW (main_window));
+	builder = fe_gtk4_builder_new_from_resource (DCC_CHAT_UI_PATH);
+	dcc_chat_window.window = fe_gtk4_builder_get_widget (builder, "dcc_chat_window", GTK_TYPE_WINDOW);
+	dcc_chat_window.list = fe_gtk4_builder_get_widget (builder, "dcc_chat_list", GTK_TYPE_LIST_BOX);
+	dcc_chat_window.accept_button = fe_gtk4_builder_get_widget (builder, "dcc_chat_accept_button", GTK_TYPE_BUTTON);
+	dcc_chat_window.abort_button = fe_gtk4_builder_get_widget (builder, "dcc_chat_abort_button", GTK_TYPE_BUTTON);
+	close_button = fe_gtk4_builder_get_widget (builder, "dcc_chat_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (dcc_chat_window.window);
+	g_object_unref (builder);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (dcc_chat_window.window), root);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	dcc_chat_window.list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (dcc_chat_window.list), GTK_SELECTION_MULTIPLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), dcc_chat_window.list);
+	gtk_button_set_label (GTK_BUTTON (dcc_chat_window.accept_button), _("Accept"));
+	gtk_button_set_label (GTK_BUTTON (dcc_chat_window.abort_button), _("Abort"));
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 	g_signal_connect (dcc_chat_window.list, "selected-rows-changed",
 		G_CALLBACK (dcc_chat_selected_changed_cb), NULL);
 	g_signal_connect (dcc_chat_window.list, "row-activated",
 		G_CALLBACK (dcc_chat_row_activated_cb), NULL);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	dcc_chat_window.accept_button = gtk_button_new_with_label (_("Accept"));
 	g_signal_connect (dcc_chat_window.accept_button, "clicked",
 		G_CALLBACK (dcc_chat_accept_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), dcc_chat_window.accept_button);
-
-	dcc_chat_window.abort_button = gtk_button_new_with_label (_("Abort"));
 	g_signal_connect (dcc_chat_window.abort_button, "clicked",
 		G_CALLBACK (dcc_chat_abort_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), dcc_chat_window.abort_button);
-
-	close_button = gtk_button_new_with_label (_("Close"));
 	g_signal_connect_swapped (close_button, "clicked",
 		G_CALLBACK (gtk_window_close), dcc_chat_window.window);
-	gtk_box_append (GTK_BOX (buttons), close_button);
-
 	g_signal_connect (dcc_chat_window.window, "close-request",
 		G_CALLBACK (dcc_chat_close_request_cb), NULL);
+
+	gtk_window_set_title (GTK_WINDOW (dcc_chat_window.window), _("DCC Chat List"));
+	if (main_window)
+		gtk_window_set_transient_for (GTK_WINDOW (dcc_chat_window.window), GTK_WINDOW (main_window));
 
 	dcc_chat_refresh ();
 	if (!passive)

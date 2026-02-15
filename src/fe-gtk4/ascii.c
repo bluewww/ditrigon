@@ -3,6 +3,8 @@
 
 #include <string.h>
 
+#define ASCII_UI_PATH "/org/hexchat/ui/gtk4/dialogs/ascii-window.ui"
+
 static GtkWidget *ascii_window;
 static GtkWidget *ascii_info_label;
 
@@ -111,10 +113,9 @@ ascii_click_cb (GtkButton *button, gpointer userdata)
 void
 ascii_open (void)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
 	GtkWidget *grid;
 	GtkWidget *close_button;
+	GtkBuilder *builder;
 	const unsigned char *ptr;
 	int row;
 	int col;
@@ -125,38 +126,25 @@ ascii_open (void)
 		return;
 	}
 
-	ascii_window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (ascii_window), _("Character Chart"));
-	gtk_window_set_default_size (GTK_WINDOW (ascii_window), 760, 500);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (ascii_window), GTK_WINDOW (main_window));
+	builder = fe_gtk4_builder_new_from_resource (ASCII_UI_PATH);
+	ascii_window = fe_gtk4_builder_get_widget (builder, "ascii_window", GTK_TYPE_WINDOW);
+	grid = fe_gtk4_builder_get_widget (builder, "ascii_grid", GTK_TYPE_GRID);
+	ascii_info_label = fe_gtk4_builder_get_widget (builder, "ascii_info_label", GTK_TYPE_LABEL);
+	close_button = fe_gtk4_builder_get_widget (builder, "ascii_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (ascii_window);
+	g_object_unref (builder);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (ascii_window), root);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	grid = gtk_grid_new ();
-	gtk_grid_set_row_spacing (GTK_GRID (grid), 4);
-	gtk_grid_set_column_spacing (GTK_GRID (grid), 4);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), grid);
-
-	ascii_info_label = gtk_label_new (_("Click a character to insert it into the input box."));
-	gtk_label_set_xalign (GTK_LABEL (ascii_info_label), 0.0f);
-	gtk_box_append (GTK_BOX (root), ascii_info_label);
-
-	close_button = gtk_button_new_with_label (_("Close"));
-	gtk_widget_set_halign (close_button, GTK_ALIGN_END);
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
+	gtk_label_set_text (GTK_LABEL (ascii_info_label),
+		_("Click a character to insert it into the input box."));
 	g_signal_connect_swapped (close_button, "clicked",
 		G_CALLBACK (gtk_window_close), ascii_window);
-	gtk_box_append (GTK_BOX (root), close_button);
+	g_signal_connect (ascii_window, "close-request",
+		G_CALLBACK (ascii_close_request_cb), NULL);
+
+	gtk_window_set_title (GTK_WINDOW (ascii_window), _("Character Chart"));
+	if (main_window)
+		gtk_window_set_transient_for (GTK_WINDOW (ascii_window), GTK_WINDOW (main_window));
 
 	row = -1;
 	col = 0;
@@ -189,8 +177,6 @@ ascii_open (void)
 		}
 	}
 
-	g_signal_connect (ascii_window, "close-request",
-		G_CALLBACK (ascii_close_request_cb), NULL);
 	gtk_window_present (GTK_WINDOW (ascii_window));
 }
 

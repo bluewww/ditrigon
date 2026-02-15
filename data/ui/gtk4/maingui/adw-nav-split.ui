@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+
+  <object class="AdwNavigationSplitView" id="content_paned">
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <property name="sidebar-width-unit">sp</property>
+    <property name="min-sidebar-width">180</property>
+    <property name="max-sidebar-width">360</property>
+    <property name="sidebar-width-fraction">0.24</property>
+    <child type="sidebar">
+      <object class="AdwNavigationPage" id="main_nav_sidebar_page">
+        <property name="title" translatable="yes">Conversations</property>
+        <property name="child">
+          <object class="AdwToolbarView" id="sidebar_toolbar">
+            <property name="top-bar-style">flat</property>
+            <property name="extend-content-to-top-edge">False</property>
+            <child type="top">
+              <object class="AdwHeaderBar" id="sidebar_header">
+                <property name="show-start-title-buttons">True</property>
+                <property name="show-end-title-buttons">False</property>
+              </object>
+            </child>
+            <property name="content">
+              <object class="GtkBox" id="sidebar_content_slot">
+                <property name="orientation">vertical</property>
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </child>
+    <child type="content">
+      <object class="AdwNavigationPage" id="main_nav_content_page">
+        <property name="title" translatable="yes">Chat</property>
+        <property name="child">
+          <object class="AdwToolbarView" id="content_toolbar">
+            <property name="top-bar-style">flat</property>
+            <property name="extend-content-to-top-edge">False</property>
+            <child type="top">
+              <object class="AdwHeaderBar" id="content_header">
+                <property name="show-start-title-buttons">False</property>
+                <property name="show-end-title-buttons">True</property>
+                <property name="title-widget">
+                  <object class="AdwWindowTitle" id="content_title">
+                    <property name="title">HexChat</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+            <property name="content">
+              <object class="GtkBox" id="content_content_slot">
+                <property name="orientation">vertical</property>
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </child>
+  </object>
+</interface>

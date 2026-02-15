@@ -1,9 +1,7 @@
 /* HexChat GTK4 setup/preferences window */
 #include "fe-gtk4.h"
 #include "sexy-spell-entry.h"
-#ifdef USE_LIBADWAITA
 #include <adwaita.h>
-#endif
 
 enum
 {
@@ -47,6 +45,104 @@ typedef struct
 #define setup_set_int(set, value) (*(((int *)&prefs) + (set)->offset) = (value))
 
 static GtkWidget *prefs_window;
+
+#define SETUP_UI_BASE "/org/hexchat/ui/gtk4/setup"
+
+static GtkWidget *
+setup_ui_widget_new (const char *resource_path, const char *object_id)
+{
+	GtkBuilder *builder;
+	GtkWidget *widget;
+
+	builder = fe_gtk4_builder_new_from_resource (resource_path);
+	widget = fe_gtk4_builder_get_widget (builder, object_id, GTK_TYPE_WIDGET);
+	g_object_ref_sink (widget);
+	g_object_unref (builder);
+	return widget;
+}
+
+static GtkWidget *
+setup_ui_window_new (void)
+{
+	GtkWidget *window;
+
+	window = setup_ui_widget_new (SETUP_UI_BASE "/preferences-window.ui", "setup_prefs_window");
+	return window;
+}
+
+static GtkWidget *
+setup_ui_page_new (void)
+{
+	GtkWidget *page;
+
+	page = setup_ui_widget_new (SETUP_UI_BASE "/page.ui", "setup_page");
+	return page;
+}
+
+static GtkWidget *
+setup_ui_group_new (void)
+{
+	GtkWidget *group;
+
+	group = setup_ui_widget_new (SETUP_UI_BASE "/group.ui", "setup_group");
+	return group;
+}
+
+static GtkWidget *
+setup_ui_switch_row_new (void)
+{
+	GtkWidget *row;
+
+	row = setup_ui_widget_new (SETUP_UI_BASE "/rows/switch-row.ui", "setup_switch_row");
+	return row;
+}
+
+static GtkWidget *
+setup_ui_entry_row_new (void)
+{
+	GtkWidget *row;
+
+	row = setup_ui_widget_new (SETUP_UI_BASE "/rows/entry-row.ui", "setup_entry_row");
+	return row;
+}
+
+static GtkWidget *
+setup_ui_action_row_new (void)
+{
+	GtkWidget *row;
+
+	row = setup_ui_widget_new (SETUP_UI_BASE "/rows/action-row.ui", "setup_action_row");
+	return row;
+}
+
+static GtkWidget *
+setup_ui_combo_row_new (void)
+{
+	GtkWidget *row;
+
+	row = setup_ui_widget_new (SETUP_UI_BASE "/rows/combo-row.ui", "setup_combo_row");
+	return row;
+}
+
+static void
+setup_adw_page_add_group_owned (GtkWidget *page, GtkWidget *group)
+{
+	if (!page || !group)
+		return;
+
+	adw_preferences_page_add (ADW_PREFERENCES_PAGE (page), ADW_PREFERENCES_GROUP (group));
+	g_object_unref (group);
+}
+
+static void
+setup_adw_group_add_row_owned (GtkWidget *group, GtkWidget *row)
+{
+	if (!group || !row)
+		return;
+
+	adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+	g_object_unref (row);
+}
 
 static void
 setup_apply_menu_visibility (void)
@@ -446,7 +542,6 @@ static const setting_page setting_pages[] =
 	{NULL, NULL}
 };
 
-#ifdef USE_LIBADWAITA
 static const char *const setting_page_icons[] =
 {
 	"preferences-desktop-appearance-symbolic",    /* Appearance */
@@ -461,27 +556,8 @@ static const char *const setting_page_icons[] =
 	"folder-download-symbolic",                   /* File transfers */
 	"dialog-password-symbolic"                    /* Identd */
 };
-#endif
 
-#ifndef USE_LIBADWAITA
-static void
-setup_toggle_cb (GtkCheckButton *check, gpointer userdata)
-{
-	const setting *set;
-	int value;
 
-	set = userdata;
-	value = gtk_check_button_get_active (check) ? 1 : 0;
-	if (set->flags & SET_FLAG_INVERT)
-		value = value ? 0 : 1;
-
-	setup_set_int (set, value);
-	if (set->apply)
-		set->apply ();
-}
-#endif
-
-#ifdef USE_LIBADWAITA
 static void
 setup_switch_row_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
 {
@@ -501,7 +577,6 @@ setup_switch_row_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
 	if (set->apply)
 		set->apply ();
 }
-#endif
 
 static void
 setup_entry_cb (GtkEditable *editable, gpointer userdata)
@@ -523,20 +598,6 @@ setup_entry_cb (GtkEditable *editable, gpointer userdata)
 
 typedef struct
 {
-	GtkWidget *entry;
-} SetupFontControl;
-
-#ifndef USE_LIBADWAITA
-typedef struct
-{
-	GtkWidget *entry;
-	GtkFontDialog *dialog;
-} SetupFontRequest;
-#endif
-
-#ifdef USE_LIBADWAITA
-typedef struct
-{
 	const setting *set;
 	GtkWidget *switch_row;
 	GtkWidget *font_row;
@@ -550,82 +611,8 @@ typedef struct
 	GtkWidget *row;
 	GtkFontDialog *dialog;
 } SetupAdwFontRequest;
-#endif
 
-#ifndef USE_LIBADWAITA
-static void
-setup_font_request_free (SetupFontRequest *req)
-{
-	if (!req)
-		return;
 
-	g_clear_object (&req->dialog);
-	g_clear_object (&req->entry);
-	g_free (req);
-}
-
-static void
-setup_font_choose_finish_cb (GObject *source, GAsyncResult *result, gpointer userdata)
-{
-	SetupFontRequest *req;
-	PangoFontDescription *font_desc;
-	char *font_name;
-	GError *error;
-
-	req = userdata;
-	error = NULL;
-	font_desc = gtk_font_dialog_choose_font_finish (GTK_FONT_DIALOG (source), result, &error);
-	if (!font_desc)
-	{
-		g_clear_error (&error);
-		setup_font_request_free (req);
-		return;
-	}
-
-	font_name = pango_font_description_to_string (font_desc);
-	gtk_editable_set_text (GTK_EDITABLE (req->entry), font_name ? font_name : "");
-	g_free (font_name);
-	pango_font_description_free (font_desc);
-	setup_font_request_free (req);
-}
-
-static void
-setup_font_browse_cb (GtkButton *button, gpointer userdata)
-{
-	SetupFontControl *control;
-	SetupFontRequest *req;
-	PangoFontDescription *initial;
-	const char *text;
-
-	(void) userdata;
-
-	control = g_object_get_data (G_OBJECT (button), "setup-font-control");
-	if (!control || !control->entry)
-		return;
-
-	initial = NULL;
-	text = gtk_editable_get_text (GTK_EDITABLE (control->entry));
-	if (text && text[0])
-		initial = pango_font_description_from_string (text);
-
-	req = g_new0 (SetupFontRequest, 1);
-	req->entry = g_object_ref (control->entry);
-	req->dialog = gtk_font_dialog_new ();
-	gtk_font_dialog_set_title (req->dialog, _("Select font"));
-	gtk_font_dialog_set_modal (req->dialog, TRUE);
-	gtk_font_dialog_choose_font (req->dialog,
-		prefs_window ? GTK_WINDOW (prefs_window) : NULL,
-		initial,
-		NULL,
-		setup_font_choose_finish_cb,
-		req);
-
-	if (initial)
-		pango_font_description_free (initial);
-}
-#endif
-
-#ifdef USE_LIBADWAITA
 static gboolean
 setup_adw_font_is_default (const char *font_name)
 {
@@ -818,7 +805,6 @@ setup_adw_font_use_default_cb (GObject *object, GParamSpec *pspec, gpointer user
 		control->set->apply ();
 	setup_adw_font_sync (control);
 }
-#endif
 
 static void
 setup_spin_cb (GtkSpinButton *spin, gpointer userdata)
@@ -831,29 +817,7 @@ setup_spin_cb (GtkSpinButton *spin, gpointer userdata)
 		set->apply ();
 }
 
-#ifndef USE_LIBADWAITA
-static void
-setup_menu_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
-{
-	const setting *set;
-	GtkDropDown *dd;
-	guint n;
 
-	(void) pspec;
-
-	set = userdata;
-	dd = GTK_DROP_DOWN (object);
-	n = gtk_drop_down_get_selected (dd);
-	if (n == GTK_INVALID_LIST_POSITION)
-		return;
-
-	setup_set_int (set, (int) n + set->extra);
-	if (set->apply)
-		set->apply ();
-}
-#endif
-
-#ifdef USE_LIBADWAITA
 static void
 setup_combo_row_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
 {
@@ -871,43 +835,8 @@ setup_combo_row_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
 	if (set->apply)
 		set->apply ();
 }
-#endif
 
-#ifndef USE_LIBADWAITA
-static GtkWidget *
-setup_translated_dropdown_new (const setting *set)
-{
-	GtkWidget *dd;
-	guint count;
-	guint i;
-	char **items;
-	int selected;
 
-	count = 0;
-	while (set->list && set->list[count])
-		count++;
-
-	items = g_new0 (char *, count + 1);
-	for (i = 0; i < count; i++)
-		items[i] = g_strdup (_(set->list[i]));
-
-	dd = gtk_drop_down_new_from_strings ((const char *const *) items);
-
-	for (i = 0; i < count; i++)
-		g_free (items[i]);
-	g_free (items);
-
-	selected = setup_get_int (set) - set->extra;
-	if (selected < 0 || selected >= (int) count)
-		selected = 0;
-	gtk_drop_down_set_selected (GTK_DROP_DOWN (dd), (guint) selected);
-	g_signal_connect (dd, "notify::selected", G_CALLBACK (setup_menu_cb), (gpointer) set);
-
-	return dd;
-}
-#endif
-
-#ifdef USE_LIBADWAITA
 static GtkWidget *
 setup_translated_combo_row_new (const setting *set)
 {
@@ -925,7 +854,7 @@ setup_translated_combo_row_new (const setting *set)
 	for (i = 0; i < count; i++)
 		gtk_string_list_append (items, _(set->list[i]));
 
-	row = adw_combo_row_new ();
+	row = setup_ui_combo_row_new ();
 	adw_combo_row_set_model (ADW_COMBO_ROW (row), G_LIST_MODEL (items));
 	g_object_unref (items);
 	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _(set->label));
@@ -941,29 +870,23 @@ setup_translated_combo_row_new (const setting *set)
 
 	return row;
 }
-#endif
 
 static gboolean
 setup_is_menu_visibility_setting (const setting *set)
 {
-#ifdef USE_LIBADWAITA
 	if (set && set->apply == setup_apply_menu_visibility)
 		return TRUE;
-#else
-	(void) set;
-#endif
 	return FALSE;
 }
 
-#ifdef USE_LIBADWAITA
 static GtkWidget *
 setup_ensure_adw_group (GtkWidget *page, GtkWidget *group)
 {
 	if (group)
 		return group;
 
-	group = adw_preferences_group_new ();
-	adw_preferences_page_add (ADW_PREFERENCES_PAGE (page), ADW_PREFERENCES_GROUP (group));
+	group = setup_ui_group_new ();
+	setup_adw_page_add_group_owned (page, group);
 	return group;
 }
 
@@ -976,7 +899,7 @@ setup_create_page_adw (const setting *set)
 	GtkWidget *control;
 	int i;
 
-	page = adw_preferences_page_new ();
+	page = setup_ui_page_new ();
 	group = NULL;
 
 	for (i = 0; set[i].type != ST_END; i++)
@@ -987,29 +910,29 @@ setup_create_page_adw (const setting *set)
 		switch (set[i].type)
 		{
 		case ST_HEADER:
-			group = adw_preferences_group_new ();
+			group = setup_ui_group_new ();
 			adw_preferences_group_set_title (ADW_PREFERENCES_GROUP (group), _(set[i].label));
-			adw_preferences_page_add (ADW_PREFERENCES_PAGE (page), ADW_PREFERENCES_GROUP (group));
+			setup_adw_page_add_group_owned (page, group);
 			break;
 		case ST_LABEL:
 			group = setup_ensure_adw_group (page, group);
-			row = adw_action_row_new ();
+			row = setup_ui_action_row_new ();
 			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), "");
 			adw_action_row_set_subtitle (ADW_ACTION_ROW (row), _(set[i].label));
 			gtk_list_box_row_set_activatable (GTK_LIST_BOX_ROW (row), FALSE);
 			gtk_widget_add_css_class (row, "dim-label");
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+			setup_adw_group_add_row_owned (group, row);
 			break;
 		case ST_TOGGLE:
 			group = setup_ensure_adw_group (page, group);
-			row = adw_switch_row_new ();
+			row = setup_ui_switch_row_new ();
 			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _(set[i].label));
 			adw_switch_row_set_active (ADW_SWITCH_ROW (row),
 				(set[i].flags & SET_FLAG_INVERT) ? (setup_get_int (&set[i]) == 0) : (setup_get_int (&set[i]) != 0));
 			g_signal_connect (row, "notify::active", G_CALLBACK (setup_switch_row_cb), (gpointer) &set[i]);
 			if (set[i].tooltip)
 				gtk_widget_set_tooltip_text (row, _(set[i].tooltip));
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+			setup_adw_group_add_row_owned (group, row);
 			break;
 		case ST_ENTRY:
 			group = setup_ensure_adw_group (page, group);
@@ -1017,7 +940,7 @@ setup_create_page_adw (const setting *set)
 			{
 				GtkWidget *pass;
 
-				row = adw_action_row_new ();
+				row = setup_ui_action_row_new ();
 				adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _(set[i].label));
 				gtk_list_box_row_set_activatable (GTK_LIST_BOX_ROW (row), TRUE);
 
@@ -1030,14 +953,14 @@ setup_create_page_adw (const setting *set)
 			}
 			else
 			{
-				row = adw_entry_row_new ();
+				row = setup_ui_entry_row_new ();
 				adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _(set[i].label));
 				gtk_editable_set_text (GTK_EDITABLE (row), setup_get_str (&set[i]));
 				g_signal_connect (row, "changed", G_CALLBACK (setup_entry_cb), (gpointer) &set[i]);
 			}
 			if (set[i].tooltip)
 				gtk_widget_set_tooltip_text (row, _(set[i].tooltip));
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+			setup_adw_group_add_row_owned (group, row);
 			break;
 		case ST_FONT:
 		{
@@ -1046,13 +969,13 @@ setup_create_page_adw (const setting *set)
 			SetupAdwFontControl *font_control;
 
 			group = setup_ensure_adw_group (page, group);
-			control = adw_switch_row_new ();
+			control = setup_ui_switch_row_new ();
 			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (control), _("Use System Font"));
 			if (set[i].tooltip)
 				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), control);
+			setup_adw_group_add_row_owned (group, control);
 
-			row = adw_action_row_new ();
+			row = setup_ui_action_row_new ();
 			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _("Custom Font"));
 			gtk_list_box_row_set_activatable (GTK_LIST_BOX_ROW (row), TRUE);
 
@@ -1078,12 +1001,12 @@ setup_create_page_adw (const setting *set)
 			g_signal_connect (row, "activated",
 				G_CALLBACK (setup_adw_font_row_activated_cb), NULL);
 			setup_adw_font_sync (font_control);
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+			setup_adw_group_add_row_owned (group, row);
 			break;
 		}
 		case ST_NUMBER:
 			group = setup_ensure_adw_group (page, group);
-			row = adw_action_row_new ();
+			row = setup_ui_action_row_new ();
 			adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), _(set[i].label));
 			control = gtk_spin_button_new_with_range (0, set[i].extra > 0 ? set[i].extra : 999999, 1);
 			gtk_spin_button_set_value (GTK_SPIN_BUTTON (control), setup_get_int (&set[i]));
@@ -1092,14 +1015,14 @@ setup_create_page_adw (const setting *set)
 			adw_action_row_set_activatable_widget (ADW_ACTION_ROW (row), control);
 			if (set[i].tooltip)
 				gtk_widget_set_tooltip_text (row, _(set[i].tooltip));
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+			setup_adw_group_add_row_owned (group, row);
 			break;
 		case ST_MENU:
 			group = setup_ensure_adw_group (page, group);
 			row = setup_translated_combo_row_new (&set[i]);
 			if (set[i].tooltip)
 				gtk_widget_set_tooltip_text (row, _(set[i].tooltip));
-			adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), row);
+			setup_adw_group_add_row_owned (group, row);
 			break;
 		default:
 			break;
@@ -1108,159 +1031,6 @@ setup_create_page_adw (const setting *set)
 
 	return page;
 }
-#else
-static GtkWidget *
-setup_make_label (const char *text, gboolean header)
-{
-	GtkWidget *label;
-	char *markup;
-
-	label = gtk_label_new (NULL);
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_label_set_wrap (GTK_LABEL (label), TRUE);
-
-	if (header)
-	{
-		markup = g_strdup_printf ("<b>%s</b>", text ? text : "");
-		gtk_label_set_markup (GTK_LABEL (label), markup);
-		g_free (markup);
-		gtk_widget_set_margin_top (label, 10);
-		gtk_widget_set_margin_bottom (label, 2);
-	}
-	else
-	{
-		markup = g_strdup_printf ("<span size=\"small\">%s</span>", text ? text : "");
-		gtk_label_set_markup (GTK_LABEL (label), markup);
-		g_free (markup);
-		gtk_widget_add_css_class (label, "dim-label");
-	}
-
-	return label;
-}
-
-static GtkWidget *
-setup_create_page (const setting *set)
-{
-	GtkWidget *box;
-	GtkWidget *grid;
-	GtkWidget *row;
-	GtkWidget *label;
-	GtkWidget *control;
-	int i;
-	int row_idx;
-
-	box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-	gtk_widget_set_margin_start (box, 10);
-	gtk_widget_set_margin_end (box, 10);
-	gtk_widget_set_margin_top (box, 6);
-	gtk_widget_set_margin_bottom (box, 10);
-
-	grid = gtk_grid_new ();
-	gtk_grid_set_column_spacing (GTK_GRID (grid), 10);
-	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
-	gtk_box_append (GTK_BOX (box), grid);
-
-	row_idx = 0;
-	for (i = 0; set[i].type != ST_END; i++)
-	{
-		if (setup_is_menu_visibility_setting (&set[i]))
-			continue;
-
-		switch (set[i].type)
-		{
-		case ST_HEADER:
-			row = setup_make_label (_(set[i].label), TRUE);
-			gtk_grid_attach (GTK_GRID (grid), row, 0, row_idx++, 2, 1);
-			break;
-		case ST_LABEL:
-			row = setup_make_label (_(set[i].label), FALSE);
-			gtk_grid_attach (GTK_GRID (grid), row, 0, row_idx++, 2, 1);
-			break;
-		case ST_TOGGLE:
-			control = gtk_check_button_new_with_label (_(set[i].label));
-			gtk_check_button_set_active (GTK_CHECK_BUTTON (control),
-				(set[i].flags & SET_FLAG_INVERT) ? (setup_get_int (&set[i]) == 0) : (setup_get_int (&set[i]) != 0));
-			g_signal_connect (control, "toggled", G_CALLBACK (setup_toggle_cb), (gpointer) &set[i]);
-			if (set[i].tooltip)
-				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
-			gtk_grid_attach (GTK_GRID (grid), control, 0, row_idx++, 2, 1);
-			break;
-		case ST_ENTRY:
-			label = gtk_label_new (_(set[i].label));
-			gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-			gtk_grid_attach (GTK_GRID (grid), label, 0, row_idx, 1, 1);
-
-			control = gtk_entry_new ();
-			gtk_widget_set_hexpand (control, TRUE);
-			gtk_editable_set_text (GTK_EDITABLE (control), setup_get_str (&set[i]));
-			if (set[i].flags & SET_FLAG_PASSWORD)
-				gtk_entry_set_visibility (GTK_ENTRY (control), FALSE);
-			g_signal_connect (control, "changed", G_CALLBACK (setup_entry_cb), (gpointer) &set[i]);
-			if (set[i].tooltip)
-				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
-			gtk_grid_attach (GTK_GRID (grid), control, 1, row_idx++, 1, 1);
-			break;
-		case ST_FONT:
-		{
-			GtkWidget *row_box;
-			GtkWidget *button;
-			SetupFontControl *font_control;
-
-			label = gtk_label_new (_(set[i].label));
-			gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-			gtk_grid_attach (GTK_GRID (grid), label, 0, row_idx, 1, 1);
-
-			row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-			gtk_widget_set_hexpand (row_box, TRUE);
-			gtk_grid_attach (GTK_GRID (grid), row_box, 1, row_idx++, 1, 1);
-
-			control = gtk_entry_new ();
-			gtk_widget_set_hexpand (control, TRUE);
-			gtk_editable_set_text (GTK_EDITABLE (control), setup_get_str (&set[i]));
-			g_signal_connect (control, "changed", G_CALLBACK (setup_entry_cb), (gpointer) &set[i]);
-			if (set[i].tooltip)
-				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
-			gtk_box_append (GTK_BOX (row_box), control);
-
-			button = gtk_button_new_with_label (_("Browse..."));
-			gtk_box_append (GTK_BOX (row_box), button);
-
-			font_control = g_new0 (SetupFontControl, 1);
-			font_control->entry = control;
-			g_object_set_data_full (G_OBJECT (button), "setup-font-control", font_control, g_free);
-			g_signal_connect (button, "clicked", G_CALLBACK (setup_font_browse_cb), NULL);
-			break;
-		}
-		case ST_NUMBER:
-			label = gtk_label_new (_(set[i].label));
-			gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-			gtk_grid_attach (GTK_GRID (grid), label, 0, row_idx, 1, 1);
-
-			control = gtk_spin_button_new_with_range (0, set[i].extra > 0 ? set[i].extra : 999999, 1);
-			gtk_spin_button_set_value (GTK_SPIN_BUTTON (control), setup_get_int (&set[i]));
-			g_signal_connect (control, "value-changed", G_CALLBACK (setup_spin_cb), (gpointer) &set[i]);
-			if (set[i].tooltip)
-				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
-			gtk_grid_attach (GTK_GRID (grid), control, 1, row_idx++, 1, 1);
-			break;
-		case ST_MENU:
-			label = gtk_label_new (_(set[i].label));
-			gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-			gtk_grid_attach (GTK_GRID (grid), label, 0, row_idx, 1, 1);
-
-			control = setup_translated_dropdown_new (&set[i]);
-			if (set[i].tooltip)
-				gtk_widget_set_tooltip_text (control, _(set[i].tooltip));
-			gtk_grid_attach (GTK_GRID (grid), control, 1, row_idx++, 1, 1);
-			break;
-		default:
-			break;
-		}
-	}
-
-	return box;
-}
-#endif
 
 static gboolean
 prefs_window_close_request_cb (GtkWindow *window, gpointer userdata)
@@ -1276,19 +1046,7 @@ prefs_window_close_request_cb (GtkWindow *window, gpointer userdata)
 void
 setup_open (void)
 {
-#ifndef USE_LIBADWAITA
-	GtkWidget *root;
-	GtkWidget *content;
-	GtkWidget *sidebar;
-	GtkWidget *stack;
-	GtkWidget *bottom;
-	GtkWidget *button;
-#endif
 	GtkWidget *page;
-#ifndef USE_LIBADWAITA
-	GtkWidget *scroller;
-	char name[32];
-#endif
 	int i;
 
 	if (prefs_window)
@@ -1297,10 +1055,7 @@ setup_open (void)
 		return;
 	}
 
-#ifdef USE_LIBADWAITA
-	prefs_window = adw_preferences_window_new ();
-	gtk_window_set_title (GTK_WINDOW (prefs_window), _("Preferences"));
-	gtk_window_set_default_size (GTK_WINDOW (prefs_window), 920, 680);
+	prefs_window = setup_ui_window_new ();
 	if (main_window)
 		gtk_window_set_transient_for (GTK_WINDOW (prefs_window), GTK_WINDOW (main_window));
 
@@ -1316,53 +1071,8 @@ setup_open (void)
 		if (icon_name && icon_name[0])
 			adw_preferences_page_set_icon_name (ADW_PREFERENCES_PAGE (page), icon_name);
 		adw_preferences_window_add (ADW_PREFERENCES_WINDOW (prefs_window), ADW_PREFERENCES_PAGE (page));
+		g_object_unref (page);
 	}
-#else
-	prefs_window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (prefs_window), _("Preferences"));
-	gtk_window_set_default_size (GTK_WINDOW (prefs_window), 920, 680);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (prefs_window), GTK_WINDOW (main_window));
-
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 10);
-	gtk_widget_set_margin_end (root, 10);
-	gtk_widget_set_margin_top (root, 10);
-	gtk_widget_set_margin_bottom (root, 10);
-	gtk_window_set_child (GTK_WINDOW (prefs_window), root);
-
-	content = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
-	gtk_widget_set_hexpand (content, TRUE);
-	gtk_widget_set_vexpand (content, TRUE);
-	gtk_box_append (GTK_BOX (root), content);
-
-	stack = gtk_stack_new ();
-	gtk_stack_set_transition_type (GTK_STACK (stack), GTK_STACK_TRANSITION_TYPE_SLIDE_UP_DOWN);
-
-	sidebar = gtk_stack_sidebar_new ();
-	gtk_stack_sidebar_set_stack (GTK_STACK_SIDEBAR (sidebar), GTK_STACK (stack));
-	gtk_widget_set_size_request (sidebar, 220, -1);
-	gtk_box_append (GTK_BOX (content), sidebar);
-	gtk_box_append (GTK_BOX (content), stack);
-
-	for (i = 0; setting_pages[i].title; i++)
-	{
-		g_snprintf (name, sizeof (name), "page%d", i);
-		page = setup_create_page (setting_pages[i].settings);
-		scroller = gtk_scrolled_window_new ();
-		gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-		gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroller), page);
-		gtk_stack_add_titled (GTK_STACK (stack), scroller, name, _(setting_pages[i].title));
-	}
-
-	bottom = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (bottom, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), bottom);
-
-	button = gtk_button_new_with_label (_("Close"));
-	g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_close), prefs_window);
-	gtk_box_append (GTK_BOX (bottom), button);
-#endif
 
 	g_signal_connect (prefs_window, "close-request",
 		G_CALLBACK (prefs_window_close_request_cb), NULL);

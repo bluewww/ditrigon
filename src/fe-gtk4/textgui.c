@@ -7,6 +7,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define TEXT_EDITOR_UI_PATH "/org/hexchat/ui/gtk4/dialogs/text-editor-window.ui"
+
 static GtkWidget *pevent_dialog;
 static GtkWidget *pevent_textview;
 
@@ -239,11 +241,11 @@ pevent_dialog_close_request_cb (GtkWindow *window, gpointer userdata)
 void
 pevent_dialog_show (void)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
-	GtkWidget *button;
-	GtkWidget *hint;
+	GtkWidget *hint = NULL;
+	GtkBuilder *builder;
+	GtkWidget *reload_button = NULL;
+	GtkWidget *save_button = NULL;
+	GtkWidget *close_button = NULL;
 
 	if (pevent_dialog)
 	{
@@ -251,51 +253,29 @@ pevent_dialog_show (void)
 		return;
 	}
 
-	pevent_dialog = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (pevent_dialog), _("Text Events"));
-	gtk_window_set_default_size (GTK_WINDOW (pevent_dialog), 760, 520);
+	builder = fe_gtk4_builder_new_from_resource (TEXT_EDITOR_UI_PATH);
+	pevent_dialog = fe_gtk4_builder_get_widget (builder, "text_editor_window", GTK_TYPE_WINDOW);
+	pevent_textview = fe_gtk4_builder_get_widget (builder, "text_editor_view", GTK_TYPE_TEXT_VIEW);
+	hint = fe_gtk4_builder_get_widget (builder, "text_editor_hint", GTK_TYPE_LABEL);
+	reload_button = fe_gtk4_builder_get_widget (builder, "text_editor_reload_button", GTK_TYPE_BUTTON);
+	save_button = fe_gtk4_builder_get_widget (builder, "text_editor_save_button", GTK_TYPE_BUTTON);
+	close_button = fe_gtk4_builder_get_widget (builder, "text_editor_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (pevent_dialog);
+	g_object_unref (builder);
+
 	if (main_window)
 		gtk_window_set_transient_for (GTK_WINDOW (pevent_dialog), GTK_WINDOW (main_window));
-
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (pevent_dialog), root);
-
-	hint = gtk_label_new (_("Raw pevents.conf editor"));
-	gtk_label_set_xalign (GTK_LABEL (hint), 0.0f);
-	gtk_widget_add_css_class (hint, "dim-label");
-	gtk_box_append (GTK_BOX (root), hint);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	pevent_textview = gtk_text_view_new ();
-	gtk_text_view_set_monospace (GTK_TEXT_VIEW (pevent_textview), TRUE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), pevent_textview);
-	pevent_dialog_reload ();
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	button = gtk_button_new_with_label (_("Reload"));
-	g_signal_connect (button, "clicked", G_CALLBACK (pevent_dialog_reload_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Save"));
-	g_signal_connect (button, "clicked", G_CALLBACK (pevent_dialog_save_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Close"));
-	g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_close), pevent_dialog);
-	gtk_box_append (GTK_BOX (buttons), button);
+	gtk_window_set_title (GTK_WINDOW (pevent_dialog), _("Text Events"));
+	gtk_label_set_text (GTK_LABEL (hint), _("Raw pevents.conf editor"));
+	gtk_button_set_label (GTK_BUTTON (reload_button), _("Reload"));
+	gtk_button_set_label (GTK_BUTTON (save_button), _("Save"));
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
+	g_signal_connect (reload_button, "clicked", G_CALLBACK (pevent_dialog_reload_cb), NULL);
+	g_signal_connect (save_button, "clicked", G_CALLBACK (pevent_dialog_save_cb), NULL);
+	g_signal_connect_swapped (close_button, "clicked", G_CALLBACK (gtk_window_close), pevent_dialog);
 
 	g_signal_connect (pevent_dialog, "close-request",
 		G_CALLBACK (pevent_dialog_close_request_cb), NULL);
+	pevent_dialog_reload ();
 	gtk_window_present (GTK_WINDOW (pevent_dialog));
 }

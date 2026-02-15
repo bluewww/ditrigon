@@ -49,11 +49,8 @@ endif
 
 iso_codes = dependency('iso-codes', required: false)
 hexchat_gtk4_cflags = []
-adwaita_dep = dependency('libadwaita-1', required: get_option('libadwaita'))
-if adwaita_dep.found()
-  hexchat_gtk4_deps += adwaita_dep
-  hexchat_gtk4_cflags += '-DUSE_LIBADWAITA'
-endif
+adwaita_dep = dependency('libadwaita-1')
+hexchat_gtk4_deps += adwaita_dep
 if iso_codes.found()
   iso_codes_prefix = iso_codes.get_pkgconfig_variable('prefix')
   hexchat_gtk4_cflags += '-DISO_CODES_PREFIX="@0@"'.format(iso_codes_prefix)

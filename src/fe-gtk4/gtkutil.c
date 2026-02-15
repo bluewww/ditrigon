@@ -1,6 +1,53 @@
 /* HexChat GTK4 dialog and utility wrappers */
 #include "fe-gtk4.h"
 
+GtkBuilder *
+fe_gtk4_builder_new_from_resource (const char *resource_path)
+{
+	GtkBuilder *builder;
+	GError *error;
+
+	g_return_val_if_fail (resource_path && resource_path[0], NULL);
+
+	error = NULL;
+	builder = gtk_builder_new ();
+	if (!gtk_builder_add_from_resource (builder, resource_path, &error))
+	{
+		g_error ("Failed to load required UI resource %s: %s",
+			resource_path, error ? error->message : "unknown error");
+		g_object_unref (builder);
+		g_clear_error (&error);
+		return NULL; /* not reached after g_error */
+	}
+
+	return builder;
+}
+
+GtkWidget *
+fe_gtk4_builder_get_widget (GtkBuilder *builder, const char *id, GType expected_type)
+{
+	GObject *obj;
+
+	g_return_val_if_fail (builder != NULL, NULL);
+	g_return_val_if_fail (id && id[0], NULL);
+
+	obj = gtk_builder_get_object (builder, id);
+	if (!obj)
+	{
+		g_error ("Required UI object '%s' not found", id);
+		return NULL; /* not reached */
+	}
+
+	if (expected_type != 0 && !g_type_is_a (G_OBJECT_TYPE (obj), expected_type))
+	{
+		g_error ("UI object '%s' has type '%s', expected '%s'",
+			id, G_OBJECT_TYPE_NAME (obj), g_type_name (expected_type));
+		return NULL; /* not reached */
+	}
+
+	return GTK_WIDGET (obj);
+}
+
 typedef struct
 {
 	void (*callback) (int value, void *userdata);

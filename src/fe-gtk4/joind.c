@@ -4,6 +4,8 @@
 #include "../common/server.h"
 #include "../common/servlist.h"
 
+#define JOIND_UI_PATH "/org/hexchat/ui/gtk4/dialogs/joind-window.ui"
+
 typedef struct
 {
 	GtkWidget *window;
@@ -111,13 +113,11 @@ joind_cancel_cb (GtkButton *button, gpointer userdata)
 void
 joind_open (server *serv)
 {
-	GtkWidget *root;
 	GtkWidget *title;
 	GtkWidget *desc;
-	GtkWidget *join_row;
-	GtkWidget *buttons;
 	GtkWidget *ok_button;
 	GtkWidget *cancel_button;
+	GtkBuilder *builder;
 	const char *network;
 	char *title_text;
 
@@ -140,7 +140,33 @@ joind_open (server *serv)
 	if (!network || !network[0])
 		network = serv->servername[0] ? serv->servername : _("Unknown");
 
-	join_dialog.window = gtk_window_new ();
+	builder = fe_gtk4_builder_new_from_resource (JOIND_UI_PATH);
+	join_dialog.window = fe_gtk4_builder_get_widget (builder, "joind_window", GTK_TYPE_WINDOW);
+	title = fe_gtk4_builder_get_widget (builder, "joind_title", GTK_TYPE_LABEL);
+	desc = fe_gtk4_builder_get_widget (builder, "joind_desc", GTK_TYPE_LABEL);
+	join_dialog.radio_nothing = fe_gtk4_builder_get_widget (builder, "joind_radio_nothing", GTK_TYPE_CHECK_BUTTON);
+	join_dialog.radio_join = fe_gtk4_builder_get_widget (builder, "joind_radio_join", GTK_TYPE_CHECK_BUTTON);
+	join_dialog.entry = fe_gtk4_builder_get_widget (builder, "joind_entry", GTK_TYPE_ENTRY);
+	join_dialog.radio_list = fe_gtk4_builder_get_widget (builder, "joind_radio_list", GTK_TYPE_CHECK_BUTTON);
+	join_dialog.check = fe_gtk4_builder_get_widget (builder, "joind_check", GTK_TYPE_CHECK_BUTTON);
+	cancel_button = fe_gtk4_builder_get_widget (builder, "joind_cancel_button", GTK_TYPE_BUTTON);
+	ok_button = fe_gtk4_builder_get_widget (builder, "joind_ok_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (join_dialog.window);
+	g_object_unref (builder);
+
+	title_text = g_strdup_printf ("<b>%s</b>", _("Connection successful."));
+	gtk_label_set_markup (GTK_LABEL (title), title_text);
+	g_free (title_text);
+	gtk_label_set_text (GTK_LABEL (desc),
+		_("No auto-join channel is configured for this network. What would you like to do next?"));
+	gtk_check_button_set_label (GTK_CHECK_BUTTON (join_dialog.radio_nothing), _("Nothing, I'll join later."));
+	gtk_check_button_set_label (GTK_CHECK_BUTTON (join_dialog.radio_join), _("Join this channel:"));
+	gtk_check_button_set_label (GTK_CHECK_BUTTON (join_dialog.radio_list), _("Open the channel list."));
+	gtk_check_button_set_label (GTK_CHECK_BUTTON (join_dialog.check),
+		_("Always show this dialog after connecting."));
+	gtk_button_set_label (GTK_BUTTON (cancel_button), _("Cancel"));
+	gtk_button_set_label (GTK_BUTTON (ok_button), _("OK"));
+
 	join_dialog.serv = serv;
 	gtk_window_set_default_size (GTK_WINDOW (join_dialog.window), 560, 280);
 	gtk_window_set_resizable (GTK_WINDOW (join_dialog.window), FALSE);
@@ -152,60 +178,14 @@ joind_open (server *serv)
 	gtk_window_set_title (GTK_WINDOW (join_dialog.window), title_text);
 	g_free (title_text);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
-	gtk_widget_set_margin_start (root, 14);
-	gtk_widget_set_margin_end (root, 14);
-	gtk_widget_set_margin_top (root, 14);
-	gtk_widget_set_margin_bottom (root, 14);
-	gtk_window_set_child (GTK_WINDOW (join_dialog.window), root);
-
-	title = gtk_label_new (NULL);
-	title_text = g_strdup_printf ("<b>%s</b>", _("Connection successful."));
-	gtk_label_set_markup (GTK_LABEL (title), title_text);
-	gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
-	gtk_box_append (GTK_BOX (root), title);
-	g_free (title_text);
-
-	desc = gtk_label_new (_("No auto-join channel is configured for this network. What would you like to do next?"));
-	gtk_label_set_xalign (GTK_LABEL (desc), 0.0f);
-	gtk_label_set_wrap (GTK_LABEL (desc), TRUE);
-	gtk_box_append (GTK_BOX (root), desc);
-
-	join_dialog.radio_nothing = gtk_check_button_new_with_label (_("Nothing, I'll join later."));
 	gtk_check_button_set_active (GTK_CHECK_BUTTON (join_dialog.radio_nothing), TRUE);
-	gtk_box_append (GTK_BOX (root), join_dialog.radio_nothing);
-
-	join_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-	gtk_box_append (GTK_BOX (root), join_row);
-
-	join_dialog.radio_join = gtk_check_button_new_with_label (_("Join this channel:"));
 	gtk_check_button_set_group (GTK_CHECK_BUTTON (join_dialog.radio_join),
 		GTK_CHECK_BUTTON (join_dialog.radio_nothing));
-	gtk_box_append (GTK_BOX (join_row), join_dialog.radio_join);
-
-	join_dialog.entry = gtk_entry_new ();
-	gtk_editable_set_text (GTK_EDITABLE (join_dialog.entry), "#");
-	gtk_widget_set_hexpand (join_dialog.entry, TRUE);
-	gtk_box_append (GTK_BOX (join_row), join_dialog.entry);
-	g_signal_connect (join_dialog.entry, "changed", G_CALLBACK (joind_entry_changed_cb), NULL);
-
-	join_dialog.radio_list = gtk_check_button_new_with_label (_("Open the channel list."));
 	gtk_check_button_set_group (GTK_CHECK_BUTTON (join_dialog.radio_list),
 		GTK_CHECK_BUTTON (join_dialog.radio_nothing));
-	gtk_box_append (GTK_BOX (root), join_dialog.radio_list);
-
-	join_dialog.check = gtk_check_button_new_with_label (_("Always show this dialog after connecting."));
+	gtk_editable_set_text (GTK_EDITABLE (join_dialog.entry), "#");
 	gtk_check_button_set_active (GTK_CHECK_BUTTON (join_dialog.check), prefs.hex_gui_join_dialog != 0);
-	gtk_box_append (GTK_BOX (root), join_dialog.check);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	cancel_button = gtk_button_new_with_label (_("Cancel"));
-	ok_button = gtk_button_new_with_label (_("OK"));
-	gtk_box_append (GTK_BOX (buttons), cancel_button);
-	gtk_box_append (GTK_BOX (buttons), ok_button);
+	g_signal_connect (join_dialog.entry, "changed", G_CALLBACK (joind_entry_changed_cb), NULL);
 
 	g_signal_connect (ok_button, "clicked", G_CALLBACK (joind_ok_cb), NULL);
 	g_signal_connect (cancel_button, "clicked", G_CALLBACK (joind_cancel_cb), NULL);

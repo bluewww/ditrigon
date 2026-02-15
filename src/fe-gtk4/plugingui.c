@@ -7,6 +7,8 @@ typedef struct session hexchat_context;
 
 #include "fe-gtk4.h"
 
+#define PLUGIN_UI_PATH "/org/hexchat/ui/gtk4/dialogs/plugin-window.ui"
+
 #ifdef USE_PLUGIN
 extern GSList *plugin_list;
 
@@ -253,13 +255,11 @@ void
 plugingui_open (void)
 {
 #ifdef USE_PLUGIN
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
 	GtkWidget *load_button;
 	GtkWidget *unload_button;
 	GtkWidget *reload_button;
 	GtkWidget *close_button;
+	GtkBuilder *builder;
 
 	if (plugin_window)
 	{
@@ -268,51 +268,31 @@ plugingui_open (void)
 		return;
 	}
 
-	plugin_window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (plugin_window), _("Plugins and Scripts"));
-	gtk_window_set_default_size (GTK_WINDOW (plugin_window), 720, 440);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (plugin_window), GTK_WINDOW (main_window));
+	builder = fe_gtk4_builder_new_from_resource (PLUGIN_UI_PATH);
+	plugin_window = fe_gtk4_builder_get_widget (builder, "plugin_window", GTK_TYPE_WINDOW);
+	plugin_listbox = fe_gtk4_builder_get_widget (builder, "plugin_list", GTK_TYPE_LIST_BOX);
+	load_button = fe_gtk4_builder_get_widget (builder, "plugin_load_button", GTK_TYPE_BUTTON);
+	unload_button = fe_gtk4_builder_get_widget (builder, "plugin_unload_button", GTK_TYPE_BUTTON);
+	reload_button = fe_gtk4_builder_get_widget (builder, "plugin_reload_button", GTK_TYPE_BUTTON);
+	close_button = fe_gtk4_builder_get_widget (builder, "plugin_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (plugin_window);
+	g_object_unref (builder);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (plugin_window), root);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	plugin_listbox = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (plugin_listbox), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), plugin_listbox);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	load_button = gtk_button_new_with_label (_("Load..."));
+	gtk_button_set_label (GTK_BUTTON (load_button), _("Load..."));
+	gtk_button_set_label (GTK_BUTTON (unload_button), _("Unload"));
+	gtk_button_set_label (GTK_BUTTON (reload_button), _("Reload"));
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 	g_signal_connect (load_button, "clicked", G_CALLBACK (plugingui_loadbutton_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), load_button);
-
-	unload_button = gtk_button_new_with_label (_("Unload"));
 	g_signal_connect (unload_button, "clicked", G_CALLBACK (plugingui_unload), NULL);
-	gtk_box_append (GTK_BOX (buttons), unload_button);
-
-	reload_button = gtk_button_new_with_label (_("Reload"));
 	g_signal_connect (reload_button, "clicked", G_CALLBACK (plugingui_reloadbutton_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), reload_button);
-
-	close_button = gtk_button_new_with_label (_("Close"));
 	g_signal_connect_swapped (close_button, "clicked",
 		G_CALLBACK (gtk_window_close), plugin_window);
-	gtk_box_append (GTK_BOX (buttons), close_button);
-
 	g_signal_connect (plugin_window, "close-request",
 		G_CALLBACK (plugingui_close_request_cb), NULL);
+
+	gtk_window_set_title (GTK_WINDOW (plugin_window), _("Plugins and Scripts"));
+	if (main_window)
+		gtk_window_set_transient_for (GTK_WINDOW (plugin_window), GTK_WINDOW (main_window));
 
 	fe_pluginlist_update ();
 	gtk_window_present (GTK_WINDOW (plugin_window));

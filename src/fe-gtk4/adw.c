@@ -1,11 +1,7 @@
 /* HexChat GTK4 libadwaita integration */
 #include "fe-gtk4.h"
-
-#ifdef USE_LIBADWAITA
 #include <adwaita.h>
-#endif
 
-#ifdef USE_LIBADWAITA
 static GtkWidget *adw_toolbar_view;
 static GtkWidget *adw_menu_button;
 static GtkWidget *adw_sidebar_button;
@@ -68,22 +64,16 @@ adw_button_set_icon_with_fallback (GtkWidget *button, const char *icon_name, con
 	else
 		gtk_button_set_icon_name (GTK_BUTTON (button), fallback_icon_name);
 }
-#endif
 
 gboolean
 fe_gtk4_adw_use_hamburger_menu (void)
 {
-#ifdef USE_LIBADWAITA
 	return TRUE;
-#else
-	return FALSE;
-#endif
 }
 
 void
 fe_gtk4_adw_init (void)
 {
-#ifdef USE_LIBADWAITA
 	static gboolean initialized;
 	AdwStyleManager *style_manager;
 
@@ -95,17 +85,12 @@ fe_gtk4_adw_init (void)
 	adw_style_manager_set_color_scheme (style_manager, ADW_COLOR_SCHEME_DEFAULT);
 
 	initialized = TRUE;
-#endif
 }
 
 GtkApplication *
 fe_gtk4_adw_application_new (void)
 {
-#ifdef USE_LIBADWAITA
 	return GTK_APPLICATION (adw_application_new (NULL, G_APPLICATION_NON_UNIQUE));
-#else
-	return gtk_application_new (NULL, G_APPLICATION_NON_UNIQUE);
-#endif
 }
 
 GtkWidget *
@@ -115,23 +100,15 @@ fe_gtk4_adw_window_new (void)
 
 	app = fe_gtk4_get_application ();
 
-#ifdef USE_LIBADWAITA
 	if (app)
 		return adw_application_window_new (app);
 
 	return adw_window_new ();
-#else
-	if (app)
-		return gtk_application_window_new (app);
-
-	return gtk_window_new ();
-#endif
 }
 
 void
 fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 {
-#ifdef USE_LIBADWAITA
 	adw_title_widget = NULL;
 	adw_sidebar_button = NULL;
 	adw_userlist_button = NULL;
@@ -155,7 +132,6 @@ fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 		adw_application_window_set_content (ADW_APPLICATION_WINDOW (window), adw_toolbar_view);
 		return;
 	}
-#endif
 
 	gtk_window_set_child (GTK_WINDOW (window), content);
 }
@@ -166,25 +142,17 @@ fe_gtk4_adw_bind_header_controls (GtkWidget *title_widget,
 	GtkWidget *userlist_button,
 	GtkWidget *menu_button)
 {
-#ifdef USE_LIBADWAITA
 	adw_title_widget = title_widget;
 	adw_sidebar_button = sidebar_button;
 	adw_userlist_button = userlist_button;
 	adw_menu_button = menu_button;
 	fe_gtk4_adw_sync_sidebar_button (fe_gtk4_maingui_get_left_sidebar_visible ());
 	fe_gtk4_adw_sync_userlist_button (prefs.hex_gui_ulist_hide ? FALSE : TRUE);
-#else
-	(void) title_widget;
-	(void) sidebar_button;
-	(void) userlist_button;
-	(void) menu_button;
-#endif
 }
 
 void
 fe_gtk4_adw_sync_sidebar_button (gboolean visible)
 {
-#ifdef USE_LIBADWAITA
 	if (!adw_sidebar_button)
 		return;
 
@@ -200,15 +168,11 @@ fe_gtk4_adw_sync_sidebar_button (gboolean visible)
 			"sidebar-show-left-symbolic", "view-left-pane-symbolic");
 		gtk_widget_set_tooltip_text (adw_sidebar_button, _("Show Sidebar"));
 	}
-#else
-	(void) visible;
-#endif
 }
 
 void
 fe_gtk4_adw_sync_userlist_button (gboolean visible)
 {
-#ifdef USE_LIBADWAITA
 	if (!adw_userlist_button)
 		return;
 
@@ -224,24 +188,17 @@ fe_gtk4_adw_sync_userlist_button (gboolean visible)
 			"sidebar-show-right-symbolic", "view-right-pane-symbolic");
 		gtk_widget_set_tooltip_text (adw_userlist_button, _("Show User List"));
 	}
-#else
-	(void) visible;
-#endif
 }
 
 void
 fe_gtk4_adw_set_window_title (const char *title)
 {
-#ifdef USE_LIBADWAITA
 	if (adw_title_widget && ADW_IS_WINDOW_TITLE (adw_title_widget))
 	{
 		adw_window_title_set_title (ADW_WINDOW_TITLE (adw_title_widget),
 			(title && title[0]) ? title : PACKAGE_NAME);
 		adw_window_title_set_subtitle (ADW_WINDOW_TITLE (adw_title_widget), NULL);
 	}
-#else
-	(void) title;
-#endif
 }
 
 void
@@ -250,13 +207,11 @@ fe_gtk4_adw_attach_menu_bar (GtkWidget *menu_widget)
 	if (!menu_widget)
 		return;
 
-#ifdef USE_LIBADWAITA
 	if (adw_toolbar_view && ADW_IS_TOOLBAR_VIEW (adw_toolbar_view))
 	{
 		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (adw_toolbar_view), menu_widget);
 		return;
 	}
-#endif
 
 	if (main_box)
 		gtk_box_prepend (GTK_BOX (main_box), menu_widget);
@@ -270,13 +225,11 @@ fe_gtk4_adw_detach_menu_bar (GtkWidget *menu_widget)
 	if (!menu_widget)
 		return;
 
-#ifdef USE_LIBADWAITA
 	if (adw_toolbar_view && ADW_IS_TOOLBAR_VIEW (adw_toolbar_view))
 	{
 		adw_toolbar_view_remove (ADW_TOOLBAR_VIEW (adw_toolbar_view), menu_widget);
 		return;
 	}
-#endif
 
 	parent = gtk_widget_get_parent (menu_widget);
 	if (parent && parent == main_box)
@@ -286,10 +239,6 @@ fe_gtk4_adw_detach_menu_bar (GtkWidget *menu_widget)
 void
 fe_gtk4_adw_set_menu_model (GMenuModel *model)
 {
-#ifdef USE_LIBADWAITA
 	if (adw_menu_button)
 		gtk_menu_button_set_menu_model (GTK_MENU_BUTTON (adw_menu_button), model);
-#else
-	(void) model;
-#endif
 }

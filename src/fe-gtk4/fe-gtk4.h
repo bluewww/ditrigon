@@ -53,6 +53,8 @@ void fe_gtk4_adw_set_menu_model (GMenuModel *model);
 void fe_gtk4_adw_sync_userlist_button (gboolean visible);
 void fe_gtk4_adw_sync_sidebar_button (gboolean visible);
 gboolean fe_gtk4_adw_use_hamburger_menu (void);
+GtkBuilder *fe_gtk4_builder_new_from_resource (const char *resource_path);
+GtkWidget *fe_gtk4_builder_get_widget (GtkBuilder *builder, const char *id, GType expected_type);
 GtkApplication *fe_gtk4_get_application (void);
 session *fe_gtk4_window_target_session (void);
 void fe_gtk4_append_log_text (const char *text);

@@ -25,10 +25,6 @@ option('dbus', type: 'feature', value: 'auto',
 option('libcanberra', type: 'feature', value: 'auto',
   description: 'Support for sound alerts, Unix only'
 )
-option('libadwaita', type: 'feature', value: 'auto',
-  description: 'Support for GNOME libadwaita styling in GTK4 frontend'
-)
-
 # Install options
 option('dbus-service-use-appid', type: 'boolean', value: false,
   description: 'Rename dbus service to match app-id, required for Flatpak'

@@ -3,6 +3,8 @@
 
 #include "../common/cfgfiles.h"
 
+#define RAWLOG_UI_PATH "/org/hexchat/ui/gtk4/dialogs/rawlog-window.ui"
+
 typedef struct
 {
 	GtkWidget *window;
@@ -224,59 +226,36 @@ rawlog_append_line (server *serv, const char *line, gboolean outbound)
 void
 open_rawlog (struct server *serv)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
-	GtkWidget *clear_button;
-	GtkWidget *save_button;
-	GtkWidget *close_button;
+	GtkWidget *clear_button = NULL;
+	GtkWidget *save_button = NULL;
+	GtkWidget *close_button = NULL;
+	GtkBuilder *builder;
 
 	if (!serv)
 		return;
 
 	if (!rawlog_view.window)
 	{
-		rawlog_view.window = gtk_window_new ();
-		gtk_window_set_default_size (GTK_WINDOW (rawlog_view.window), 720, 420);
+		builder = fe_gtk4_builder_new_from_resource (RAWLOG_UI_PATH);
+		rawlog_view.window = fe_gtk4_builder_get_widget (builder, "rawlog_window", GTK_TYPE_WINDOW);
+		rawlog_view.text_view = fe_gtk4_builder_get_widget (builder, "rawlog_text_view", GTK_TYPE_TEXT_VIEW);
+		clear_button = fe_gtk4_builder_get_widget (builder, "rawlog_clear_button", GTK_TYPE_BUTTON);
+		save_button = fe_gtk4_builder_get_widget (builder, "rawlog_save_button", GTK_TYPE_BUTTON);
+		close_button = fe_gtk4_builder_get_widget (builder, "rawlog_close_button", GTK_TYPE_BUTTON);
+		g_object_ref_sink (rawlog_view.window);
+		g_object_unref (builder);
+
+		rawlog_view.buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (rawlog_view.text_view));
 		if (main_window)
 			gtk_window_set_transient_for (GTK_WINDOW (rawlog_view.window), GTK_WINDOW (main_window));
+		gtk_button_set_label (GTK_BUTTON (clear_button), _("Clear"));
+		gtk_button_set_label (GTK_BUTTON (save_button), _("Save As..."));
+		gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 
-		root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-		gtk_widget_set_margin_start (root, 12);
-		gtk_widget_set_margin_end (root, 12);
-		gtk_widget_set_margin_top (root, 12);
-		gtk_widget_set_margin_bottom (root, 12);
-		gtk_window_set_child (GTK_WINDOW (rawlog_view.window), root);
-
-		scroll = gtk_scrolled_window_new ();
-		gtk_widget_set_hexpand (scroll, TRUE);
-		gtk_widget_set_vexpand (scroll, TRUE);
-		gtk_box_append (GTK_BOX (root), scroll);
-
-		rawlog_view.text_view = gtk_text_view_new ();
-		rawlog_view.buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (rawlog_view.text_view));
-		gtk_text_view_set_editable (GTK_TEXT_VIEW (rawlog_view.text_view), FALSE);
-		gtk_text_view_set_cursor_visible (GTK_TEXT_VIEW (rawlog_view.text_view), FALSE);
-		gtk_text_view_set_monospace (GTK_TEXT_VIEW (rawlog_view.text_view), TRUE);
-		gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), rawlog_view.text_view);
-
-		buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-		gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-		gtk_box_append (GTK_BOX (root), buttons);
-
-		clear_button = gtk_button_new_with_label (_("Clear"));
 		g_signal_connect (clear_button, "clicked", G_CALLBACK (rawlog_clear_cb), NULL);
-		gtk_box_append (GTK_BOX (buttons), clear_button);
-
-		save_button = gtk_button_new_with_label (_("Save As..."));
 		g_signal_connect (save_button, "clicked", G_CALLBACK (rawlog_save_cb), NULL);
-		gtk_box_append (GTK_BOX (buttons), save_button);
-
-		close_button = gtk_button_new_with_label (_("Close"));
 		g_signal_connect_swapped (close_button, "clicked",
 			G_CALLBACK (gtk_window_close), rawlog_view.window);
-		gtk_box_append (GTK_BOX (buttons), close_button);
-
 		g_signal_connect (rawlog_view.window, "close-request",
 			G_CALLBACK (rawlog_close_request_cb), NULL);
 	}

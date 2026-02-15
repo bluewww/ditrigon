@@ -7,6 +7,9 @@
 
 #include <time.h>
 
+#define NOTIFY_UI_PATH "/org/hexchat/ui/gtk4/dialogs/notify-window.ui"
+#define NOTIFY_ADD_UI_PATH "/org/hexchat/ui/gtk4/dialogs/notify-add-dialog.ui"
+
 typedef struct
 {
 	GtkWidget *window;
@@ -401,55 +404,36 @@ notify_open_add_dialog (const char *name, const char *networks)
 {
 	HcNotifyAddDialog *dialog;
 	GtkWidget *window;
-	GtkWidget *root;
 	GtkWidget *name_label;
 	GtkWidget *net_label;
-	GtkWidget *buttons;
 	GtkWidget *ok_button;
 	GtkWidget *cancel_button;
+	GtkBuilder *builder;
 
 	dialog = g_new0 (HcNotifyAddDialog, 1);
 
-	window = gtk_window_new ();
-	dialog->window = window;
+	builder = fe_gtk4_builder_new_from_resource (NOTIFY_ADD_UI_PATH);
+	dialog->window = fe_gtk4_builder_get_widget (builder, "notify_add_window", GTK_TYPE_WINDOW);
+	name_label = fe_gtk4_builder_get_widget (builder, "notify_add_name_label", GTK_TYPE_LABEL);
+	dialog->name_entry = fe_gtk4_builder_get_widget (builder, "notify_add_name_entry", GTK_TYPE_ENTRY);
+	net_label = fe_gtk4_builder_get_widget (builder, "notify_add_network_label", GTK_TYPE_LABEL);
+	dialog->net_entry = fe_gtk4_builder_get_widget (builder, "notify_add_network_entry", GTK_TYPE_ENTRY);
+	cancel_button = fe_gtk4_builder_get_widget (builder, "notify_add_cancel_button", GTK_TYPE_BUTTON);
+	ok_button = fe_gtk4_builder_get_widget (builder, "notify_add_ok_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (dialog->window);
+	g_object_unref (builder);
+
+	window = dialog->window;
+	gtk_label_set_text (GTK_LABEL (name_label), _("Nickname:"));
+	gtk_label_set_text (GTK_LABEL (net_label), _("Networks (comma separated, leave empty for all):"));
+	gtk_button_set_label (GTK_BUTTON (cancel_button), _("Cancel"));
+	gtk_button_set_label (GTK_BUTTON (ok_button), _("Add"));
+
+	window = dialog->window;
 	gtk_window_set_title (GTK_WINDOW (window), _("Add to Friends List"));
-	gtk_window_set_default_size (GTK_WINDOW (window), 420, 180);
 	if (main_window)
 		gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (main_window));
 	gtk_window_set_modal (GTK_WINDOW (window), TRUE);
-
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (window), root);
-
-	name_label = gtk_label_new (_("Nickname:"));
-	gtk_label_set_xalign (GTK_LABEL (name_label), 0.0f);
-	gtk_box_append (GTK_BOX (root), name_label);
-
-	dialog->name_entry = gtk_entry_new ();
-	gtk_editable_set_text (GTK_EDITABLE (dialog->name_entry), name ? name : "");
-	gtk_box_append (GTK_BOX (root), dialog->name_entry);
-
-	net_label = gtk_label_new (_("Networks (comma separated, leave empty for all):"));
-	gtk_label_set_xalign (GTK_LABEL (net_label), 0.0f);
-	gtk_box_append (GTK_BOX (root), net_label);
-
-	dialog->net_entry = gtk_entry_new ();
-	gtk_editable_set_text (GTK_EDITABLE (dialog->net_entry),
-		networks ? networks : "ALL");
-	gtk_box_append (GTK_BOX (root), dialog->net_entry);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	cancel_button = gtk_button_new_with_label (_("Cancel"));
-	ok_button = gtk_button_new_with_label (_("Add"));
-	gtk_box_append (GTK_BOX (buttons), cancel_button);
-	gtk_box_append (GTK_BOX (buttons), ok_button);
 
 	g_signal_connect (ok_button, "clicked", G_CALLBACK (notify_add_dialog_ok_cb), dialog);
 	g_signal_connect (cancel_button, "clicked", G_CALLBACK (notify_add_dialog_cancel_cb), dialog);
@@ -460,6 +444,8 @@ notify_open_add_dialog (const char *name, const char *networks)
 	g_signal_connect (window, "close-request",
 		G_CALLBACK (notify_add_dialog_close_request_cb), dialog);
 
+	gtk_editable_set_text (GTK_EDITABLE (dialog->name_entry), name ? name : "");
+	gtk_editable_set_text (GTK_EDITABLE (dialog->net_entry), networks ? networks : "ALL");
 	gtk_window_set_default_widget (GTK_WINDOW (window), ok_button);
 	gtk_window_present (GTK_WINDOW (window));
 }
@@ -475,11 +461,9 @@ notify_add_clicked_cb (GtkButton *button, gpointer userdata)
 void
 notify_opengui (void)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
 	GtkWidget *add_button;
 	GtkWidget *close_button;
+	GtkBuilder *builder;
 
 	if (notify_view.window)
 	{
@@ -488,57 +472,37 @@ notify_opengui (void)
 		return;
 	}
 
-	notify_view.window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (notify_view.window), _("Friends List"));
-	gtk_window_set_default_size (GTK_WINDOW (notify_view.window), 620, 420);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (notify_view.window), GTK_WINDOW (main_window));
+	builder = fe_gtk4_builder_new_from_resource (NOTIFY_UI_PATH);
+	notify_view.window = fe_gtk4_builder_get_widget (builder, "notify_window", GTK_TYPE_WINDOW);
+	notify_view.list = fe_gtk4_builder_get_widget (builder, "notify_list", GTK_TYPE_LIST_BOX);
+	add_button = fe_gtk4_builder_get_widget (builder, "notify_add_button", GTK_TYPE_BUTTON);
+	notify_view.open_button = fe_gtk4_builder_get_widget (builder, "notify_open_button", GTK_TYPE_BUTTON);
+	notify_view.remove_button = fe_gtk4_builder_get_widget (builder, "notify_remove_button", GTK_TYPE_BUTTON);
+	close_button = fe_gtk4_builder_get_widget (builder, "notify_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (notify_view.window);
+	g_object_unref (builder);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (notify_view.window), root);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	notify_view.list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (notify_view.list), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), notify_view.list);
+	gtk_button_set_label (GTK_BUTTON (add_button), _("Add..."));
+	gtk_button_set_label (GTK_BUTTON (notify_view.open_button), _("Open Dialog"));
+	gtk_button_set_label (GTK_BUTTON (notify_view.remove_button), _("Remove"));
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 	g_signal_connect (notify_view.list, "selected-rows-changed",
 		G_CALLBACK (notify_row_changed_cb), NULL);
 	g_signal_connect (notify_view.list, "row-activated",
 		G_CALLBACK (notify_row_activated_cb), NULL);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	add_button = gtk_button_new_with_label (_("Add..."));
 	g_signal_connect (add_button, "clicked", G_CALLBACK (notify_add_clicked_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), add_button);
-
-	notify_view.open_button = gtk_button_new_with_label (_("Open Dialog"));
 	g_signal_connect (notify_view.open_button, "clicked",
 		G_CALLBACK (notify_open_selected_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), notify_view.open_button);
-
-	notify_view.remove_button = gtk_button_new_with_label (_("Remove"));
 	g_signal_connect (notify_view.remove_button, "clicked",
 		G_CALLBACK (notify_remove_selected_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), notify_view.remove_button);
-
-	close_button = gtk_button_new_with_label (_("Close"));
 	g_signal_connect_swapped (close_button, "clicked",
 		G_CALLBACK (gtk_window_close), notify_view.window);
-	gtk_box_append (GTK_BOX (buttons), close_button);
-
 	g_signal_connect (notify_view.window, "close-request",
 		G_CALLBACK (notify_close_request_cb), NULL);
+
+	gtk_window_set_title (GTK_WINDOW (notify_view.window), _("Friends List"));
+	if (main_window)
+		gtk_window_set_transient_for (GTK_WINDOW (notify_view.window), GTK_WINDOW (main_window));
 
 	notify_gui_update ();
 	notify_row_changed_cb (GTK_LIST_BOX (notify_view.list), NULL);

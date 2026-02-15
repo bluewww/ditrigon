@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+
+  <object class="GtkWindow" id="servlist_window">
+    <property name="default-width">760</property>
+    <property name="default-height">700</property>
+    <property name="child">
+      <object class="GtkBox" id="servlist_root">
+        <property name="orientation">vertical</property>
+        <property name="spacing">10</property>
+        <property name="margin-start">10</property>
+        <property name="margin-end">10</property>
+        <property name="margin-top">10</property>
+        <property name="margin-bottom">10</property>
+
+        <child>
+          <object class="GtkLabel" id="servlist_user_info_section">
+            <property name="label" translatable="yes">&lt;b&gt;User Information&lt;/b&gt;</property>
+            <property name="use-markup">True</property>
+            <property name="xalign">0</property>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkGrid" id="servlist_user_grid">
+            <property name="column-spacing">8</property>
+            <property name="row-spacing">2</property>
+
+            <child>
+              <object class="GtkLabel" id="servlist_nick1_label">
+                <property name="label" translatable="yes">Nick name:</property>
+                <property name="xalign">0</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">0</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkEntry" id="servlist_entry_nick1">
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">0</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkLabel" id="servlist_nick2_label">
+                <property name="label" translatable="yes">Second choice:</property>
+                <property name="xalign">0</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">1</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkEntry" id="servlist_entry_nick2">
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">1</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkLabel" id="servlist_nick3_label">
+                <property name="label" translatable="yes">Third choice:</property>
+                <property name="xalign">0</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">2</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkEntry" id="servlist_entry_nick3">
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">2</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkLabel" id="servlist_user_label">
+                <property name="label" translatable="yes">User name:</property>
+                <property name="xalign">0</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">3</property>
+                </layout>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkEntry" id="servlist_entry_guser">
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">3</property>
+                </layout>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkLabel" id="servlist_networks_section">
+            <property name="label" translatable="yes">&lt;b&gt;Networks&lt;/b&gt;</property>
+            <property name="use-markup">True</property>
+            <property name="xalign">0</property>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkSearchEntry" id="servlist_networks_search_entry"/>
+        </child>
+
+        <child>
+          <object class="GtkBox" id="servlist_content">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">8</property>
+            <property name="vexpand">True</property>
+
+            <child>
+              <object class="GtkScrolledWindow" id="servlist_networks_scroller">
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+                <property name="hscrollbar-policy">never</property>
+                <property name="vscrollbar-policy">automatic</property>
+                <property name="child">
+                  <object class="GtkListBox" id="servlist_networks_list">
+                    <property name="selection-mode">single</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkBox" id="servlist_networks_button_box">
+                <property name="orientation">vertical</property>
+                <property name="spacing">6</property>
+
+                <child>
+                  <object class="GtkButton" id="servlist_add_button">
+                    <property name="label" translatable="yes">Add</property>
+                    <property name="icon-name">list-add-symbolic</property>
+                  </object>
+                </child>
+
+                <child>
+                  <object class="GtkButton" id="servlist_remove_button">
+                    <property name="label" translatable="yes">Remove</property>
+                    <property name="icon-name">list-remove-symbolic</property>
+                    <style>
+                      <class name="destructive-action"/>
+                    </style>
+                  </object>
+                </child>
+
+                <child>
+                  <object class="GtkButton" id="servlist_edit_button">
+                    <property name="label" translatable="yes">Edit...</property>
+                    <property name="icon-name">document-edit-symbolic</property>
+                  </object>
+                </child>
+
+                <child>
+                  <object class="GtkButton" id="servlist_sort_button">
+                    <property name="label" translatable="yes">Sort</property>
+                    <property name="icon-name">view-sort-ascending-symbolic</property>
+                  </object>
+                </child>
+
+                <child>
+                  <object class="GtkButton" id="servlist_favor_button">
+                    <property name="label" translatable="yes">Favor</property>
+                    <property name="icon-name">star-new-symbolic</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkBox" id="servlist_options_row">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">12</property>
+
+            <child>
+              <object class="GtkCheckButton" id="servlist_check_skip">
+                <property name="label" translatable="yes">Skip network list on startup</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkCheckButton" id="servlist_check_fav">
+                <property name="label" translatable="yes">Show favorites only</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkBox" id="servlist_bottom">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">6</property>
+            <property name="halign">end</property>
+
+            <child>
+              <object class="GtkButton" id="servlist_cancel_button">
+                <property name="label" translatable="yes">Cancel</property>
+                <property name="width-request">110</property>
+                <property name="height-request">42</property>
+                <style>
+                  <class name="pill"/>
+                </style>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkButton" id="servlist_connect_button">
+                <property name="label" translatable="yes">Connect</property>
+                <property name="width-request">130</property>
+                <property name="height-request">42</property>
+                <style>
+                  <class name="pill"/>
+                  <class name="suggested-action"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </property>
+  </object>
+</interface>

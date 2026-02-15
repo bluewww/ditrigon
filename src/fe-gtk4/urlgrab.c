@@ -4,6 +4,8 @@
 #include "../common/url.h"
 #include "../common/tree.h"
 
+#define URLGRAB_UI_PATH "/org/hexchat/ui/gtk4/dialogs/urlgrab-window.ui"
+
 typedef struct
 {
 	GtkWidget *window;
@@ -214,15 +216,13 @@ fe_url_add (const char *urltext)
 void
 url_opengui (void)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
 	GtkWidget *open_button;
 	GtkWidget *copy_button;
 	GtkWidget *save_button;
 	GtkWidget *clear_button;
 	GtkWidget *close_button;
 	GtkWidget *hint;
+	GtkBuilder *builder;
 
 	if (urlgrab_view.window)
 	{
@@ -230,62 +230,38 @@ url_opengui (void)
 		return;
 	}
 
-	urlgrab_view.window = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (urlgrab_view.window), _("URL Grabber"));
-	gtk_window_set_default_size (GTK_WINDOW (urlgrab_view.window), 640, 420);
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (urlgrab_view.window), GTK_WINDOW (main_window));
+	builder = fe_gtk4_builder_new_from_resource (URLGRAB_UI_PATH);
+	urlgrab_view.window = fe_gtk4_builder_get_widget (builder, "urlgrab_window", GTK_TYPE_WINDOW);
+	hint = fe_gtk4_builder_get_widget (builder, "urlgrab_hint", GTK_TYPE_LABEL);
+	urlgrab_view.list = fe_gtk4_builder_get_widget (builder, "urlgrab_list", GTK_TYPE_LIST_BOX);
+	open_button = fe_gtk4_builder_get_widget (builder, "urlgrab_open_button", GTK_TYPE_BUTTON);
+	copy_button = fe_gtk4_builder_get_widget (builder, "urlgrab_copy_button", GTK_TYPE_BUTTON);
+	save_button = fe_gtk4_builder_get_widget (builder, "urlgrab_save_button", GTK_TYPE_BUTTON);
+	clear_button = fe_gtk4_builder_get_widget (builder, "urlgrab_clear_button", GTK_TYPE_BUTTON);
+	close_button = fe_gtk4_builder_get_widget (builder, "urlgrab_close_button", GTK_TYPE_BUTTON);
+	g_object_ref_sink (urlgrab_view.window);
+	g_object_unref (builder);
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (urlgrab_view.window), root);
-
-	hint = gtk_label_new (_("Double-click a URL to open it."));
-	gtk_label_set_xalign (GTK_LABEL (hint), 0.0f);
-	gtk_widget_add_css_class (hint, "dim-label");
-	gtk_box_append (GTK_BOX (root), hint);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	urlgrab_view.list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (urlgrab_view.list), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), urlgrab_view.list);
+	gtk_label_set_text (GTK_LABEL (hint), _("Double-click a URL to open it."));
+	gtk_button_set_label (GTK_BUTTON (open_button), _("Open"));
+	gtk_button_set_label (GTK_BUTTON (copy_button), _("Copy"));
+	gtk_button_set_label (GTK_BUTTON (save_button), _("Save As..."));
+	gtk_button_set_label (GTK_BUTTON (clear_button), _("Clear"));
+	gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 	g_signal_connect (urlgrab_view.list, "row-activated",
 		G_CALLBACK (urlgrab_row_activated_cb), NULL);
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	open_button = gtk_button_new_with_label (_("Open"));
 	g_signal_connect (open_button, "clicked", G_CALLBACK (urlgrab_open_selected_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), open_button);
-
-	copy_button = gtk_button_new_with_label (_("Copy"));
 	g_signal_connect (copy_button, "clicked", G_CALLBACK (urlgrab_copy_selected_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), copy_button);
-
-	save_button = gtk_button_new_with_label (_("Save As..."));
 	g_signal_connect (save_button, "clicked", G_CALLBACK (urlgrab_save_clicked_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), save_button);
-
-	clear_button = gtk_button_new_with_label (_("Clear"));
 	g_signal_connect (clear_button, "clicked", G_CALLBACK (urlgrab_clear_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), clear_button);
-
-	close_button = gtk_button_new_with_label (_("Close"));
 	g_signal_connect_swapped (close_button, "clicked",
 		G_CALLBACK (gtk_window_close), urlgrab_view.window);
-	gtk_box_append (GTK_BOX (buttons), close_button);
-
 	g_signal_connect (urlgrab_view.window, "close-request",
 		G_CALLBACK (urlgrab_close_request_cb), NULL);
+
+	gtk_window_set_title (GTK_WINDOW (urlgrab_view.window), _("URL Grabber"));
+	if (main_window)
+		gtk_window_set_transient_for (GTK_WINDOW (urlgrab_view.window), GTK_WINDOW (main_window));
 
 	if (prefs.hex_url_grabber)
 		tree_foreach (url_tree, urlgrab_populate_cb, NULL);

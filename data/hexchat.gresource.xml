@@ -21,4 +21,33 @@
 		<file alias="tree_server.png" preprocess="to-pixdata">icons/tree_server.png</file>
 		<file alias="tree_util.png" preprocess="to-pixdata">icons/tree_util.png</file>
 	</gresource>
+	<gresource prefix="/org/hexchat">
+		<file>ui/gtk4/dialogs/ascii-window.ui</file>
+		<file>ui/gtk4/dialogs/banlist-window.ui</file>
+		<file>ui/gtk4/dialogs/ignore-window.ui</file>
+		<file>ui/gtk4/dialogs/notify-window.ui</file>
+		<file>ui/gtk4/dialogs/notify-add-dialog.ui</file>
+		<file>ui/gtk4/dialogs/urlgrab-window.ui</file>
+		<file>ui/gtk4/dialogs/plugin-window.ui</file>
+		<file>ui/gtk4/dialogs/editlist-window.ui</file>
+		<file>ui/gtk4/dialogs/joind-window.ui</file>
+		<file>ui/gtk4/dialogs/dcc-file-window.ui</file>
+		<file>ui/gtk4/dialogs/dcc-chat-window.ui</file>
+		<file>ui/gtk4/dialogs/text-editor-window.ui</file>
+		<file>ui/gtk4/dialogs/rawlog-window.ui</file>
+		<file>ui/gtk4/dialogs/chanlist-window.ui</file>
+		<file>ui/gtk4/dialogs/servlist-window.ui</file>
+		<file>ui/gtk4/dialogs/servlist-edit-window.ui</file>
+		<file>ui/gtk4/maingui/main-box.ui</file>
+		<file>ui/gtk4/maingui/chat-layout.ui</file>
+		<file>ui/gtk4/maingui/legacy-content-paned.ui</file>
+		<file>ui/gtk4/maingui/adw-nav-split.ui</file>
+		<file>ui/gtk4/setup/preferences-window.ui</file>
+		<file>ui/gtk4/setup/page.ui</file>
+		<file>ui/gtk4/setup/group.ui</file>
+		<file>ui/gtk4/setup/rows/switch-row.ui</file>
+		<file>ui/gtk4/setup/rows/entry-row.ui</file>
+		<file>ui/gtk4/setup/rows/action-row.ui</file>
+		<file>ui/gtk4/setup/rows/combo-row.ui</file>
+	</gresource>
 </gresources>

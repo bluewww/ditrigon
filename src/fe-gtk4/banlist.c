@@ -12,6 +12,8 @@
 #define RPL_ENDOFQUIETLIST 729
 #endif
 
+#define BANLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/banlist-window.ui"
+
 typedef struct
 {
 	char *mask;
@@ -260,11 +262,9 @@ ban_refresh_clicked_cb (GtkButton *button, gpointer userdata)
 void
 banlist_opengui (session *sess)
 {
-	GtkWidget *root;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
 	GtkWidget *refresh_button;
 	GtkWidget *close_button;
+	GtkBuilder *builder;
 	char *title;
 
 	if (!sess || !sess->server || sess->type != SESS_CHANNEL)
@@ -275,57 +275,31 @@ banlist_opengui (session *sess)
 
 	if (!ban_view.window)
 	{
-		ban_view.window = gtk_window_new ();
-		gtk_window_set_default_size (GTK_WINDOW (ban_view.window), 700, 420);
-		if (main_window)
-			gtk_window_set_transient_for (GTK_WINDOW (ban_view.window), GTK_WINDOW (main_window));
+		builder = fe_gtk4_builder_new_from_resource (BANLIST_UI_PATH);
+		ban_view.window = fe_gtk4_builder_get_widget (builder, "banlist_window", GTK_TYPE_WINDOW);
+		ban_view.status = fe_gtk4_builder_get_widget (builder, "banlist_status", GTK_TYPE_LABEL);
+		ban_view.list = fe_gtk4_builder_get_widget (builder, "banlist_list", GTK_TYPE_LIST_BOX);
+		refresh_button = fe_gtk4_builder_get_widget (builder, "banlist_refresh_button", GTK_TYPE_BUTTON);
+		ban_view.remove_button = fe_gtk4_builder_get_widget (builder, "banlist_remove_button", GTK_TYPE_BUTTON);
+		ban_view.clear_button = fe_gtk4_builder_get_widget (builder, "banlist_clear_button", GTK_TYPE_BUTTON);
+		close_button = fe_gtk4_builder_get_widget (builder, "banlist_close_button", GTK_TYPE_BUTTON);
+		g_object_ref_sink (ban_view.window);
+		g_object_unref (builder);
 
-		root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-		gtk_widget_set_margin_start (root, 12);
-		gtk_widget_set_margin_end (root, 12);
-		gtk_widget_set_margin_top (root, 12);
-		gtk_widget_set_margin_bottom (root, 12);
-		gtk_window_set_child (GTK_WINDOW (ban_view.window), root);
-
-		ban_view.status = gtk_label_new ("");
-		gtk_label_set_xalign (GTK_LABEL (ban_view.status), 0.0f);
-		gtk_box_append (GTK_BOX (root), ban_view.status);
-
-		scroll = gtk_scrolled_window_new ();
-		gtk_widget_set_hexpand (scroll, TRUE);
-		gtk_widget_set_vexpand (scroll, TRUE);
-		gtk_box_append (GTK_BOX (root), scroll);
-
-		ban_view.list = gtk_list_box_new ();
-		gtk_list_box_set_selection_mode (GTK_LIST_BOX (ban_view.list), GTK_SELECTION_SINGLE);
-		gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), ban_view.list);
+		gtk_button_set_label (GTK_BUTTON (refresh_button), _("Refresh"));
+		gtk_button_set_label (GTK_BUTTON (ban_view.remove_button), _("Remove"));
+		gtk_button_set_label (GTK_BUTTON (ban_view.clear_button), _("Clear"));
+		gtk_button_set_label (GTK_BUTTON (close_button), _("Close"));
 		g_signal_connect (ban_view.list, "selected-rows-changed",
 			G_CALLBACK (ban_selection_changed_cb), NULL);
-
-		buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-		gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-		gtk_box_append (GTK_BOX (root), buttons);
-
-		refresh_button = gtk_button_new_with_label (_("Refresh"));
 		g_signal_connect (refresh_button, "clicked",
 			G_CALLBACK (ban_refresh_clicked_cb), NULL);
-		gtk_box_append (GTK_BOX (buttons), refresh_button);
-
-		ban_view.remove_button = gtk_button_new_with_label (_("Remove"));
 		g_signal_connect (ban_view.remove_button, "clicked",
 			G_CALLBACK (ban_remove_selected_cb), NULL);
-		gtk_box_append (GTK_BOX (buttons), ban_view.remove_button);
-
-		ban_view.clear_button = gtk_button_new_with_label (_("Clear"));
 		g_signal_connect (ban_view.clear_button, "clicked",
 			G_CALLBACK (ban_clear_all_cb), NULL);
-		gtk_box_append (GTK_BOX (buttons), ban_view.clear_button);
-
-		close_button = gtk_button_new_with_label (_("Close"));
 		g_signal_connect_swapped (close_button, "clicked",
 			G_CALLBACK (gtk_window_close), ban_view.window);
-		gtk_box_append (GTK_BOX (buttons), close_button);
-
 		g_signal_connect (ban_view.window, "close-request",
 			G_CALLBACK (ban_close_request_cb), NULL);
 	}

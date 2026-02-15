@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#define EDITLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/editlist-window.ui"
+
 typedef struct
 {
 	GtkWidget *window;
@@ -337,12 +339,9 @@ void
 editlist_gui_open (char *title1, char *title2, GSList *list, char *title, char *wmclass,
 	char *file, char *help)
 {
-	GtkWidget *root;
 	GtkWidget *header;
-	GtkWidget *scroll;
-	GtkWidget *buttons;
-	GtkWidget *button;
 	GtkWidget *help_label;
+	GtkBuilder *builder;
 	char *header_text;
 
 	(void) wmclass;
@@ -353,80 +352,68 @@ editlist_gui_open (char *title1, char *title2, GSList *list, char *title, char *
 		return;
 	}
 
-	editlist_gui.window = gtk_window_new ();
 	editlist_gui.source_list = list;
 	editlist_gui.file = g_strdup (file ? file : "");
 	editlist_gui.title1 = g_strdup (title1 ? title1 : _("Name"));
 	editlist_gui.title2 = g_strdup (title2 ? title2 : _("Command"));
+
+	builder = fe_gtk4_builder_new_from_resource (EDITLIST_UI_PATH);
+	{
+		GtkWidget *add_button;
+		GtkWidget *delete_button;
+		GtkWidget *up_button;
+		GtkWidget *down_button;
+		GtkWidget *cancel_button;
+		GtkWidget *save_button;
+
+		editlist_gui.window = fe_gtk4_builder_get_widget (builder, "editlist_window", GTK_TYPE_WINDOW);
+		header = fe_gtk4_builder_get_widget (builder, "editlist_header", GTK_TYPE_LABEL);
+		editlist_gui.list = fe_gtk4_builder_get_widget (builder, "editlist_list", GTK_TYPE_LIST_BOX);
+		help_label = fe_gtk4_builder_get_widget (builder, "editlist_help_label", GTK_TYPE_LABEL);
+		add_button = fe_gtk4_builder_get_widget (builder, "editlist_add_button", GTK_TYPE_BUTTON);
+		delete_button = fe_gtk4_builder_get_widget (builder, "editlist_delete_button", GTK_TYPE_BUTTON);
+		up_button = fe_gtk4_builder_get_widget (builder, "editlist_up_button", GTK_TYPE_BUTTON);
+		down_button = fe_gtk4_builder_get_widget (builder, "editlist_down_button", GTK_TYPE_BUTTON);
+		cancel_button = fe_gtk4_builder_get_widget (builder, "editlist_cancel_button", GTK_TYPE_BUTTON);
+		save_button = fe_gtk4_builder_get_widget (builder, "editlist_save_button", GTK_TYPE_BUTTON);
+		g_object_ref_sink (editlist_gui.window);
+		g_object_unref (builder);
+
+		gtk_button_set_label (GTK_BUTTON (add_button), _("Add"));
+		gtk_button_set_label (GTK_BUTTON (delete_button), _("Delete"));
+		gtk_button_set_label (GTK_BUTTON (up_button), _("Up"));
+		gtk_button_set_label (GTK_BUTTON (down_button), _("Down"));
+		gtk_button_set_label (GTK_BUTTON (cancel_button), _("Cancel"));
+		gtk_button_set_label (GTK_BUTTON (save_button), _("Save"));
+		g_signal_connect (add_button, "clicked", G_CALLBACK (editlist_add_cb), NULL);
+		g_signal_connect (delete_button, "clicked", G_CALLBACK (editlist_delete_cb), NULL);
+		g_signal_connect (up_button, "clicked", G_CALLBACK (editlist_up_cb), NULL);
+		g_signal_connect (down_button, "clicked", G_CALLBACK (editlist_down_cb), NULL);
+		g_signal_connect (cancel_button, "clicked", G_CALLBACK (editlist_cancel_cb), NULL);
+		g_signal_connect (save_button, "clicked", G_CALLBACK (editlist_save_cb), NULL);
+
+		header_text = g_strdup_printf ("%s / %s", editlist_gui.title1, editlist_gui.title2);
+		gtk_label_set_text (GTK_LABEL (header), header_text);
+		g_free (header_text);
+		if (help && help[0])
+		{
+			gtk_label_set_text (GTK_LABEL (help_label), help);
+			gtk_widget_set_visible (help_label, TRUE);
+		}
+		else
+		{
+			gtk_label_set_text (GTK_LABEL (help_label), "");
+			gtk_widget_set_visible (help_label, FALSE);
+		}
+	}
 
 	gtk_window_set_title (GTK_WINDOW (editlist_gui.window), title ? title : _("Edit List"));
 	gtk_window_set_default_size (GTK_WINDOW (editlist_gui.window), 760, 420);
 	if (main_window)
 		gtk_window_set_transient_for (GTK_WINDOW (editlist_gui.window), GTK_WINDOW (main_window));
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-	gtk_widget_set_margin_start (root, 12);
-	gtk_widget_set_margin_end (root, 12);
-	gtk_widget_set_margin_top (root, 12);
-	gtk_widget_set_margin_bottom (root, 12);
-	gtk_window_set_child (GTK_WINDOW (editlist_gui.window), root);
-
-	header_text = g_strdup_printf ("%s / %s", editlist_gui.title1, editlist_gui.title2);
-	header = gtk_label_new (header_text);
-	g_free (header_text);
-	gtk_label_set_xalign (GTK_LABEL (header), 0.0f);
-	gtk_widget_add_css_class (header, "dim-label");
-	gtk_box_append (GTK_BOX (root), header);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_box_append (GTK_BOX (root), scroll);
-
-	editlist_gui.list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (editlist_gui.list), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), editlist_gui.list);
-
-	editlist_populate_from_list (list);
-
-	if (help && help[0])
-	{
-		help_label = gtk_label_new (help);
-		gtk_label_set_wrap (GTK_LABEL (help_label), TRUE);
-		gtk_label_set_xalign (GTK_LABEL (help_label), 0.0f);
-		gtk_widget_add_css_class (help_label, "dim-label");
-		gtk_box_append (GTK_BOX (root), help_label);
-	}
-
-	buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (buttons, GTK_ALIGN_END);
-	gtk_box_append (GTK_BOX (root), buttons);
-
-	button = gtk_button_new_with_label (_("Add"));
-	g_signal_connect (button, "clicked", G_CALLBACK (editlist_add_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Delete"));
-	g_signal_connect (button, "clicked", G_CALLBACK (editlist_delete_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Up"));
-	g_signal_connect (button, "clicked", G_CALLBACK (editlist_up_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Down"));
-	g_signal_connect (button, "clicked", G_CALLBACK (editlist_down_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Cancel"));
-	g_signal_connect (button, "clicked", G_CALLBACK (editlist_cancel_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
-	button = gtk_button_new_with_label (_("Save"));
-	g_signal_connect (button, "clicked", G_CALLBACK (editlist_save_cb), NULL);
-	gtk_box_append (GTK_BOX (buttons), button);
-
 	g_signal_connect (editlist_gui.window, "close-request",
 		G_CALLBACK (editlist_close_request_cb), NULL);
+	editlist_populate_from_list (list);
 	gtk_window_present (GTK_WINDOW (editlist_gui.window));
 }
