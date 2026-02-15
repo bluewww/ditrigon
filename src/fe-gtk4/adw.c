@@ -35,7 +35,6 @@ fe_gtk4_adw_new_item_button (void)
 	menu = g_menu_new ();
 	g_menu_append (menu, _("Connect to a Network..."), "win.network-list");
 	g_menu_append (menu, _("Join a Channel..."), "win.server-join");
-	g_menu_append (menu, _("New Server Tab"), "win.new-server");
 	adw_split_button_set_menu_model (ADW_SPLIT_BUTTON (button), G_MENU_MODEL (menu));
 	g_object_unref (menu);
 
