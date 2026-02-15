@@ -96,6 +96,7 @@ gboolean fe_gtk4_topicbar_get_visible (void);
 void fe_gtk4_maingui_set_fullscreen (gboolean fullscreen);
 gboolean fe_gtk4_maingui_get_fullscreen (void);
 void fe_gtk4_maingui_apply_input_font (void);
+void fe_gtk4_maingui_animate_userlist_split (gboolean visible);
 
 void setup_open (void);
 void fe_gtk4_setup_open (void);

@@ -23,12 +23,94 @@ static GtkWidget *input_nick_box;
 static GtkWidget *input_nick_button;
 static GtkWidget *input_send_button;
 static gboolean pane_positions_ready;
+static GtkCssProvider *maingui_css_provider;
+static guint userlist_split_anim_source;
+static gint64 userlist_split_anim_start_us;
+static int userlist_split_anim_from;
+static int userlist_split_anim_to;
+static gboolean userlist_split_animating;
 
 #define GUI_PANE_LEFT_DEFAULT 128
 #define GUI_PANE_RIGHT_DEFAULT 100
 #define GUI_PANE_CENTER_MIN GUI_PANE_LEFT_DEFAULT
 
 static int done_intro;
+
+static void
+maingui_install_css (void)
+{
+	GdkDisplay *display;
+	const char *css;
+
+	if (maingui_css_provider)
+		return;
+
+	display = gdk_display_get_default ();
+	if (!display)
+		return;
+
+	css =
+		"paned.hc-soft-paned > separator {\n"
+		"  background-color: alpha(currentColor, 0.12);\n"
+		"}\n";
+
+	maingui_css_provider = gtk_css_provider_new ();
+	gtk_css_provider_load_from_string (maingui_css_provider, css);
+	gtk_style_context_add_provider_for_display (display,
+		GTK_STYLE_PROVIDER (maingui_css_provider),
+		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+static void
+userlist_split_animation_stop (void)
+{
+	if (userlist_split_anim_source)
+	{
+		g_source_remove (userlist_split_anim_source);
+		userlist_split_anim_source = 0;
+	}
+	userlist_split_animating = FALSE;
+}
+
+static gboolean
+userlist_split_animation_cb (gpointer userdata)
+{
+	double t;
+	double eased;
+	double inv;
+	int pos;
+	gint64 now_us;
+	const double duration_us = 250000.0;
+
+	(void) userdata;
+
+	if (!main_right_paned)
+	{
+		userlist_split_animation_stop ();
+		return G_SOURCE_REMOVE;
+	}
+
+	now_us = g_get_monotonic_time ();
+	t = (now_us - userlist_split_anim_start_us) / duration_us;
+	if (t >= 1.0)
+		t = 1.0;
+	if (t < 0.0)
+		t = 0.0;
+	inv = 1.0 - t;
+	eased = 1.0 - (inv * inv * inv);
+	pos = userlist_split_anim_from +
+		(int) ((userlist_split_anim_to - userlist_split_anim_from) * eased);
+
+	gtk_paned_set_position (GTK_PANED (main_right_paned), pos);
+
+	if (t >= 1.0)
+	{
+		userlist_split_animation_stop ();
+		return G_SOURCE_REMOVE;
+	}
+
+	return G_SOURCE_CONTINUE;
+}
 
 static void
 entry_update_nick (session *sess)
@@ -253,7 +335,7 @@ right_pane_pos_cb (GtkPaned *pane, GParamSpec *pspec, gpointer user_data)
 	(void) pspec;
 	(void) user_data;
 
-	if (!pane_positions_ready)
+	if (!pane_positions_ready || prefs.hex_gui_ulist_hide || userlist_split_animating)
 		return;
 
 	width = gtk_widget_get_width (GTK_WIDGET (pane));
@@ -265,6 +347,44 @@ right_pane_pos_cb (GtkPaned *pane, GParamSpec *pspec, gpointer user_data)
 	if (right_size < prefs.hex_gui_pane_right_size_min)
 		right_size = prefs.hex_gui_pane_right_size_min;
 	prefs.hex_gui_pane_right_size = right_size;
+}
+
+void
+fe_gtk4_maingui_animate_userlist_split (gboolean visible)
+{
+	int width;
+	int pos;
+	int right_size;
+	int target_pos;
+
+	if (!main_right_paned)
+		return;
+
+	width = gtk_widget_get_width (main_right_paned);
+	if (width <= 0)
+		return;
+
+	pos = gtk_paned_get_position (GTK_PANED (main_right_paned));
+	if (pos < 0)
+		pos = width;
+
+	right_size = MAX (prefs.hex_gui_pane_right_size, prefs.hex_gui_pane_right_size_min);
+	if (right_size <= 0)
+		right_size = GUI_PANE_RIGHT_DEFAULT;
+	if (right_size >= width)
+		right_size = MAX (prefs.hex_gui_pane_right_size_min, GUI_PANE_RIGHT_DEFAULT);
+
+	if (visible)
+		target_pos = CLAMP (width - right_size, 0, MAX (0, width - 1));
+	else
+		target_pos = width;
+
+	userlist_split_animation_stop ();
+	userlist_split_anim_from = pos;
+	userlist_split_anim_to = target_pos;
+	userlist_split_anim_start_us = g_get_monotonic_time ();
+	userlist_split_animating = TRUE;
+	userlist_split_anim_source = g_timeout_add (16, userlist_split_animation_cb, NULL);
 }
 
 static gboolean
@@ -344,6 +464,11 @@ fe_gtk4_maingui_cleanup (void)
 	input_nick_button = NULL;
 	input_send_button = NULL;
 	pane_positions_ready = FALSE;
+	g_clear_object (&maingui_css_provider);
+	userlist_split_animation_stop ();
+	userlist_split_anim_start_us = 0;
+	userlist_split_anim_from = 0;
+	userlist_split_anim_to = 0;
 }
 
 session *
@@ -462,11 +587,13 @@ fe_gtk4_create_main_window (void)
 	main_window = fe_gtk4_adw_window_new ();
 	gtk_window_set_title (GTK_WINDOW (main_window), PACKAGE_NAME);
 	gtk_window_set_default_size (GTK_WINDOW (main_window), 960, 700);
+	maingui_install_css ();
 
 	main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 	fe_gtk4_adw_window_set_content (main_window, main_box);
 
 	content_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
+	gtk_widget_add_css_class (content_paned, "hc-soft-paned");
 	gtk_widget_set_hexpand (content_paned, TRUE);
 	gtk_widget_set_vexpand (content_paned, TRUE);
 	gtk_box_append (GTK_BOX (main_box), content_paned);
@@ -484,6 +611,7 @@ fe_gtk4_create_main_window (void)
 	gtk_paned_set_shrink_end_child (GTK_PANED (content_paned), TRUE);
 
 	main_right_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
+	gtk_widget_add_css_class (main_right_paned, "hc-soft-paned");
 	gtk_widget_set_hexpand (main_right_paned, TRUE);
 	gtk_widget_set_vexpand (main_right_paned, TRUE);
 	gtk_box_append (GTK_BOX (main_right_box), main_right_paned);

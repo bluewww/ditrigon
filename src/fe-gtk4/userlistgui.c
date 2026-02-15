@@ -32,6 +32,7 @@ static GtkMultiSelection *userlist_selection;
 static session *userlist_session;
 static gboolean userlist_select_syncing;
 static GtkCssProvider *userlist_css_provider;
+static gboolean userlist_pending_hide;
 
 static const char *
 userlist_role_css_class (char prefix)
@@ -99,6 +100,24 @@ userlist_set_role_icon (GtkWidget *image, char prefix)
 	}
 
 	gtk_widget_add_css_class (image, "dim-label");
+}
+
+static void
+userlist_revealer_child_revealed_cb (GtkRevealer *revealer, GParamSpec *pspec, gpointer user_data)
+{
+	(void) pspec;
+	(void) user_data;
+
+	if (!revealer)
+		return;
+
+	if (userlist_pending_hide &&
+		!gtk_revealer_get_reveal_child (revealer) &&
+		!gtk_revealer_get_child_revealed (revealer))
+	{
+		gtk_widget_set_visible (GTK_WIDGET (revealer), FALSE);
+		userlist_pending_hide = FALSE;
+	}
 }
 
 static char *
@@ -635,6 +654,7 @@ void
 fe_gtk4_userlist_init (void)
 {
 	userlist_select_syncing = FALSE;
+	userlist_pending_hide = FALSE;
 }
 
 void
@@ -650,6 +670,7 @@ fe_gtk4_userlist_cleanup (void)
 	userlist_view = NULL;
 	userlist_session = NULL;
 	userlist_select_syncing = FALSE;
+	userlist_pending_hide = FALSE;
 }
 
 GtkWidget *
@@ -670,7 +691,10 @@ fe_gtk4_userlist_create_widget (void)
 		gtk_widget_set_hexpand (userlist_revealer, FALSE);
 		gtk_widget_set_vexpand (userlist_revealer, TRUE);
 		gtk_revealer_set_transition_type (GTK_REVEALER (userlist_revealer), GTK_REVEALER_TRANSITION_TYPE_SLIDE_LEFT);
-		gtk_revealer_set_transition_duration (GTK_REVEALER (userlist_revealer), 180);
+		gtk_revealer_set_transition_duration (GTK_REVEALER (userlist_revealer), 250);
+		gtk_widget_set_visible (userlist_revealer, TRUE);
+		g_signal_connect (userlist_revealer, "notify::child-revealed",
+			G_CALLBACK (userlist_revealer_child_revealed_cb), NULL);
 	}
 
 	if (!userlist_panel)
@@ -742,15 +766,17 @@ fe_gtk4_userlist_set_visible (gboolean visible)
 	{
 		if (visible)
 		{
+			userlist_pending_hide = FALSE;
 			gtk_widget_set_visible (userlist_revealer, TRUE);
 			gtk_revealer_set_reveal_child (GTK_REVEALER (userlist_revealer), TRUE);
 		}
 		else
 		{
+			userlist_pending_hide = TRUE;
 			gtk_revealer_set_reveal_child (GTK_REVEALER (userlist_revealer), FALSE);
-			gtk_widget_set_visible (userlist_revealer, FALSE);
 		}
 	}
+	fe_gtk4_maingui_animate_userlist_split (visible ? TRUE : FALSE);
 	fe_gtk4_adw_sync_userlist_button (visible ? TRUE : FALSE);
 }
 
@@ -758,8 +784,7 @@ gboolean
 fe_gtk4_userlist_get_visible (void)
 {
 	if (userlist_revealer)
-		return gtk_widget_get_visible (userlist_revealer) &&
-			gtk_revealer_get_reveal_child (GTK_REVEALER (userlist_revealer));
+		return gtk_revealer_get_reveal_child (GTK_REVEALER (userlist_revealer));
 
 	return prefs.hex_gui_ulist_hide ? FALSE : TRUE;
 }

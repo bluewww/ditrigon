@@ -45,6 +45,29 @@ adw_new_item_button_new (void)
 
 	return button;
 }
+
+static void
+adw_button_set_icon_with_fallback (GtkWidget *button, const char *icon_name, const char *fallback_icon_name)
+{
+	GdkDisplay *display;
+	GtkIconTheme *icon_theme;
+
+	if (!button)
+		return;
+
+	display = gdk_display_get_default ();
+	if (!display)
+	{
+		gtk_button_set_icon_name (GTK_BUTTON (button), fallback_icon_name);
+		return;
+	}
+
+	icon_theme = gtk_icon_theme_get_for_display (display);
+	if (icon_theme && icon_name && gtk_icon_theme_has_icon (icon_theme, icon_name))
+		gtk_button_set_icon_name (GTK_BUTTON (button), icon_name);
+	else
+		gtk_button_set_icon_name (GTK_BUTTON (button), fallback_icon_name);
+}
 #endif
 
 gboolean
@@ -204,12 +227,14 @@ fe_gtk4_adw_sync_userlist_button (gboolean visible)
 
 	if (visible)
 	{
-		gtk_button_set_icon_name (GTK_BUTTON (adw_userlist_button), "sidebar-hide-right-symbolic");
+		adw_button_set_icon_with_fallback (adw_userlist_button,
+			"sidebar-hide-right-symbolic", "view-right-pane-symbolic");
 		gtk_widget_set_tooltip_text (adw_userlist_button, _("Hide User List"));
 	}
 	else
 	{
-		gtk_button_set_icon_name (GTK_BUTTON (adw_userlist_button), "sidebar-show-right-symbolic");
+		adw_button_set_icon_with_fallback (adw_userlist_button,
+			"sidebar-show-right-symbolic", "view-right-pane-symbolic");
 		gtk_widget_set_tooltip_text (adw_userlist_button, _("Show User List"));
 	}
 #else
