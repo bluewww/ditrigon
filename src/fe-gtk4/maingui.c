@@ -2,6 +2,9 @@
 #include "fe-gtk4.h"
 #include "sexy-spell-entry.h"
 #include "../common/url.h"
+#ifdef USE_LIBADWAITA
+#include <adwaita.h>
+#endif
 
 GtkWidget *main_window;
 GtkWidget *main_box;
@@ -29,10 +32,23 @@ static gint64 userlist_split_anim_start_us;
 static int userlist_split_anim_from;
 static int userlist_split_anim_to;
 static gboolean userlist_split_animating;
+static guint left_sidebar_anim_source;
+static gint64 left_sidebar_anim_start_us;
+static int left_sidebar_anim_from;
+static int left_sidebar_anim_to;
+static gboolean left_sidebar_animating;
+static gboolean left_sidebar_pending_hide;
+static gboolean left_sidebar_visible = TRUE;
+#ifdef USE_LIBADWAITA
+static GtkWidget *main_nav_split;
+static AdwNavigationPage *main_nav_sidebar_page;
+static AdwNavigationPage *main_nav_content_page;
+#endif
 
 #define GUI_PANE_LEFT_DEFAULT 128
 #define GUI_PANE_RIGHT_DEFAULT 100
 #define GUI_PANE_CENTER_MIN GUI_PANE_LEFT_DEFAULT
+#define NAV_SPLIT_COLLAPSE_CONDITION "max-width: 560sp"
 
 static int done_intro;
 
@@ -106,6 +122,175 @@ userlist_split_animation_cb (gpointer userdata)
 	if (t >= 1.0)
 	{
 		userlist_split_animation_stop ();
+		return G_SOURCE_REMOVE;
+	}
+
+	return G_SOURCE_CONTINUE;
+}
+
+static gboolean
+maingui_uses_navigation_split (void)
+{
+#ifdef USE_LIBADWAITA
+	return content_paned && ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned);
+#else
+	return FALSE;
+#endif
+}
+
+static gboolean
+maingui_uses_legacy_paned (void)
+{
+	return content_paned && GTK_IS_PANED (content_paned);
+}
+
+#ifdef USE_LIBADWAITA
+static void
+nav_split_state_notify_cb (GObject *object, GParamSpec *pspec, gpointer user_data)
+{
+	gboolean visible;
+	int width;
+	double fraction;
+
+	(void) object;
+	(void) pspec;
+	(void) user_data;
+
+	if (!main_nav_split || !ADW_IS_NAVIGATION_SPLIT_VIEW (main_nav_split))
+		return;
+
+	if (adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split)))
+		visible = !adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
+	else
+		visible = TRUE;
+
+	if (pane_positions_ready && !adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split)))
+	{
+		width = gtk_widget_get_width (main_nav_split);
+		fraction = adw_navigation_split_view_get_sidebar_width_fraction (ADW_NAVIGATION_SPLIT_VIEW (main_nav_split));
+		if (width > 0 && fraction > 0.0)
+			prefs.hex_gui_pane_left_size = CLAMP ((int) (width * fraction), 1, MAX (1, width - 1));
+	}
+
+	left_sidebar_visible = visible ? TRUE : FALSE;
+	fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+}
+
+static void
+maingui_install_nav_split_breakpoints (void)
+{
+	AdwBreakpointCondition *condition;
+	AdwBreakpoint *breakpoint;
+	GValue value = G_VALUE_INIT;
+
+	if (!main_window || !main_nav_split)
+		return;
+
+	condition = adw_breakpoint_condition_parse (NAV_SPLIT_COLLAPSE_CONDITION);
+	if (!condition)
+		return;
+
+	breakpoint = adw_breakpoint_new (condition);
+	if (!breakpoint)
+	{
+		adw_breakpoint_condition_free (condition);
+		return;
+	}
+
+	g_value_init (&value, G_TYPE_BOOLEAN);
+	g_value_set_boolean (&value, TRUE);
+	adw_breakpoint_add_setter (breakpoint, G_OBJECT (main_nav_split), "collapsed", &value);
+	g_value_unset (&value);
+
+	if (ADW_IS_WINDOW (main_window))
+		adw_window_add_breakpoint (ADW_WINDOW (main_window), breakpoint);
+	else if (ADW_IS_APPLICATION_WINDOW (main_window))
+		adw_application_window_add_breakpoint (ADW_APPLICATION_WINDOW (main_window), breakpoint);
+}
+#endif
+
+static int
+left_sidebar_target_position (void)
+{
+	int content_width;
+	int right_size;
+	int max_left;
+	int left_size;
+
+	if (!maingui_uses_legacy_paned ())
+		return 0;
+
+	content_width = gtk_widget_get_width (content_paned);
+	if (content_width <= 0)
+		return 0;
+
+	right_size = prefs.hex_gui_ulist_hide ? 0 :
+		MAX (prefs.hex_gui_pane_right_size, prefs.hex_gui_pane_right_size_min);
+	if (!prefs.hex_gui_ulist_hide && right_size <= 0)
+		right_size = GUI_PANE_RIGHT_DEFAULT;
+
+	left_size = prefs.hex_gui_pane_left_size;
+	if (left_size <= 0)
+		left_size = GUI_PANE_LEFT_DEFAULT;
+
+	max_left = content_width - right_size - GUI_PANE_CENTER_MIN;
+	if (max_left < GUI_PANE_LEFT_DEFAULT)
+		max_left = GUI_PANE_LEFT_DEFAULT;
+
+	if (left_size > max_left)
+		left_size = GUI_PANE_LEFT_DEFAULT;
+	left_size = CLAMP (left_size, 1, MAX (1, content_width - 1));
+	return left_size;
+}
+
+static void
+left_sidebar_animation_stop (void)
+{
+	if (left_sidebar_anim_source)
+	{
+		g_source_remove (left_sidebar_anim_source);
+		left_sidebar_anim_source = 0;
+	}
+	left_sidebar_animating = FALSE;
+}
+
+static gboolean
+left_sidebar_animation_cb (gpointer userdata)
+{
+	double t;
+	double eased;
+	double inv;
+	int pos;
+	gint64 now_us;
+	const double duration_us = 250000.0;
+
+	(void) userdata;
+
+	if (!maingui_uses_legacy_paned ())
+	{
+		left_sidebar_animation_stop ();
+		return G_SOURCE_REMOVE;
+	}
+
+	now_us = g_get_monotonic_time ();
+	t = (now_us - left_sidebar_anim_start_us) / duration_us;
+	if (t >= 1.0)
+		t = 1.0;
+	if (t < 0.0)
+		t = 0.0;
+	inv = 1.0 - t;
+	eased = 1.0 - (inv * inv * inv);
+	pos = left_sidebar_anim_from +
+		(int) ((left_sidebar_anim_to - left_sidebar_anim_from) * eased);
+
+	gtk_paned_set_position (GTK_PANED (content_paned), pos);
+
+	if (t >= 1.0)
+	{
+		left_sidebar_animation_stop ();
+		if (left_sidebar_pending_hide && session_scroller)
+			gtk_widget_set_visible (session_scroller, FALSE);
+		left_sidebar_pending_hide = FALSE;
 		return G_SOURCE_REMOVE;
 	}
 
@@ -285,6 +470,112 @@ fe_gtk4_maingui_get_fullscreen (void)
 	return prefs.hex_gui_win_fullscreen ? TRUE : FALSE;
 }
 
+void
+fe_gtk4_maingui_set_sidebar_widget (GtkWidget *sidebar)
+{
+#ifdef USE_LIBADWAITA
+	if (main_nav_sidebar_page && maingui_uses_navigation_split ())
+	{
+		adw_navigation_page_set_child (main_nav_sidebar_page, sidebar);
+		return;
+	}
+#endif
+
+	if (maingui_uses_legacy_paned ())
+		gtk_paned_set_start_child (GTK_PANED (content_paned), sidebar);
+}
+
+void
+fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
+{
+	int width;
+	int from_pos;
+	int to_pos;
+
+	left_sidebar_visible = visible ? TRUE : FALSE;
+
+	if (!content_paned)
+	{
+		fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+		return;
+	}
+
+#ifdef USE_LIBADWAITA
+	if (maingui_uses_navigation_split ())
+	{
+		AdwNavigationSplitView *split;
+
+		split = ADW_NAVIGATION_SPLIT_VIEW (content_paned);
+		if (left_sidebar_visible)
+		{
+			adw_navigation_split_view_set_collapsed (split, FALSE);
+			if (adw_navigation_split_view_get_collapsed (split))
+				adw_navigation_split_view_set_show_content (split, FALSE);
+			else
+				adw_navigation_split_view_set_show_content (split, TRUE);
+		}
+		else
+		{
+			adw_navigation_split_view_set_show_content (split, TRUE);
+			adw_navigation_split_view_set_collapsed (split, TRUE);
+		}
+		fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+		return;
+	}
+#endif
+
+	width = gtk_widget_get_width (content_paned);
+	from_pos = gtk_paned_get_position (GTK_PANED (content_paned));
+	if (from_pos < 0)
+		from_pos = left_sidebar_visible ? left_sidebar_target_position () : 0;
+
+	if (left_sidebar_visible)
+	{
+		left_sidebar_pending_hide = FALSE;
+		if (session_scroller)
+			gtk_widget_set_visible (session_scroller, TRUE);
+		to_pos = left_sidebar_target_position ();
+	}
+	else
+	{
+		left_sidebar_pending_hide = TRUE;
+		to_pos = 0;
+	}
+
+	left_sidebar_animation_stop ();
+	if (width <= 0 || from_pos == to_pos)
+	{
+		gtk_paned_set_position (GTK_PANED (content_paned), to_pos);
+		if (!left_sidebar_visible && session_scroller)
+			gtk_widget_set_visible (session_scroller, FALSE);
+		left_sidebar_pending_hide = FALSE;
+		fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+		return;
+	}
+
+	left_sidebar_anim_from = from_pos;
+	left_sidebar_anim_to = to_pos;
+	left_sidebar_anim_start_us = g_get_monotonic_time ();
+	left_sidebar_animating = TRUE;
+	left_sidebar_anim_source = g_timeout_add (16, left_sidebar_animation_cb, NULL);
+	fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
+}
+
+gboolean
+fe_gtk4_maingui_get_left_sidebar_visible (void)
+{
+#ifdef USE_LIBADWAITA
+	if (maingui_uses_navigation_split ())
+	{
+		if (adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (content_paned)))
+			return adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (content_paned)) ? FALSE : TRUE;
+		return TRUE;
+	}
+#endif
+
+	return left_sidebar_visible;
+}
+
 static void
 nick_change_cb (int cancel, char *text, gpointer userdata)
 {
@@ -320,7 +611,7 @@ left_pane_pos_cb (GtkPaned *pane, GParamSpec *pspec, gpointer user_data)
 	(void) pspec;
 	(void) user_data;
 
-	if (!pane_positions_ready)
+	if (!pane_positions_ready || !left_sidebar_visible || left_sidebar_animating)
 		return;
 	prefs.hex_gui_pane_left_size = gtk_paned_get_position (pane);
 }
@@ -392,6 +683,7 @@ apply_initial_panes_cb (gpointer userdata)
 {
 	int content_width;
 	int left_size;
+	double left_fraction;
 	int right_size;
 	int max_left;
 	int width;
@@ -419,15 +711,39 @@ apply_initial_panes_cb (gpointer userdata)
 	if (left_size <= 0)
 		left_size = GUI_PANE_LEFT_DEFAULT;
 
-	/* Keep enough room for center content; stale GTK4 values can otherwise dominate startup. */
-	max_left = content_width - right_size - GUI_PANE_CENTER_MIN;
-	if (max_left < GUI_PANE_LEFT_DEFAULT)
-		max_left = GUI_PANE_LEFT_DEFAULT;
-	if (left_size > max_left)
-		left_size = GUI_PANE_LEFT_DEFAULT;
-	left_size = CLAMP (left_size, 1, MAX (1, content_width - 1));
-	gtk_paned_set_position (GTK_PANED (content_paned), left_size);
-	prefs.hex_gui_pane_left_size = left_size;
+	if (maingui_uses_legacy_paned ())
+	{
+		/* Keep enough room for center content; stale GTK4 values can otherwise dominate startup. */
+		max_left = content_width - right_size - GUI_PANE_CENTER_MIN;
+		if (max_left < GUI_PANE_LEFT_DEFAULT)
+			max_left = GUI_PANE_LEFT_DEFAULT;
+		if (left_size > max_left)
+			left_size = GUI_PANE_LEFT_DEFAULT;
+		left_size = CLAMP (left_size, 1, MAX (1, content_width - 1));
+		if (left_sidebar_visible)
+		{
+			if (session_scroller)
+				gtk_widget_set_visible (session_scroller, TRUE);
+			gtk_paned_set_position (GTK_PANED (content_paned), left_size);
+			prefs.hex_gui_pane_left_size = left_size;
+		}
+		else
+		{
+			gtk_paned_set_position (GTK_PANED (content_paned), 0);
+			if (session_scroller)
+				gtk_widget_set_visible (session_scroller, FALSE);
+		}
+	}
+#ifdef USE_LIBADWAITA
+	else if (maingui_uses_navigation_split ())
+	{
+		left_fraction = (double) left_size / (double) content_width;
+		left_fraction = CLAMP (left_fraction, 0.16, 0.38);
+		adw_navigation_split_view_set_sidebar_width_fraction (
+			ADW_NAVIGATION_SPLIT_VIEW (content_paned), left_fraction);
+		fe_gtk4_maingui_set_left_sidebar_visible (left_sidebar_visible);
+	}
+#endif
 
 	pos = width - right_size;
 	pos = CLAMP (pos, 0, MAX (0, width - 1));
@@ -459,6 +775,11 @@ fe_gtk4_maingui_cleanup (void)
 	main_center_box = NULL;
 	topic_row = NULL;
 	topic_entry = NULL;
+#ifdef USE_LIBADWAITA
+	main_nav_split = NULL;
+	main_nav_sidebar_page = NULL;
+	main_nav_content_page = NULL;
+#endif
 	entry_row = NULL;
 	input_nick_box = NULL;
 	input_nick_button = NULL;
@@ -469,6 +790,12 @@ fe_gtk4_maingui_cleanup (void)
 	userlist_split_anim_start_us = 0;
 	userlist_split_anim_from = 0;
 	userlist_split_anim_to = 0;
+	left_sidebar_animation_stop ();
+	left_sidebar_anim_start_us = 0;
+	left_sidebar_anim_from = 0;
+	left_sidebar_anim_to = 0;
+	left_sidebar_pending_hide = FALSE;
+	left_sidebar_visible = TRUE;
 }
 
 session *
@@ -579,6 +906,18 @@ fe_gtk4_create_main_window (void)
 {
 	GtkWidget *scroll;
 	GtkWidget *userlist;
+#ifdef USE_LIBADWAITA
+	GtkWidget *sidebar_toolbar = NULL;
+	GtkWidget *sidebar_header = NULL;
+	GtkWidget *content_toolbar = NULL;
+	GtkWidget *content_header = NULL;
+	GtkWidget *content_title = NULL;
+	GtkWidget *sidebar_button = NULL;
+	GtkWidget *userlist_button = NULL;
+	GtkWidget *menu_button = NULL;
+	GtkWidget *prefs_button = NULL;
+	GtkWidget *new_item_button = NULL;
+#endif
 	GSList *iter;
 
 	if (main_window)
@@ -589,26 +928,104 @@ fe_gtk4_create_main_window (void)
 	gtk_window_set_default_size (GTK_WINDOW (main_window), 960, 700);
 	maingui_install_css ();
 
-	main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+	main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, fe_gtk4_adw_use_hamburger_menu () ? 0 : 6);
 	fe_gtk4_adw_window_set_content (main_window, main_box);
 
-	content_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
-	gtk_widget_add_css_class (content_paned, "hc-soft-paned");
-	gtk_widget_set_hexpand (content_paned, TRUE);
-	gtk_widget_set_vexpand (content_paned, TRUE);
-	gtk_box_append (GTK_BOX (main_box), content_paned);
-
 	session_scroller = fe_gtk4_chanview_create_widget ();
-	gtk_paned_set_start_child (GTK_PANED (content_paned), session_scroller);
 
 	main_right_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
 	gtk_widget_set_hexpand (main_right_box, TRUE);
 	gtk_widget_set_vexpand (main_right_box, TRUE);
-	gtk_paned_set_end_child (GTK_PANED (content_paned), main_right_box);
-	gtk_paned_set_resize_start_child (GTK_PANED (content_paned), FALSE);
-	gtk_paned_set_shrink_start_child (GTK_PANED (content_paned), TRUE);
-	gtk_paned_set_resize_end_child (GTK_PANED (content_paned), TRUE);
-	gtk_paned_set_shrink_end_child (GTK_PANED (content_paned), TRUE);
+
+#ifdef USE_LIBADWAITA
+	if (fe_gtk4_adw_use_hamburger_menu ())
+	{
+		sidebar_toolbar = adw_toolbar_view_new ();
+		sidebar_header = adw_header_bar_new ();
+		gtk_widget_add_css_class (sidebar_header, "flat");
+		adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (sidebar_header), TRUE);
+		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (sidebar_header), FALSE);
+		new_item_button = fe_gtk4_adw_new_item_button ();
+		adw_header_bar_pack_start (ADW_HEADER_BAR (sidebar_header), new_item_button);
+		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (sidebar_toolbar), sidebar_header);
+		adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (sidebar_toolbar), session_scroller);
+		adw_toolbar_view_set_top_bar_style (ADW_TOOLBAR_VIEW (sidebar_toolbar), ADW_TOOLBAR_FLAT);
+		adw_toolbar_view_set_extend_content_to_top_edge (ADW_TOOLBAR_VIEW (sidebar_toolbar), FALSE);
+
+		content_toolbar = adw_toolbar_view_new ();
+		content_header = adw_header_bar_new ();
+		gtk_widget_add_css_class (content_header, "flat");
+		adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (content_header), FALSE);
+		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (content_header), TRUE);
+
+		sidebar_button = gtk_button_new_from_icon_name ("sidebar-hide-left-symbolic");
+		gtk_widget_add_css_class (sidebar_button, "flat");
+		gtk_widget_set_tooltip_text (sidebar_button, _("Hide Sidebar"));
+		gtk_actionable_set_action_name (GTK_ACTIONABLE (sidebar_button), "win.toggle-sidebar");
+		adw_header_bar_pack_start (ADW_HEADER_BAR (content_header), sidebar_button);
+
+		content_title = adw_window_title_new (PACKAGE_NAME, NULL);
+		adw_header_bar_set_title_widget (ADW_HEADER_BAR (content_header), content_title);
+
+		prefs_button = gtk_button_new_from_icon_name ("emblem-system-symbolic");
+		gtk_widget_set_tooltip_text (prefs_button, _("Preferences"));
+		gtk_actionable_set_action_name (GTK_ACTIONABLE (prefs_button), "win.preferences");
+		adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), prefs_button);
+
+		userlist_button = gtk_button_new_from_icon_name ("sidebar-hide-right-symbolic");
+		gtk_widget_add_css_class (userlist_button, "flat");
+		gtk_widget_set_tooltip_text (userlist_button, _("Hide User List"));
+		gtk_actionable_set_action_name (GTK_ACTIONABLE (userlist_button), "win.toggle-userlist");
+		adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), userlist_button);
+
+		menu_button = gtk_menu_button_new ();
+		gtk_menu_button_set_icon_name (GTK_MENU_BUTTON (menu_button), "open-menu-symbolic");
+		gtk_widget_set_tooltip_text (menu_button, _("Main Menu"));
+		adw_header_bar_pack_end (ADW_HEADER_BAR (content_header), menu_button);
+
+		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (content_toolbar), content_header);
+		adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (content_toolbar), main_right_box);
+		adw_toolbar_view_set_top_bar_style (ADW_TOOLBAR_VIEW (content_toolbar), ADW_TOOLBAR_FLAT);
+		adw_toolbar_view_set_extend_content_to_top_edge (ADW_TOOLBAR_VIEW (content_toolbar), FALSE);
+
+		content_paned = adw_navigation_split_view_new ();
+		main_nav_split = content_paned;
+		gtk_widget_set_hexpand (content_paned, TRUE);
+		gtk_widget_set_vexpand (content_paned, TRUE);
+		gtk_box_append (GTK_BOX (main_box), content_paned);
+
+		main_nav_sidebar_page = adw_navigation_page_new (sidebar_toolbar, _("Conversations"));
+		main_nav_content_page = adw_navigation_page_new (content_toolbar, _("Chat"));
+		adw_navigation_split_view_set_sidebar (ADW_NAVIGATION_SPLIT_VIEW (content_paned), main_nav_sidebar_page);
+		adw_navigation_split_view_set_content (ADW_NAVIGATION_SPLIT_VIEW (content_paned), main_nav_content_page);
+		adw_navigation_split_view_set_sidebar_width_unit (ADW_NAVIGATION_SPLIT_VIEW (content_paned), ADW_LENGTH_UNIT_SP);
+		adw_navigation_split_view_set_min_sidebar_width (ADW_NAVIGATION_SPLIT_VIEW (content_paned), 180.0);
+		adw_navigation_split_view_set_max_sidebar_width (ADW_NAVIGATION_SPLIT_VIEW (content_paned), 360.0);
+		adw_navigation_split_view_set_sidebar_width_fraction (ADW_NAVIGATION_SPLIT_VIEW (content_paned), 0.24);
+		fe_gtk4_adw_bind_header_controls (content_title, sidebar_button, userlist_button, menu_button);
+		g_signal_connect (content_paned, "notify::collapsed",
+			G_CALLBACK (nav_split_state_notify_cb), NULL);
+		g_signal_connect (content_paned, "notify::show-content",
+			G_CALLBACK (nav_split_state_notify_cb), NULL);
+		g_signal_connect (content_paned, "notify::sidebar-width-fraction",
+			G_CALLBACK (nav_split_state_notify_cb), NULL);
+		maingui_install_nav_split_breakpoints ();
+	}
+	else
+#endif
+	{
+		content_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
+		gtk_widget_add_css_class (content_paned, "hc-soft-paned");
+		gtk_widget_set_hexpand (content_paned, TRUE);
+		gtk_widget_set_vexpand (content_paned, TRUE);
+		gtk_box_append (GTK_BOX (main_box), content_paned);
+		gtk_paned_set_start_child (GTK_PANED (content_paned), session_scroller);
+		gtk_paned_set_end_child (GTK_PANED (content_paned), main_right_box);
+		gtk_paned_set_resize_start_child (GTK_PANED (content_paned), FALSE);
+		gtk_paned_set_shrink_start_child (GTK_PANED (content_paned), TRUE);
+		gtk_paned_set_resize_end_child (GTK_PANED (content_paned), TRUE);
+		gtk_paned_set_shrink_end_child (GTK_PANED (content_paned), TRUE);
+	}
 
 	main_right_paned = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
 	gtk_widget_add_css_class (main_right_paned, "hc-soft-paned");
@@ -703,7 +1120,8 @@ fe_gtk4_create_main_window (void)
 	}
 	topic_update_for_session (current_tab);
 
-	g_signal_connect (content_paned, "notify::position", G_CALLBACK (left_pane_pos_cb), NULL);
+	if (maingui_uses_legacy_paned ())
+		g_signal_connect (content_paned, "notify::position", G_CALLBACK (left_pane_pos_cb), NULL);
 	g_signal_connect (main_right_paned, "notify::position", G_CALLBACK (right_pane_pos_cb), NULL);
 	g_idle_add (apply_initial_panes_cb, NULL);
 
@@ -711,6 +1129,7 @@ fe_gtk4_create_main_window (void)
 		gtk_window_fullscreen (GTK_WINDOW (main_window));
 
 	fe_gtk4_menu_sync_actions ();
+	fe_gtk4_adw_sync_sidebar_button (left_sidebar_visible);
 	gtk_window_present (GTK_WINDOW (main_window));
 }
 

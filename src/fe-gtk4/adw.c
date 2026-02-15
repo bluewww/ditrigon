@@ -7,8 +7,8 @@
 
 #ifdef USE_LIBADWAITA
 static GtkWidget *adw_toolbar_view;
-static GtkWidget *adw_header_bar;
 static GtkWidget *adw_menu_button;
+static GtkWidget *adw_sidebar_button;
 static GtkWidget *adw_userlist_button;
 static GtkWidget *adw_title_widget;
 
@@ -24,8 +24,8 @@ adw_new_item_clicked_cb (AdwSplitButton *button, gpointer userdata)
 	fe_serverlist_open (sess);
 }
 
-static GtkWidget *
-adw_new_item_button_new (void)
+GtkWidget *
+fe_gtk4_adw_new_item_button (void)
 {
 	GtkWidget *button;
 	GMenu *menu;
@@ -133,89 +133,76 @@ fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content)
 {
 #ifdef USE_LIBADWAITA
 	adw_title_widget = NULL;
+	adw_sidebar_button = NULL;
 	adw_userlist_button = NULL;
+	adw_menu_button = NULL;
 	if (ADW_IS_WINDOW (window))
 	{
-		GtkWidget *title;
-		GtkWidget *button;
-
 		adw_toolbar_view = adw_toolbar_view_new ();
-		adw_header_bar = adw_header_bar_new ();
-		adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
-		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
-		title = adw_window_title_new (PACKAGE_NAME, NULL);
-		adw_title_widget = title;
-		adw_header_bar_set_title_widget (ADW_HEADER_BAR (adw_header_bar), title);
-
-		button = adw_new_item_button_new ();
-		adw_header_bar_pack_start (ADW_HEADER_BAR (adw_header_bar), button);
-
-		button = gtk_button_new_from_icon_name ("emblem-system-symbolic");
-		gtk_widget_set_tooltip_text (button, _("Preferences"));
-		gtk_actionable_set_action_name (GTK_ACTIONABLE (button), "win.preferences");
-		adw_header_bar_pack_end (ADW_HEADER_BAR (adw_header_bar), button);
-
-		adw_userlist_button = gtk_button_new_from_icon_name ("sidebar-hide-right-symbolic");
-		gtk_widget_add_css_class (adw_userlist_button, "flat");
-		gtk_widget_set_tooltip_text (adw_userlist_button, _("Hide User List"));
-		gtk_actionable_set_action_name (GTK_ACTIONABLE (adw_userlist_button), "win.toggle-userlist");
-		adw_header_bar_pack_end (ADW_HEADER_BAR (adw_header_bar), adw_userlist_button);
-
-		adw_menu_button = gtk_menu_button_new ();
-		gtk_menu_button_set_icon_name (GTK_MENU_BUTTON (adw_menu_button), "open-menu-symbolic");
-		gtk_widget_set_tooltip_text (adw_menu_button, _("Main Menu"));
-		adw_header_bar_pack_end (ADW_HEADER_BAR (adw_header_bar), adw_menu_button);
-
-		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (adw_toolbar_view), adw_header_bar);
 		adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (adw_toolbar_view), content);
+		adw_toolbar_view_set_extend_content_to_top_edge (ADW_TOOLBAR_VIEW (adw_toolbar_view), FALSE);
 		adw_toolbar_view_set_top_bar_style (ADW_TOOLBAR_VIEW (adw_toolbar_view), ADW_TOOLBAR_FLAT);
 		adw_window_set_content (ADW_WINDOW (window), adw_toolbar_view);
-		fe_gtk4_adw_sync_userlist_button (prefs.hex_gui_ulist_hide ? FALSE : TRUE);
 		return;
 	}
 
 	if (ADW_IS_APPLICATION_WINDOW (window))
 	{
-		GtkWidget *title;
-		GtkWidget *button;
-
 		adw_toolbar_view = adw_toolbar_view_new ();
-		adw_header_bar = adw_header_bar_new ();
-		adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
-		adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (adw_header_bar), TRUE);
-		title = adw_window_title_new (PACKAGE_NAME, NULL);
-		adw_title_widget = title;
-		adw_header_bar_set_title_widget (ADW_HEADER_BAR (adw_header_bar), title);
-
-		button = adw_new_item_button_new ();
-		adw_header_bar_pack_start (ADW_HEADER_BAR (adw_header_bar), button);
-
-		button = gtk_button_new_from_icon_name ("emblem-system-symbolic");
-		gtk_widget_set_tooltip_text (button, _("Preferences"));
-		gtk_actionable_set_action_name (GTK_ACTIONABLE (button), "win.preferences");
-		adw_header_bar_pack_end (ADW_HEADER_BAR (adw_header_bar), button);
-
-		adw_userlist_button = gtk_button_new_from_icon_name ("sidebar-hide-right-symbolic");
-		gtk_widget_add_css_class (adw_userlist_button, "flat");
-		gtk_widget_set_tooltip_text (adw_userlist_button, _("Hide User List"));
-		gtk_actionable_set_action_name (GTK_ACTIONABLE (adw_userlist_button), "win.toggle-userlist");
-		adw_header_bar_pack_end (ADW_HEADER_BAR (adw_header_bar), adw_userlist_button);
-
-		adw_menu_button = gtk_menu_button_new ();
-		gtk_menu_button_set_icon_name (GTK_MENU_BUTTON (adw_menu_button), "open-menu-symbolic");
-		gtk_widget_set_tooltip_text (adw_menu_button, _("Main Menu"));
-		adw_header_bar_pack_end (ADW_HEADER_BAR (adw_header_bar), adw_menu_button);
-
-		adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (adw_toolbar_view), adw_header_bar);
 		adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (adw_toolbar_view), content);
+		adw_toolbar_view_set_extend_content_to_top_edge (ADW_TOOLBAR_VIEW (adw_toolbar_view), FALSE);
 		adw_toolbar_view_set_top_bar_style (ADW_TOOLBAR_VIEW (adw_toolbar_view), ADW_TOOLBAR_FLAT);
 		adw_application_window_set_content (ADW_APPLICATION_WINDOW (window), adw_toolbar_view);
-		fe_gtk4_adw_sync_userlist_button (prefs.hex_gui_ulist_hide ? FALSE : TRUE);
 		return;
 	}
 #endif
 
 	gtk_window_set_child (GTK_WINDOW (window), content);
+}
+
+void
+fe_gtk4_adw_bind_header_controls (GtkWidget *title_widget,
+	GtkWidget *sidebar_button,
+	GtkWidget *userlist_button,
+	GtkWidget *menu_button)
+{
+#ifdef USE_LIBADWAITA
+	adw_title_widget = title_widget;
+	adw_sidebar_button = sidebar_button;
+	adw_userlist_button = userlist_button;
+	adw_menu_button = menu_button;
+	fe_gtk4_adw_sync_sidebar_button (fe_gtk4_maingui_get_left_sidebar_visible ());
+	fe_gtk4_adw_sync_userlist_button (prefs.hex_gui_ulist_hide ? FALSE : TRUE);
+#else
+	(void) title_widget;
+	(void) sidebar_button;
+	(void) userlist_button;
+	(void) menu_button;
+#endif
+}
+
+void
+fe_gtk4_adw_sync_sidebar_button (gboolean visible)
+{
+#ifdef USE_LIBADWAITA
+	if (!adw_sidebar_button)
+		return;
+
+	if (visible)
+	{
+		adw_button_set_icon_with_fallback (adw_sidebar_button,
+			"sidebar-hide-left-symbolic", "view-left-pane-symbolic");
+		gtk_widget_set_tooltip_text (adw_sidebar_button, _("Hide Sidebar"));
+	}
+	else
+	{
+		adw_button_set_icon_with_fallback (adw_sidebar_button,
+			"sidebar-show-left-symbolic", "view-left-pane-symbolic");
+		gtk_widget_set_tooltip_text (adw_sidebar_button, _("Show Sidebar"));
+	}
+#else
+	(void) visible;
+#endif
 }
 
 void

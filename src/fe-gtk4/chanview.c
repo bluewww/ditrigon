@@ -1,5 +1,8 @@
 /* HexChat GTK4 channel view dispatcher */
 #include "fe-gtk4.h"
+#ifdef USE_LIBADWAITA
+#include <adwaita.h>
+#endif
 
 typedef enum
 {
@@ -169,7 +172,6 @@ fe_gtk4_chanview_set_layout (int layout)
 	}
 
 	old_scroller = session_scroller;
-	gtk_paned_set_start_child (GTK_PANED (content_paned), NULL);
 
 	switch (active_impl)
 	{
@@ -195,9 +197,28 @@ fe_gtk4_chanview_set_layout (int layout)
 	}
 
 	session_scroller = fe_gtk4_chanview_create_widget ();
-	gtk_paned_set_start_child (GTK_PANED (content_paned), session_scroller);
-	gtk_paned_set_position (GTK_PANED (content_paned),
-		prefs.hex_gui_pane_left_size > 0 ? prefs.hex_gui_pane_left_size : 128);
+	fe_gtk4_maingui_set_sidebar_widget (session_scroller);
+	if (GTK_IS_PANED (content_paned))
+	{
+		if (fe_gtk4_maingui_get_left_sidebar_visible ())
+		{
+			gtk_widget_set_visible (session_scroller, TRUE);
+			gtk_paned_set_position (GTK_PANED (content_paned),
+				prefs.hex_gui_pane_left_size > 0 ? prefs.hex_gui_pane_left_size : 128);
+		}
+		else
+		{
+			gtk_widget_set_visible (session_scroller, FALSE);
+			gtk_paned_set_position (GTK_PANED (content_paned), 0);
+		}
+	}
+#ifdef USE_LIBADWAITA
+	else if (ADW_IS_NAVIGATION_SPLIT_VIEW (content_paned))
+	{
+		gtk_widget_set_visible (session_scroller, TRUE);
+		fe_gtk4_maingui_set_left_sidebar_visible (fe_gtk4_maingui_get_left_sidebar_visible ());
+	}
+#endif
 
 	for (iter = sess_list; iter; iter = iter->next)
 	{

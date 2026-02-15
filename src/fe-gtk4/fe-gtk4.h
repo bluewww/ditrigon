@@ -41,11 +41,17 @@ void fe_gtk4_adw_init (void);
 GtkApplication *fe_gtk4_adw_application_new (void);
 GtkWidget *fe_gtk4_adw_window_new (void);
 void fe_gtk4_adw_window_set_content (GtkWidget *window, GtkWidget *content);
+GtkWidget *fe_gtk4_adw_new_item_button (void);
+void fe_gtk4_adw_bind_header_controls (GtkWidget *title_widget,
+	GtkWidget *sidebar_button,
+	GtkWidget *userlist_button,
+	GtkWidget *menu_button);
 void fe_gtk4_adw_set_window_title (const char *title);
 void fe_gtk4_adw_attach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_detach_menu_bar (GtkWidget *menu_widget);
 void fe_gtk4_adw_set_menu_model (GMenuModel *model);
 void fe_gtk4_adw_sync_userlist_button (gboolean visible);
+void fe_gtk4_adw_sync_sidebar_button (gboolean visible);
 gboolean fe_gtk4_adw_use_hamburger_menu (void);
 GtkApplication *fe_gtk4_get_application (void);
 session *fe_gtk4_window_target_session (void);
@@ -97,6 +103,9 @@ void fe_gtk4_maingui_set_fullscreen (gboolean fullscreen);
 gboolean fe_gtk4_maingui_get_fullscreen (void);
 void fe_gtk4_maingui_apply_input_font (void);
 void fe_gtk4_maingui_animate_userlist_split (gboolean visible);
+void fe_gtk4_maingui_set_sidebar_widget (GtkWidget *sidebar);
+void fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible);
+gboolean fe_gtk4_maingui_get_left_sidebar_visible (void);
 
 void setup_open (void);
 void fe_gtk4_setup_open (void);

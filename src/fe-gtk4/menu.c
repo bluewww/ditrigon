@@ -1162,6 +1162,20 @@ win_action_toggle_topicbar (GSimpleAction *action, GVariant *parameter, gpointer
 }
 
 static void
+win_action_toggle_sidebar (GSimpleAction *action, GVariant *parameter, gpointer userdata)
+{
+	gboolean visible;
+
+	(void) action;
+	(void) parameter;
+	(void) userdata;
+
+	visible = !fe_gtk4_maingui_get_left_sidebar_visible ();
+	fe_gtk4_maingui_set_left_sidebar_visible (visible);
+	save_config ();
+}
+
+static void
 win_action_toggle_userlist (GSimpleAction *action, GVariant *parameter, gpointer userdata)
 {
 	gboolean visible;
@@ -1898,6 +1912,7 @@ fe_gtk4_rebuild_menu_bar (void)
 	view_menu = g_menu_new ();
 	if (!fe_gtk4_adw_use_hamburger_menu ())
 		g_menu_append (view_menu, _("Menu Bar"), "win.toggle-menubar");
+	g_menu_append (view_menu, _("Sidebar"), "win.toggle-sidebar");
 	g_menu_append (view_menu, _("Topic Bar"), "win.toggle-topicbar");
 	g_menu_append (view_menu, _("User List"), "win.toggle-userlist");
 	g_menu_append (view_menu, _("User List Buttons"), "win.toggle-userlist-buttons");
@@ -2188,6 +2203,7 @@ fe_gtk4_menu_register_actions (void)
 		{ "load-plugin", win_action_load_plugin, NULL, NULL, NULL },
 		{ "plugin-list", win_action_plugin_list, NULL, NULL, NULL },
 		{ "toggle-menubar", win_action_toggle_menubar, NULL, NULL, NULL },
+		{ "toggle-sidebar", win_action_toggle_sidebar, NULL, NULL, NULL },
 		{ "toggle-topicbar", win_action_toggle_topicbar, NULL, NULL, NULL },
 		{ "toggle-userlist", win_action_toggle_userlist, NULL, NULL, NULL },
 		{ "toggle-userlist-buttons", win_action_toggle_userlist_buttons, NULL, NULL, NULL },
