@@ -415,6 +415,87 @@ nick_menu_extract_icon (const char *name, char **label, char **icon)
 	}
 }
 
+static gboolean
+nick_menu_icon_exists (const char *icon_name)
+{
+	GdkDisplay *display;
+	GtkIconTheme *theme;
+
+	if (!icon_name || !icon_name[0])
+		return FALSE;
+
+	display = gdk_display_get_default ();
+	if (!display)
+		return FALSE;
+
+	theme = gtk_icon_theme_get_for_display (display);
+	if (!theme)
+		return FALSE;
+
+	return gtk_icon_theme_has_icon (theme, icon_name);
+}
+
+static char *
+nick_menu_resolve_icon_name (const char *icon)
+{
+	static const struct
+	{
+		const char *legacy;
+		const char *modern;
+	} icon_map[] =
+	{
+		{ "gtk-go-up", "mail-message-new-symbolic" },
+		{ "gtk-floppy", "document-send-symbolic" },
+		{ "gtk-info", "dialog-information-symbolic" },
+		{ "gtk-add", "list-add-symbolic" },
+		{ "gtk-stop", "process-stop-symbolic" },
+		{ "avatar-default-symbolic", "user-identity-symbolic" }
+	};
+	guint i;
+
+	if (!icon || !icon[0])
+		return NULL;
+
+	if (nick_menu_icon_exists (icon))
+		return g_strdup (icon);
+
+	for (i = 0; i < G_N_ELEMENTS (icon_map); i++)
+	{
+		if (g_strcmp0 (icon, icon_map[i].legacy) != 0)
+			continue;
+		if (nick_menu_icon_exists (icon_map[i].modern))
+			return g_strdup (icon_map[i].modern);
+	}
+
+	if (g_str_has_prefix (icon, "gtk-"))
+	{
+		char *candidate;
+
+		candidate = g_strdup_printf ("%s-symbolic", icon + 4);
+		if (nick_menu_icon_exists (candidate))
+			return candidate;
+		g_free (candidate);
+	}
+
+	return NULL;
+}
+
+static void
+popover_left_align_button_label (GtkWidget *button)
+{
+	GtkWidget *child;
+
+	if (!button || !GTK_IS_BUTTON (button))
+		return;
+
+	child = gtk_button_get_child (GTK_BUTTON (button));
+	if (child && GTK_IS_LABEL (child))
+	{
+		gtk_label_set_xalign (GTK_LABEL (child), 0.0f);
+		gtk_widget_set_halign (child, GTK_ALIGN_START);
+	}
+}
+
 static GtkWidget *
 nick_menu_new_row_content (const char *label, const char *icon, gboolean submenu)
 {
@@ -423,13 +504,15 @@ nick_menu_new_row_content (const char *label, const char *icon, gboolean submenu
 	GtkWidget *text;
 	GtkWidget *arrow;
 	char *clean;
+	char *resolved_icon;
 
 	row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
 	clean = strip_mnemonic (label ? label : "");
+	resolved_icon = nick_menu_resolve_icon_name (icon);
 
-	if (icon && icon[0])
+	if (resolved_icon && resolved_icon[0])
 	{
-		image = gtk_image_new_from_icon_name (icon);
+		image = gtk_image_new_from_icon_name (resolved_icon);
 		gtk_widget_set_valign (image, GTK_ALIGN_CENTER);
 		gtk_box_append (GTK_BOX (row), image);
 	}
@@ -448,6 +531,7 @@ nick_menu_new_row_content (const char *label, const char *icon, gboolean submenu
 	}
 
 	g_free (clean);
+	g_free (resolved_icon);
 	return row;
 }
 
@@ -932,6 +1016,7 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+	popover_left_align_button_label (button);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 
@@ -939,6 +1024,7 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+	popover_left_align_button_label (button);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_browser_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 
@@ -946,6 +1032,7 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+	popover_left_align_button_label (button);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_new_window_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 
@@ -953,6 +1040,7 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_hexpand (button, TRUE);
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
+	popover_left_align_button_label (button);
 	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_copy_cb), ctx);
 	gtk_box_append (GTK_BOX (box), button);
 

@@ -560,11 +560,18 @@ tree_popover_add_action (GtkWidget *box, const char *label, GCallback cb,
 	gpointer data, GClosureNotify destroy_data)
 {
 	GtkWidget *button;
+	GtkWidget *child;
 
 	button = gtk_button_new_with_label (label);
 	gtk_widget_add_css_class (button, "flat");
 	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
 	gtk_widget_set_hexpand (button, TRUE);
+	child = gtk_button_get_child (GTK_BUTTON (button));
+	if (child && GTK_IS_LABEL (child))
+	{
+		gtk_label_set_xalign (GTK_LABEL (child), 0.0f);
+		gtk_widget_set_halign (child, GTK_ALIGN_START);
+	}
 	g_signal_connect_data (button, "clicked", cb, data, destroy_data, 0);
 	gtk_box_append (GTK_BOX (box), button);
 	return button;
@@ -577,6 +584,8 @@ tree_popover_add_toggle (GtkWidget *box, const char *label, gboolean active, GCa
 	GtkWidget *check;
 
 	check = gtk_check_button_new_with_label (label);
+	gtk_widget_set_halign (check, GTK_ALIGN_FILL);
+	gtk_widget_set_hexpand (check, TRUE);
 	gtk_check_button_set_active (GTK_CHECK_BUTTON (check), active);
 	g_signal_connect_data (check, "toggled", cb, data, destroy_data, 0);
 	gtk_box_append (GTK_BOX (box), check);
@@ -622,6 +631,7 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 	gtk_widget_set_margin_end (box, 6);
 	gtk_widget_set_margin_top (box, 6);
 	gtk_widget_set_margin_bottom (box, 6);
+	gtk_widget_add_css_class (box, "menu");
 	gtk_popover_set_child (GTK_POPOVER (popover), box);
 
 	action_data = g_new0 (HcSessionActionData, 1);
