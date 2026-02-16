@@ -1696,6 +1696,9 @@ xtext_scroll_to_end (void)
 
 	if (!log_buffer || !log_view)
 		return;
+
+	printf("xtext_scroll_to_end ()\n");
+
 	mark = gtk_text_buffer_get_mark (log_buffer, "end");
 	gtk_text_buffer_get_iter_at_mark (log_buffer, &iter, mark);
 	/* scroll to end mark onscreen */
@@ -1748,6 +1751,8 @@ xtext_show_session_rendered (session *sess)
 	/* was_at_end = TRUE; */
 	/* vadj = NULL; */
 
+	if (sess && sess->server)
+	    printf ("xtext_show_session_rendered (name=%s)\n", sess->server->servername);
 
 
 	xtext_render_session = (sess && is_session (sess)) ? sess : NULL;
@@ -2044,6 +2049,7 @@ fe_gtk4_append_log_text (const char *text)
 		return;
 	}
 
+	printf("fe_gtk4_append_log_text (\"%s\")\n", text);
 	xtext_render_session = (current_tab && is_session (current_tab)) ? current_tab : NULL;
 	xtext_render_raw_append (text);
 	xtext_render_session = NULL;
@@ -2057,6 +2063,8 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 
 	if (!text || !text[0])
 		return;
+
+	printf("fe_gtk4_append_for_session (%s, \"%s\")\n", sess->server->servername, text);
 
 	if (!sess || !is_session (sess))
 	{
@@ -2083,6 +2091,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 			}
 		}
 
+		printf("\tsess == current_tab\n");
 		xtext_render_raw_append (text);
 		xtext_scroll_to_end ();
 	}
