@@ -406,15 +406,20 @@ tabs_base_label (session *sess)
 		return g_strdup_printf ("[%s]", network);
 	}
 
-	if (!sess->channel[0] && sess->server &&
-		sess->type != SESS_DIALOG &&
-		sess->type != SESS_NOTICES &&
-		sess->type != SESS_SNOTICES)
+	if (sess->type == SESS_CHANNEL)
 	{
-		network = server_get_network (sess->server, TRUE);
-		if (!network || !network[0])
-			network = sess->server->servername[0] ? sess->server->servername : _("Server");
-		return g_strdup_printf ("[%s]", network);
+		if (sess->channel[0])
+			return g_strdup (sess->channel);
+		if (sess->waitchannel[0])
+			return g_strdup (sess->waitchannel);
+		if (sess->server)
+		{
+			network = server_get_network (sess->server, TRUE);
+			if (!network || !network[0])
+				network = sess->server->servername[0] ? sess->server->servername : _("Server");
+			return g_strdup_printf ("[%s]", network);
+		}
+		return g_strdup (_("Channel"));
 	}
 
 	if (sess->channel[0])

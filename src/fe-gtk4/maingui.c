@@ -38,6 +38,7 @@ static gboolean left_sidebar_visible = TRUE;
 static GtkWidget *main_nav_split;
 static AdwNavigationPage *main_nav_sidebar_page;
 static AdwNavigationPage *main_nav_content_page;
+static GHashTable *disconnect_preserve_servers;
 
 #define GUI_PANE_LEFT_DEFAULT 128
 #define GUI_PANE_RIGHT_DEFAULT 200
@@ -67,6 +68,64 @@ fe_idle (gpointer data)
 	return G_SOURCE_REMOVE;
 }
 #endif
+
+static gboolean
+maingui_disconnect_preserve_clear_idle (gpointer data)
+{
+	server *serv;
+
+	serv = data;
+	if (!serv)
+		return G_SOURCE_REMOVE;
+
+	if (disconnect_preserve_servers)
+		g_hash_table_remove (disconnect_preserve_servers, serv);
+
+	return G_SOURCE_REMOVE;
+}
+
+static void
+maingui_mark_disconnect_preserve (server *serv)
+{
+	GSList *list;
+
+	if (!serv)
+		return;
+
+	if (!disconnect_preserve_servers)
+		disconnect_preserve_servers = g_hash_table_new (g_direct_hash, g_direct_equal);
+
+	if (!g_hash_table_contains (disconnect_preserve_servers, serv))
+	{
+		g_hash_table_add (disconnect_preserve_servers, serv);
+		g_idle_add (maingui_disconnect_preserve_clear_idle, serv);
+	}
+
+	for (list = sess_list; list; list = list->next)
+	{
+		session *sess = list->data;
+
+		if (!sess || sess->server != serv || sess->type != SESS_CHANNEL)
+			continue;
+
+		if (sess->channel[0])
+			safe_strcpy (sess->willjoinchannel, sess->channel, CHANLEN);
+		else if (sess->waitchannel[0] && !sess->willjoinchannel[0])
+			safe_strcpy (sess->willjoinchannel, sess->waitchannel, CHANLEN);
+	}
+}
+
+static gboolean
+maingui_preserve_disconnect_text (const session *sess)
+{
+	if (!sess || sess->type != SESS_CHANNEL || !sess->server)
+		return FALSE;
+
+	if (!sess->waitchannel[0] || !disconnect_preserve_servers)
+		return FALSE;
+
+	return g_hash_table_contains (disconnect_preserve_servers, sess->server);
+}
 
 static int
 maingui_right_pane_min_size (void)
@@ -856,6 +915,8 @@ void
 fe_gtk4_maingui_init (void)
 {
 	pane_positions_ready = FALSE;
+	if (!disconnect_preserve_servers)
+		disconnect_preserve_servers = g_hash_table_new (g_direct_hash, g_direct_equal);
 	fe_gtk4_chanview_init ();
 	fe_gtk4_xtext_init ();
 	fe_gtk4_userlist_init ();
@@ -886,6 +947,7 @@ fe_gtk4_maingui_cleanup (void)
 	userlist_split_anim_from = 0;
 	userlist_split_anim_to = 0;
 	left_sidebar_visible = TRUE;
+	g_clear_pointer (&disconnect_preserve_servers, g_hash_table_unref);
 }
 
 session *
@@ -1757,8 +1819,12 @@ fe_text_clear (struct session *sess, int lines)
 void
 fe_clear_channel (struct session *sess)
 {
-	fe_text_clear (sess, 0);
-	if (sess == current_tab && log_view)
+	gboolean preserve;
+
+	preserve = maingui_preserve_disconnect_text (sess);
+	if (!preserve)
+		fe_text_clear (sess, 0);
+	if (!preserve && sess == current_tab && log_view)
 		gtk_widget_set_tooltip_text (log_view, NULL);
 	if (sess == current_tab)
 		topic_update_for_session (sess);
@@ -1827,9 +1893,12 @@ void
 fe_set_title (struct session *sess)
 {
 	char tbuf[512];
+	char title_status[64];
+	const char *channel_name;
 	const char *display_name;
 	const char *header_title;
 	const char *network;
+	gboolean disconnected;
 
 	if (!main_window)
 		return;
@@ -1851,25 +1920,19 @@ fe_set_title (struct session *sess)
 	if (current_tab && sess != current_tab)
 		return;
 
-	if (!sess->server->connected && sess->type != SESS_DIALOG)
-	{
-		gtk_window_set_title (GTK_WINDOW (main_window), display_name);
-		fe_gtk4_adw_set_window_title (display_name);
-		topic_update_for_session (sess);
-		return;
-	}
-
 	network = server_get_network (sess->server, TRUE);
 	if (!network || !network[0])
 		network = sess->server->servername[0] ? sess->server->servername : _("Unknown");
+	channel_name = sess->channel[0] ? sess->channel : sess->waitchannel;
+	disconnected = !sess->server->connected;
 
 	switch (sess->type)
 	{
 	case SESS_DIALOG:
 		g_snprintf (tbuf, sizeof (tbuf), "%s %s @ %s - %s",
-			_("Dialog with"), sess->channel[0] ? sess->channel : "",
+			_("Dialog with"), channel_name,
 			network, display_name);
-		header_title = sess->channel[0] ? sess->channel : network;
+		header_title = channel_name[0] ? channel_name : network;
 		break;
 	case SESS_SERVER:
 		g_snprintf (tbuf, sizeof (tbuf), "%s%s%s - %s",
@@ -1883,7 +1946,7 @@ fe_set_title (struct session *sess)
 			prefs.hex_gui_win_nick && sess->server->nick[0] ? sess->server->nick : "",
 			prefs.hex_gui_win_nick ? " @ " : "",
 			network,
-			sess->channel[0] ? sess->channel : "",
+			channel_name,
 			prefs.hex_gui_win_modes && sess->current_modes ? " (" : "",
 			prefs.hex_gui_win_modes && sess->current_modes ? sess->current_modes : "",
 			prefs.hex_gui_win_modes && sess->current_modes ? ")" : "",
@@ -1894,7 +1957,7 @@ fe_set_title (struct session *sess)
 			if (used < sizeof (tbuf))
 				g_snprintf (tbuf + used, sizeof (tbuf) - used, " (%d)", sess->total);
 		}
-		header_title = sess->channel[0] ? sess->channel : network;
+		header_title = channel_name[0] ? channel_name : network;
 		break;
 	case SESS_NOTICES:
 	case SESS_SNOTICES:
@@ -1908,6 +1971,16 @@ fe_set_title (struct session *sess)
 		g_snprintf (tbuf, sizeof (tbuf), "%s", display_name);
 		header_title = display_name;
 		break;
+	}
+
+	if (disconnected && sess->type != SESS_DIALOG)
+	{
+		gsize used;
+
+		g_snprintf (title_status, sizeof (title_status), " (%s)", _("Disconnected"));
+		used = strlen (tbuf);
+		if (used < sizeof (tbuf))
+			g_strlcpy (tbuf + used, title_status, sizeof (tbuf) - used);
 	}
 
 	gtk_window_set_title (GTK_WINDOW (main_window), tbuf);
@@ -1978,6 +2051,7 @@ fe_server_event (server *serv, int type, int arg)
 			joind_open (serv);
 		break;
 	case FE_SE_DISCONNECT:
+		maingui_mark_disconnect_preserve (serv);
 		g_snprintf (buf, sizeof (buf), "* Disconnected from %s.", network);
 		joind_close (serv);
 		break;

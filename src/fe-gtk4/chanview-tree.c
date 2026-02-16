@@ -93,7 +93,8 @@ tree_load_css (void)
 		".hc-tree-hilight { color: @theme_fg_color; font-weight: 700; }"
 		".hc-tree-badge-data { background-color: alpha(@theme_fg_color, 0.18); color: @theme_fg_color; }"
 		".hc-tree-badge-msg { background-color: alpha(@accent_bg_color, 0.25); color: @accent_fg_color; }"
-		".hc-tree-badge-hilight { background-color: #e01b24; color: #ffffff; }");
+		".hc-tree-badge-hilight { background-color: #e01b24; color: #ffffff; }"
+		".hc-tree-disconnected { color: alpha(@theme_fg_color, 0.62); }");
 	gtk_style_context_add_provider_for_display (display,
 		GTK_STYLE_PROVIDER (provider),
 		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -142,7 +143,8 @@ tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
 		"hc-tree-server",
 		"hc-tree-data",
 		"hc-tree-msg",
-		"hc-tree-hilight"
+		"hc-tree-hilight",
+		"hc-tree-disconnected"
 	};
 	static const char *const label_classes[] =
 	{
@@ -150,7 +152,8 @@ tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
 		"hc-tree-server",
 		"hc-tree-data",
 		"hc-tree-msg",
-		"hc-tree-hilight"
+		"hc-tree-hilight",
+		"hc-tree-disconnected"
 	};
 	guint i;
 
@@ -240,6 +243,14 @@ tree_apply_state_classes (GtkWidget *row_box, GtkWidget *label, HcChanNode *node
 			gtk_widget_add_css_class (row_box, "hc-tree-server");
 		if (label)
 			gtk_widget_add_css_class (label, "hc-tree-server");
+	}
+
+	if (sess && sess->server && !sess->server->connected)
+	{
+		if (row_box)
+			gtk_widget_add_css_class (row_box, "hc-tree-disconnected");
+		if (label)
+			gtk_widget_add_css_class (label, "hc-tree-disconnected");
 	}
 
 	if (!sess || sess == current_tab)
@@ -1019,15 +1030,21 @@ tree_session_label (session *sess)
 			network = sess->server && sess->server->servername[0] ? sess->server->servername : _("Server");
 		base = g_strdup (network);
 	}
-	else if (!sess->channel[0] && sess->server &&
-		sess->type != SESS_DIALOG &&
-		sess->type != SESS_NOTICES &&
-		sess->type != SESS_SNOTICES)
+	else if (sess->type == SESS_CHANNEL)
 	{
-		network = server_get_network (sess->server, TRUE);
-		if (!network || !network[0])
-			network = sess->server->servername[0] ? sess->server->servername : _("Server");
-		base = g_strdup (network);
+		if (sess->channel[0])
+			base = g_strdup (sess->channel);
+		else if (sess->waitchannel[0])
+			base = g_strdup (sess->waitchannel);
+		else if (sess->server)
+		{
+			network = server_get_network (sess->server, TRUE);
+			if (!network || !network[0])
+				network = sess->server->servername[0] ? sess->server->servername : _("Server");
+			base = g_strdup (network);
+		}
+		else
+			base = g_strdup (_("Channel"));
 	}
 	else if (sess->channel[0])
 		base = g_strdup (sess->channel);
