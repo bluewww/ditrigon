@@ -2058,7 +2058,7 @@ fe_serverlist_open (session *sess)
 	servlist_sess = sess;
 
 	builder = fe_gtk4_builder_new_from_resource (SERVLIST_UI_PATH);
-	serverlist_win = fe_gtk4_builder_get_widget (builder, "servlist_window", GTK_TYPE_WINDOW);
+	serverlist_win = fe_gtk4_builder_get_widget (builder, "servlist_window", ADW_TYPE_WINDOW);
 	entry_nick1 = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_nick1", ADW_TYPE_ENTRY_ROW));
 	entry_nick2 = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_nick2", ADW_TYPE_ENTRY_ROW));
 	entry_nick3 = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_nick3", ADW_TYPE_ENTRY_ROW));

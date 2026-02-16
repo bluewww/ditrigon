@@ -3,8 +3,8 @@
 <interface>
   <!-- interface-name servlist-window.ui -->
   <requires lib="Adw" version="1.0"/>
-  <requires lib="gtk" version="4.0"/>
   <requires lib="gio" version="2.0"/>
+  <requires lib="gtk" version="4.0"/>
   <requires lib="libadwaita" version="1.7"/>
   <menu id="network_menu">
     <section>
@@ -14,8 +14,10 @@
       </item>
     </section>
   </menu>
-  <object class="GtkWindow" id="servlist_window">
-    <property name="child">
+  <object class="AdwWindow" id="servlist_window">
+    <property name="default-height">680</property>
+    <property name="default-width">900</property>
+    <child>
       <object class="AdwToolbarView" id="servlist_toolbar_view">
         <property name="content">
           <object class="AdwNavigationSplitView" id="servlist_split_view">
@@ -225,8 +227,6 @@
           </object>
         </child>
       </object>
-    </property>
-    <property name="default-height">680</property>
-    <property name="default-width">900</property>
+    </child>
   </object>
 </interface>
