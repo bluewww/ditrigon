@@ -824,7 +824,7 @@ load_default_config(void)
 	prefs.hex_gui_lang = get_default_language();
 	prefs.hex_gui_pane_left_size = 128;		/* with treeview icons we need a bit bigger space */
 	prefs.hex_gui_pane_right_size = 200;
-	prefs.hex_gui_pane_right_size_min = 180;
+	prefs.hex_gui_pane_right_size_min = 220;
 	prefs.hex_gui_tab_layout = 2;			/* 0=Tabs 1=Reserved 2=Tree */
 	prefs.hex_gui_tab_newtofront = 2;
 	prefs.hex_gui_tab_pos = 1;
@@ -996,8 +996,8 @@ load_config (void)
 		prefs.hex_gui_win_height = 138;
 	if (prefs.hex_gui_win_width < 106)
 		prefs.hex_gui_win_width = 106;
-	if (prefs.hex_gui_pane_right_size_min < 180)
-		prefs.hex_gui_pane_right_size_min = 180;
+	if (prefs.hex_gui_pane_right_size_min < 220)
+		prefs.hex_gui_pane_right_size_min = 220;
 	if (prefs.hex_gui_pane_right_size_min > 300)
 		prefs.hex_gui_pane_right_size_min = 300;
 	if (prefs.hex_gui_pane_right_size > 300)

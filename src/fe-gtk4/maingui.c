@@ -41,8 +41,8 @@ static AdwNavigationPage *main_nav_content_page;
 static GHashTable *disconnect_preserve_servers;
 
 #define GUI_PANE_LEFT_DEFAULT 128
-#define GUI_PANE_RIGHT_DEFAULT 200
-#define GUI_PANE_RIGHT_MIN 180
+#define GUI_PANE_RIGHT_DEFAULT 220
+#define GUI_PANE_RIGHT_MIN 220
 #define GUI_PANE_RIGHT_MAX 300
 #define GUI_PANE_CENTER_MIN GUI_PANE_LEFT_DEFAULT
 #define NAV_SPLIT_COLLAPSE_CONDITION "max-width: 560sp"
