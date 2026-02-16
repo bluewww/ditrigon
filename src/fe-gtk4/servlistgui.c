@@ -26,18 +26,17 @@ static GtkWidget *networks_list;
 static GtkWidget *networks_search_entry;
 static char *networks_filter_casefold;
 
-static GtkWidget *entry_nick1;
-static GtkWidget *entry_nick2;
-static GtkWidget *entry_nick3;
-static GtkWidget *entry_guser;
+static AdwEntryRow *entry_nick1;
+static AdwEntryRow *entry_nick2;
+static AdwEntryRow *entry_nick3;
+static AdwEntryRow *entry_guser;
 
-static GtkWidget *checkbutton_skip;
+static AdwSwitchRow *checkbutton_skip;
 static GtkWidget *checkbutton_fav;
 static GtkWidget *button_connect;
 static GtkWidget *button_add_net;
 static GtkWidget *button_remove_net;
 static GtkWidget *button_edit_net;
-static GtkWidget *button_sort_net;
 static GtkWidget *button_favor_net;
 
 static GtkWidget *edit_win;
@@ -667,9 +666,10 @@ servlist_deletenet_cb (GtkWidget *item, gpointer userdata)
 }
 
 static void
-servlist_sort_cb (GtkWidget *button, gpointer userdata)
+servlist_sort_cb (GSimpleAction *action, GVariant *parameter, gpointer userdata)
 {
-	(void) button;
+	(void) action;
+	(void) parameter;
 	(void) userdata;
 
 	network_list = g_slist_sort (network_list, (GCompareFunc) servlist_compare);
@@ -751,11 +751,11 @@ servlist_favor_cb (GtkWidget *button, gpointer userdata)
 }
 
 static void
-no_servlist (GtkWidget *check, gpointer userdata)
+no_servlist (AdwSwitchRow *row, GParamSpec *pspec, gpointer userdata)
 {
+	(void) pspec;
 	(void) userdata;
-	prefs.hex_gui_slist_skip =
-		gtk_check_button_get_active (GTK_CHECK_BUTTON (check)) ? TRUE : FALSE;
+	prefs.hex_gui_slist_skip = adw_switch_row_get_active (row) ? TRUE : FALSE;
 }
 
 static void
@@ -867,7 +867,6 @@ servlist_close_request_cb (GtkWindow *window, gpointer userdata)
 	button_add_net = NULL;
 	button_remove_net = NULL;
 	button_edit_net = NULL;
-	button_sort_net = NULL;
 	button_favor_net = NULL;
 	selected_net = NULL;
 	servlist_sess = NULL;
@@ -876,16 +875,6 @@ servlist_close_request_cb (GtkWindow *window, gpointer userdata)
 		hexchat_exit ();
 
 	return FALSE;
-}
-
-static void
-servlist_close_clicked_cb (GtkWidget *button, gpointer userdata)
-{
-	(void) button;
-	(void) userdata;
-
-	if (serverlist_win)
-		gtk_window_close (GTK_WINDOW (serverlist_win));
 }
 
 static void
@@ -2054,8 +2043,9 @@ void
 fe_serverlist_open (session *sess)
 {
 	GtkWidget *placeholder;
-	GtkWidget *cancel_button;
 	GtkBuilder *builder;
+	GSimpleActionGroup *actions;
+	GSimpleAction *sort_action;
 	int width;
 	int height;
 
@@ -2069,20 +2059,19 @@ fe_serverlist_open (session *sess)
 
 	builder = fe_gtk4_builder_new_from_resource (SERVLIST_UI_PATH);
 	serverlist_win = fe_gtk4_builder_get_widget (builder, "servlist_window", GTK_TYPE_WINDOW);
-	entry_nick1 = fe_gtk4_builder_get_widget (builder, "servlist_entry_nick1", GTK_TYPE_ENTRY);
-	entry_nick2 = fe_gtk4_builder_get_widget (builder, "servlist_entry_nick2", GTK_TYPE_ENTRY);
-	entry_nick3 = fe_gtk4_builder_get_widget (builder, "servlist_entry_nick3", GTK_TYPE_ENTRY);
-	entry_guser = fe_gtk4_builder_get_widget (builder, "servlist_entry_guser", GTK_TYPE_ENTRY);
+	entry_nick1 = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_nick1", ADW_TYPE_ENTRY_ROW));
+	entry_nick2 = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_nick2", ADW_TYPE_ENTRY_ROW));
+	entry_nick3 = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_nick3", ADW_TYPE_ENTRY_ROW));
+	entry_guser = ADW_ENTRY_ROW (fe_gtk4_builder_get_widget (builder, "servlist_entry_guser", ADW_TYPE_ENTRY_ROW));
 	networks_search_entry = fe_gtk4_builder_get_widget (builder, "servlist_networks_search_entry", GTK_TYPE_SEARCH_ENTRY);
 	networks_list = fe_gtk4_builder_get_widget (builder, "servlist_networks_list", GTK_TYPE_LIST_BOX);
-	checkbutton_skip = fe_gtk4_builder_get_widget (builder, "servlist_check_skip", GTK_TYPE_CHECK_BUTTON);
+	checkbutton_skip = ADW_SWITCH_ROW (fe_gtk4_builder_get_widget (builder, "servlist_check_skip", ADW_TYPE_SWITCH_ROW));
 	checkbutton_fav = fe_gtk4_builder_get_widget (builder, "servlist_check_fav", GTK_TYPE_CHECK_BUTTON);
 	button_connect = fe_gtk4_builder_get_widget (builder, "servlist_connect_button", GTK_TYPE_BUTTON);
-	cancel_button = fe_gtk4_builder_get_widget (builder, "servlist_cancel_button", GTK_TYPE_BUTTON);
+	GtkWidget *button_cancel = fe_gtk4_builder_get_widget (builder, "servlist_cancel_button", GTK_TYPE_BUTTON);
 	button_add_net = fe_gtk4_builder_get_widget (builder, "servlist_add_button", GTK_TYPE_BUTTON);
 	button_remove_net = fe_gtk4_builder_get_widget (builder, "servlist_remove_button", GTK_TYPE_BUTTON);
 	button_edit_net = fe_gtk4_builder_get_widget (builder, "servlist_edit_button", GTK_TYPE_BUTTON);
-	button_sort_net = fe_gtk4_builder_get_widget (builder, "servlist_sort_button", GTK_TYPE_BUTTON);
 	button_favor_net = fe_gtk4_builder_get_widget (builder, "servlist_favor_button", GTK_TYPE_BUTTON);
 	g_object_ref_sink (serverlist_win);
 	g_object_unref (builder);
@@ -2119,15 +2108,21 @@ fe_serverlist_open (session *sess)
 	g_signal_connect (button_add_net, "clicked", G_CALLBACK (servlist_addnet_cb), NULL);
 	g_signal_connect (button_remove_net, "clicked", G_CALLBACK (servlist_deletenet_cb), NULL);
 	g_signal_connect (button_edit_net, "clicked", G_CALLBACK (servlist_edit_cb), NULL);
-	g_signal_connect (button_sort_net, "clicked", G_CALLBACK (servlist_sort_cb), NULL);
 	g_signal_connect (button_favor_net, "clicked", G_CALLBACK (servlist_favor_cb), NULL);
 
-	gtk_check_button_set_active (GTK_CHECK_BUTTON (checkbutton_skip), prefs.hex_gui_slist_skip);
-	g_signal_connect (checkbutton_skip, "toggled", G_CALLBACK (no_servlist), NULL);
+	/* Create action group and add sort action for the menu */
+	actions = g_simple_action_group_new ();
+	sort_action = g_simple_action_new ("sort-networks", NULL);
+	g_signal_connect (sort_action, "activate", G_CALLBACK (servlist_sort_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (actions), G_ACTION (sort_action));
+	gtk_widget_insert_action_group (serverlist_win, "app", G_ACTION_GROUP (actions));
+
+	adw_switch_row_set_active (checkbutton_skip, prefs.hex_gui_slist_skip);
+	g_signal_connect (checkbutton_skip, "notify::active", G_CALLBACK (no_servlist), NULL);
 	gtk_check_button_set_active (GTK_CHECK_BUTTON (checkbutton_fav), prefs.hex_gui_slist_fav);
 	g_signal_connect (checkbutton_fav, "toggled", G_CALLBACK (fav_servlist), NULL);
 
-	g_signal_connect (cancel_button, "clicked", G_CALLBACK (servlist_close_clicked_cb), NULL);
+	g_signal_connect_swapped (button_cancel, "clicked", G_CALLBACK (gtk_window_close), serverlist_win);
 	g_signal_connect (button_connect, "clicked", G_CALLBACK (servlist_connect_cb), NULL);
 
 	g_signal_connect (entry_guser, "changed", G_CALLBACK (servlist_username_changed_cb), NULL);
@@ -2165,7 +2160,6 @@ fe_gtk4_servlistgui_cleanup (void)
 	button_add_net = NULL;
 	button_remove_net = NULL;
 	button_edit_net = NULL;
-	button_sort_net = NULL;
 	button_favor_net = NULL;
 	selected_net = NULL;
 	selected_serv = NULL;
