@@ -1691,13 +1691,15 @@ xtext_render_raw_append (const char *raw)
 static void
 xtext_scroll_to_end (void)
 {
-	GtkTextIter end;
+	GtkTextIter iter;
+	GtkTextMark *mark;
 
 	if (!log_buffer || !log_view)
 		return;
-
-	gtk_text_buffer_get_end_iter (log_buffer, &end);
-	gtk_text_view_scroll_to_iter (GTK_TEXT_VIEW (log_view), &end, 0.0, FALSE, 0.0, 1.0);
+	mark = gtk_text_buffer_get_mark (log_buffer, "end");
+	gtk_text_buffer_get_iter_at_mark (log_buffer, &iter, mark);
+	/* scroll to end mark onscreen */
+	gtk_text_view_scroll_mark_onscreen (GTK_TEXT_VIEW (log_view), mark);
 }
 
 static void
@@ -1932,6 +1934,7 @@ fe_gtk4_xtext_create_widget (void)
 	GtkBuilder *builder;
 	GtkWidget *scroll;
 	GdkRGBA stamp_rgba;
+	GtkTextIter iter;
 
 	if (log_view && xtext_resize_tick_id != 0)
 	{
@@ -2001,6 +2004,10 @@ fe_gtk4_xtext_create_widget (void)
 
 	if (color_tags)
 		g_hash_table_remove_all (color_tags);
+
+	/* Create mark with left gravity to scroll to end */
+	gtk_text_buffer_get_end_iter (log_buffer, &iter);
+	gtk_text_buffer_create_mark (log_buffer, "end", &iter, FALSE);
 
 	xtext_search_mark = NULL;
 	xtext_hover_start_mark = NULL;
