@@ -52,7 +52,6 @@ typedef struct
 #define HC_IRC_CTRL_UNDERLINE ((unsigned char) '\x1f')
 
 static GHashTable *session_logs;
-static GHashTable *session_scroll_values;
 static GHashTable *color_tags;
 static GtkTextTag *tag_stamp;
 static GtkTextTag *tag_bold;
@@ -76,9 +75,7 @@ static double xtext_secondary_pending_y;
 static guint xtext_resize_tick_id;
 static guint xtext_resize_idle_id;
 static int xtext_last_view_width;
-static session *xtext_visible_session;
 static session *xtext_render_session;
-static gboolean xtext_scroll_tracking_blocked;
 
 static void xtext_render_raw_append (const char *raw);
 static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
@@ -746,88 +743,6 @@ session_log_ensure (session *sess)
 	log = g_string_new ("");
 	g_hash_table_insert (session_logs, sess, log);
 	return log;
-}
-
-static void
-session_scroll_set (session *sess, double value)
-{
-	double *stored;
-
-	if (!session_scroll_values || !sess || !is_session (sess))
-		return;
-
-	stored = g_hash_table_lookup (session_scroll_values, sess);
-	if (!stored)
-	{
-		stored = g_new (double, 1);
-		g_hash_table_insert (session_scroll_values, sess, stored);
-	}
-	*stored = value;
-}
-
-static gboolean
-session_scroll_get (session *sess, double *value_out)
-{
-	double *stored;
-
-	if (!session_scroll_values || !sess || !is_session (sess) || !value_out)
-		return FALSE;
-
-	stored = g_hash_table_lookup (session_scroll_values, sess);
-	if (!stored)
-		return FALSE;
-
-	*value_out = *stored;
-	return TRUE;
-}
-
-static GtkAdjustment *
-xtext_get_vadjustment (void)
-{
-	if (!log_view)
-		return NULL;
-
-	return gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (log_view));
-}
-
-static void
-xtext_save_visible_scroll (void)
-{
-	GtkAdjustment *vadj;
-
-	if (!xtext_visible_session || !is_session (xtext_visible_session))
-		return;
-
-	vadj = xtext_get_vadjustment ();
-	if (!vadj)
-		return;
-
-	session_scroll_set (xtext_visible_session, gtk_adjustment_get_value (vadj));
-}
-
-static void
-xtext_restore_scroll_value (double value)
-{
-	GtkAdjustment *vadj;
-	double upper;
-	double page;
-	double max_value;
-
-	vadj = xtext_get_vadjustment ();
-	if (!vadj)
-		return;
-
-	upper = gtk_adjustment_get_upper (vadj);
-	page = gtk_adjustment_get_page_size (vadj);
-	max_value = upper - page;
-	if (max_value < 0.0)
-		max_value = 0.0;
-	if (value > max_value)
-		value = max_value;
-	if (value < 0.0)
-		value = 0.0;
-
-	gtk_adjustment_set_value (vadj, value);
 }
 
 static void
@@ -1784,22 +1699,6 @@ xtext_scroll_to_end (void)
 }
 
 static void
-xtext_vadjustment_value_changed_cb (GtkAdjustment *adj, gpointer user_data)
-{
-	(void) user_data;
-
-	if (!adj)
-		return;
-	if (xtext_scroll_tracking_blocked)
-		return;
-
-	if (!xtext_visible_session || !is_session (xtext_visible_session))
-		return;
-
-	session_scroll_set (xtext_visible_session, gtk_adjustment_get_value (adj));
-}
-
-static void
 xtext_show_session_rendered (session *sess, gboolean keep_scroll)
 {
 	GString *log;
@@ -1812,12 +1711,6 @@ xtext_show_session_rendered (session *sess, gboolean keep_scroll)
 
 	if (!log_buffer)
 		return;
-
-	if (!keep_scroll)
-	{
-		if (xtext_visible_session && xtext_visible_session != sess)
-			xtext_save_visible_scroll ();
-	}
 
 	log = NULL;
 	if (session_logs && sess)
@@ -1838,20 +1731,13 @@ xtext_show_session_rendered (session *sess, gboolean keep_scroll)
 		}
 	}
 
-	xtext_scroll_tracking_blocked = TRUE;
 	xtext_render_session = (sess && is_session (sess)) ? sess : NULL;
 	xtext_render_raw_all (log ? log->str : "");
 	xtext_render_session = NULL;
 
 	if (!keep_scroll || was_at_end || !vadj)
 	{
-		if (keep_scroll || !sess || !is_session (sess) || !session_scroll_get (sess, &old_value))
-			xtext_scroll_to_end ();
-		else
-			xtext_restore_scroll_value (old_value);
-		xtext_visible_session = (sess && is_session (sess)) ? sess : NULL;
-		xtext_scroll_tracking_blocked = FALSE;
-		xtext_save_visible_scroll ();
+		xtext_scroll_to_end ();
 		return;
 	}
 
@@ -1866,9 +1752,6 @@ xtext_show_session_rendered (session *sess, gboolean keep_scroll)
 		old_value = 0.0;
 
 	gtk_adjustment_set_value (vadj, old_value);
-	xtext_visible_session = (sess && is_session (sess)) ? sess : NULL;
-	xtext_scroll_tracking_blocked = FALSE;
-	xtext_save_visible_scroll ();
 }
 
 static gboolean
@@ -1984,9 +1867,6 @@ fe_gtk4_xtext_init (void)
 	if (!session_logs)
 		session_logs = g_hash_table_new_full (g_direct_hash, g_direct_equal,
 			NULL, session_log_free);
-	if (!session_scroll_values)
-		session_scroll_values = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-			NULL, g_free);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
 	if (xtext_space_width_px <= 0)
@@ -2002,11 +1882,6 @@ fe_gtk4_xtext_cleanup (void)
 	{
 		g_hash_table_unref (session_logs);
 		session_logs = NULL;
-	}
-	if (session_scroll_values)
-	{
-		g_hash_table_unref (session_scroll_values);
-		session_scroll_values = NULL;
 	}
 	if (color_tags)
 	{
@@ -2046,9 +1921,7 @@ fe_gtk4_xtext_cleanup (void)
 	xtext_space_width_px = 0;
 	xtext_message_col_px = 0;
 	xtext_last_view_width = -1;
-	xtext_visible_session = NULL;
 	xtext_render_session = NULL;
-	xtext_scroll_tracking_blocked = FALSE;
 }
 
 GtkWidget *
@@ -2103,8 +1976,6 @@ fe_gtk4_xtext_create_widget (void)
 	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), log_view);
 
 	log_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (log_view));
-	g_signal_connect (xtext_get_vadjustment (), "value-changed",
-		G_CALLBACK (xtext_vadjustment_value_changed_cb), NULL);
 
 	tag_bold = gtk_text_buffer_create_tag (log_buffer, "hc-bold",
 		"weight", PANGO_WEIGHT_BOLD,
@@ -2136,9 +2007,7 @@ fe_gtk4_xtext_create_widget (void)
 	xtext_hover_end_mark = NULL;
 	xtext_message_col_px = 0;
 	xtext_resize_tick_id = gtk_widget_add_tick_callback (log_view, xtext_resize_tick_cb, NULL, NULL);
-	xtext_visible_session = NULL;
 	xtext_render_session = NULL;
-	xtext_scroll_tracking_blocked = FALSE;
 	xtext_apply_font_pref ();
 
 	return scroll;
@@ -2222,10 +2091,6 @@ fe_gtk4_xtext_remove_session (session *sess)
 		return;
 
 	g_hash_table_remove (session_logs, sess);
-	if (session_scroll_values)
-		g_hash_table_remove (session_scroll_values, sess);
-	if (xtext_visible_session == sess)
-		xtext_visible_session = NULL;
 }
 
 const char *
