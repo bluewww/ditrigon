@@ -10,8 +10,6 @@
 #define DEFAULT_SERVER "newserver/6667"
 #endif
 
-#define SERVLIST_X_PADDING 6
-#define SERVLIST_Y_PADDING 2
 #define SERVLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/servlist-window.ui"
 #define SERVLIST_EDIT_UI_PATH "/org/hexchat/ui/gtk4/dialogs/servlist-edit-window.ui"
 
@@ -36,6 +34,11 @@ static GtkWidget *entry_guser;
 static GtkWidget *checkbutton_skip;
 static GtkWidget *checkbutton_fav;
 static GtkWidget *button_connect;
+static GtkWidget *button_add_net;
+static GtkWidget *button_remove_net;
+static GtkWidget *button_edit_net;
+static GtkWidget *button_sort_net;
+static GtkWidget *button_favor_net;
 
 static GtkWidget *edit_win;
 static GtkWidget *edit_lists[N_TREES];
@@ -165,6 +168,7 @@ servlist_edit_set_current_page (int page)
 static void servlist_networks_populate (GtkWidget *list, GSList *netlist);
 static GtkWidget *servlist_open_edit (GtkWidget *parent, ircnet *net);
 static GSList *servlist_move_item (GSList *list, gpointer item, int delta);
+static void servlist_validate_user_entries (void);
 
 static void
 servlist_list_clear (GtkWidget *list)
@@ -238,6 +242,152 @@ servlist_get_login_desc_index (int conf_value)
 	}
 
 	return 0;
+}
+
+static const char *
+servlist_network_primary_server (ircnet *net)
+{
+	GSList *node;
+	int index;
+	int len;
+	ircserver *serv;
+
+	if (!net || !net->servlist)
+		return _("No servers configured");
+
+	len = g_slist_length (net->servlist);
+	if (len <= 0)
+		return _("No servers configured");
+
+	index = CLAMP (net->selected, 0, len - 1);
+	node = g_slist_nth (net->servlist, index);
+	if (!node)
+		node = net->servlist;
+	if (!node)
+		return _("No servers configured");
+
+	serv = node->data;
+	if (!serv || !serv->hostname || !serv->hostname[0])
+		return _("No servers configured");
+
+	return serv->hostname;
+}
+
+static const char *
+servlist_network_connection_state (ircnet *net)
+{
+	GSList *list;
+
+	if (!net)
+		return _("Disconnected");
+
+	for (list = serv_list; list; list = list->next)
+	{
+		server *serv;
+
+		serv = list->data;
+		if (!serv || serv->network != net)
+			continue;
+		if (serv->connected)
+			return _("Connected");
+		if (serv->connecting)
+			return _("Connecting");
+	}
+
+	return _("Disconnected");
+}
+
+static void
+servlist_update_actions (void)
+{
+	gboolean has_selected;
+	gboolean favorite;
+
+	has_selected = selected_net != NULL;
+	favorite = has_selected && ((selected_net->flags & FLAG_FAVORITE) != 0);
+
+	if (button_remove_net)
+		gtk_widget_set_sensitive (button_remove_net, has_selected);
+	if (button_edit_net)
+		gtk_widget_set_sensitive (button_edit_net, has_selected);
+	if (button_favor_net)
+	{
+		gtk_widget_set_sensitive (button_favor_net, has_selected);
+		if (has_selected)
+		{
+			gtk_button_set_icon_name (GTK_BUTTON (button_favor_net),
+				favorite ? "starred-symbolic" : "star-new-symbolic");
+			gtk_widget_set_tooltip_text (button_favor_net,
+				favorite ? _("Remove Favorite") : _("Favorite Network"));
+		}
+		else
+		{
+			gtk_button_set_icon_name (GTK_BUTTON (button_favor_net), "star-new-symbolic");
+			gtk_widget_set_tooltip_text (button_favor_net, _("Favorite Network"));
+		}
+	}
+
+	servlist_validate_user_entries ();
+}
+
+static GtkWidget *
+servlist_network_row_new (ircnet *net)
+{
+	GtkWidget *row;
+	GtkWidget *box;
+	GtkWidget *labels_box;
+	GtkWidget *title;
+	GtkWidget *subtitle;
+	GtkWidget *star;
+	char *subtitle_text;
+	char *tooltip_text;
+	const char *name;
+
+	row = gtk_list_box_row_new ();
+
+	box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+	gtk_widget_set_margin_start (box, 8);
+	gtk_widget_set_margin_end (box, 8);
+	gtk_widget_set_margin_top (box, 5);
+	gtk_widget_set_margin_bottom (box, 5);
+
+	labels_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+	gtk_widget_set_hexpand (labels_box, TRUE);
+
+	name = net && net->name ? net->name : _("New Network");
+	title = gtk_label_new (name);
+	gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
+	gtk_label_set_ellipsize (GTK_LABEL (title), PANGO_ELLIPSIZE_END);
+	gtk_label_set_single_line_mode (GTK_LABEL (title), TRUE);
+	gtk_widget_add_css_class (title, "heading");
+	gtk_box_append (GTK_BOX (labels_box), title);
+
+	subtitle_text = g_strdup_printf ("%s - %s",
+		servlist_network_primary_server (net),
+		servlist_network_connection_state (net));
+	subtitle = gtk_label_new (subtitle_text);
+	g_free (subtitle_text);
+	gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
+	gtk_label_set_ellipsize (GTK_LABEL (subtitle), PANGO_ELLIPSIZE_END);
+	gtk_label_set_single_line_mode (GTK_LABEL (subtitle), TRUE);
+	gtk_widget_add_css_class (subtitle, "dim-label");
+	gtk_box_append (GTK_BOX (labels_box), subtitle);
+
+	gtk_box_append (GTK_BOX (box), labels_box);
+
+	star = gtk_image_new_from_icon_name ("starred-symbolic");
+	gtk_widget_set_visible (star, net && (net->flags & FLAG_FAVORITE));
+	gtk_widget_set_valign (star, GTK_ALIGN_CENTER);
+	gtk_box_append (GTK_BOX (box), star);
+
+	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), box);
+	tooltip_text = g_strdup_printf ("%s\n%s",
+		name, servlist_network_primary_server (net));
+	gtk_widget_set_tooltip_text (row, tooltip_text);
+	g_free (tooltip_text);
+	g_object_set_data (G_OBJECT (row), "hc-network", net);
+
+	return row;
 }
 
 static GtkListBoxRow *
@@ -316,15 +466,23 @@ servlist_network_row_cb (GtkListBox *box, GtkListBoxRow *row, gpointer user_data
 
 	selected_net = NULL;
 	if (!row)
+	{
+		servlist_update_actions ();
 		return;
+	}
 
 	selected_net = g_object_get_data (G_OBJECT (row), "hc-network");
 	if (!selected_net)
+	{
+		servlist_update_actions ();
 		return;
+	}
 
 	pos = g_slist_index (network_list, selected_net);
 	if (pos >= 0)
 		prefs.hex_gui_slist_select = pos;
+
+	servlist_update_actions ();
 }
 
 static void
@@ -349,9 +507,7 @@ servlist_networks_populate_ (GtkWidget *list, GSList *netlist, gboolean favorite
 
 	for (; netlist; netlist = netlist->next)
 	{
-		GtkWidget *label;
 		GtkWidget *row;
-		char *text;
 
 		net = netlist->data;
 		if (!net)
@@ -365,21 +521,7 @@ servlist_networks_populate_ (GtkWidget *list, GSList *netlist, gboolean favorite
 			continue;
 		}
 
-		if (net->flags & FLAG_FAVORITE)
-			text = g_strdup_printf ("★ %s", net->name ? net->name : _("New Network"));
-		else
-			text = g_strdup (net->name ? net->name : _("New Network"));
-
-		label = gtk_label_new (text);
-		g_free (text);
-		gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-		gtk_widget_set_margin_start (label, 8);
-		gtk_widget_set_margin_end (label, 8);
-		gtk_widget_set_margin_top (label, 4);
-		gtk_widget_set_margin_bottom (label, 4);
-
-		row = gtk_list_box_row_new ();
-		gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), label);
+		row = servlist_network_row_new (net);
 		g_object_set_data (G_OBJECT (row), "hc-network", net);
 		gtk_list_box_append (GTK_LIST_BOX (list), row);
 
@@ -408,6 +550,8 @@ servlist_networks_populate_ (GtkWidget *list, GSList *netlist, gboolean favorite
 		gtk_list_box_select_row (GTK_LIST_BOX (list), selected_row);
 	else
 		selected_net = NULL;
+
+	servlist_update_actions ();
 }
 
 static void
@@ -447,7 +591,7 @@ servlist_validate_user_entries (void)
 	nick2 = gtk_editable_get_text (GTK_EDITABLE (entry_nick2));
 	user = gtk_editable_get_text (GTK_EDITABLE (entry_guser));
 
-	ok = TRUE;
+	ok = selected_net != NULL;
 	if (!user || user[0] == 0)
 		ok = FALSE;
 	if (!nick1 || nick1[0] == 0)
@@ -770,6 +914,11 @@ servlist_close_request_cb (GtkWindow *window, gpointer userdata)
 	checkbutton_skip = NULL;
 	checkbutton_fav = NULL;
 	button_connect = NULL;
+	button_add_net = NULL;
+	button_remove_net = NULL;
+	button_edit_net = NULL;
+	button_sort_net = NULL;
+	button_favor_net = NULL;
 	selected_net = NULL;
 	servlist_sess = NULL;
 
@@ -1979,15 +2128,7 @@ void
 fe_serverlist_open (session *sess)
 {
 	GtkWidget *placeholder;
-	GtkWidget *button;
-	GtkWidget *button_box;
-	GtkWidget *add_button;
-	GtkWidget *remove_button;
-	GtkWidget *edit_button;
-	GtkWidget *sort_button;
-	GtkWidget *favor_button;
 	GtkWidget *cancel_button;
-	GtkWidget *header;
 	GtkBuilder *builder;
 	int width;
 	int height;
@@ -2012,12 +2153,11 @@ fe_serverlist_open (session *sess)
 	checkbutton_fav = fe_gtk4_builder_get_widget (builder, "servlist_check_fav", GTK_TYPE_CHECK_BUTTON);
 	button_connect = fe_gtk4_builder_get_widget (builder, "servlist_connect_button", GTK_TYPE_BUTTON);
 	cancel_button = fe_gtk4_builder_get_widget (builder, "servlist_cancel_button", GTK_TYPE_BUTTON);
-	button_box = fe_gtk4_builder_get_widget (builder, "servlist_networks_button_box", GTK_TYPE_BOX);
-	add_button = fe_gtk4_builder_get_widget (builder, "servlist_add_button", GTK_TYPE_BUTTON);
-	remove_button = fe_gtk4_builder_get_widget (builder, "servlist_remove_button", GTK_TYPE_BUTTON);
-	edit_button = fe_gtk4_builder_get_widget (builder, "servlist_edit_button", GTK_TYPE_BUTTON);
-	sort_button = fe_gtk4_builder_get_widget (builder, "servlist_sort_button", GTK_TYPE_BUTTON);
-	favor_button = fe_gtk4_builder_get_widget (builder, "servlist_favor_button", GTK_TYPE_BUTTON);
+	button_add_net = fe_gtk4_builder_get_widget (builder, "servlist_add_button", GTK_TYPE_BUTTON);
+	button_remove_net = fe_gtk4_builder_get_widget (builder, "servlist_remove_button", GTK_TYPE_BUTTON);
+	button_edit_net = fe_gtk4_builder_get_widget (builder, "servlist_edit_button", GTK_TYPE_BUTTON);
+	button_sort_net = fe_gtk4_builder_get_widget (builder, "servlist_sort_button", GTK_TYPE_BUTTON);
+	button_favor_net = fe_gtk4_builder_get_widget (builder, "servlist_favor_button", GTK_TYPE_BUTTON);
 	g_object_ref_sink (serverlist_win);
 	g_object_unref (builder);
 
@@ -2027,38 +2167,6 @@ fe_serverlist_open (session *sess)
 	gtk_window_set_default_size (GTK_WINDOW (serverlist_win), width, height);
 	if (main_window)
 		gtk_window_set_transient_for (GTK_WINDOW (serverlist_win), GTK_WINDOW (main_window));
-
-	gtk_widget_set_visible (button_box, FALSE);
-
-	header = adw_header_bar_new ();
-	adw_header_bar_set_show_start_title_buttons (ADW_HEADER_BAR (header), TRUE);
-	adw_header_bar_set_show_end_title_buttons (ADW_HEADER_BAR (header), TRUE);
-	gtk_window_set_titlebar (GTK_WINDOW (serverlist_win), header);
-
-	button = gtk_button_new_from_icon_name ("list-add-symbolic");
-	gtk_widget_set_tooltip_text (button, _("Add Network"));
-	g_signal_connect (button, "clicked", G_CALLBACK (servlist_addnet_cb), NULL);
-	adw_header_bar_pack_start (ADW_HEADER_BAR (header), button);
-
-	button = gtk_button_new_from_icon_name ("list-remove-symbolic");
-	gtk_widget_set_tooltip_text (button, _("Remove Network"));
-	g_signal_connect (button, "clicked", G_CALLBACK (servlist_deletenet_cb), NULL);
-	adw_header_bar_pack_start (ADW_HEADER_BAR (header), button);
-
-	button = gtk_button_new_from_icon_name ("document-edit-symbolic");
-	gtk_widget_set_tooltip_text (button, _("Edit Network"));
-	g_signal_connect (button, "clicked", G_CALLBACK (servlist_edit_cb), NULL);
-	adw_header_bar_pack_start (ADW_HEADER_BAR (header), button);
-
-	button = gtk_button_new_from_icon_name ("view-sort-ascending-symbolic");
-	gtk_widget_set_tooltip_text (button, _("Sort Networks"));
-	g_signal_connect (button, "clicked", G_CALLBACK (servlist_sort_cb), NULL);
-	adw_header_bar_pack_end (ADW_HEADER_BAR (header), button);
-
-	button = gtk_button_new_from_icon_name ("star-new-symbolic");
-	gtk_widget_set_tooltip_text (button, _("Toggle Favorite"));
-	g_signal_connect (button, "clicked", G_CALLBACK (servlist_favor_cb), NULL);
-	adw_header_bar_pack_end (ADW_HEADER_BAR (header), button);
 
 	gtk_editable_set_text (GTK_EDITABLE (entry_nick1), prefs.hex_irc_nick1);
 	gtk_editable_set_text (GTK_EDITABLE (entry_nick2), prefs.hex_irc_nick2);
@@ -2082,11 +2190,11 @@ fe_serverlist_open (session *sess)
 		gtk_widget_add_controller (networks_list, controller);
 	}
 
-	g_signal_connect (add_button, "clicked", G_CALLBACK (servlist_addnet_cb), NULL);
-	g_signal_connect (remove_button, "clicked", G_CALLBACK (servlist_deletenet_cb), NULL);
-	g_signal_connect (edit_button, "clicked", G_CALLBACK (servlist_edit_cb), NULL);
-	g_signal_connect (sort_button, "clicked", G_CALLBACK (servlist_sort_cb), NULL);
-	g_signal_connect (favor_button, "clicked", G_CALLBACK (servlist_favor_cb), NULL);
+	g_signal_connect (button_add_net, "clicked", G_CALLBACK (servlist_addnet_cb), NULL);
+	g_signal_connect (button_remove_net, "clicked", G_CALLBACK (servlist_deletenet_cb), NULL);
+	g_signal_connect (button_edit_net, "clicked", G_CALLBACK (servlist_edit_cb), NULL);
+	g_signal_connect (button_sort_net, "clicked", G_CALLBACK (servlist_sort_cb), NULL);
+	g_signal_connect (button_favor_net, "clicked", G_CALLBACK (servlist_favor_cb), NULL);
 
 	gtk_check_button_set_active (GTK_CHECK_BUTTON (checkbutton_skip), prefs.hex_gui_slist_skip);
 	g_signal_connect (checkbutton_skip, "toggled", G_CALLBACK (no_servlist), NULL);
@@ -2101,7 +2209,7 @@ fe_serverlist_open (session *sess)
 	g_signal_connect (entry_nick2, "changed", G_CALLBACK (servlist_nick_changed_cb), NULL);
 
 	servlist_networks_populate (networks_list, network_list);
-	servlist_validate_user_entries ();
+	servlist_update_actions ();
 
 	g_signal_connect (serverlist_win, "close-request", G_CALLBACK (servlist_close_request_cb), NULL);
 	gtk_window_present (GTK_WINDOW (serverlist_win));
@@ -2128,6 +2236,11 @@ fe_gtk4_servlistgui_cleanup (void)
 	checkbutton_skip = NULL;
 	checkbutton_fav = NULL;
 	button_connect = NULL;
+	button_add_net = NULL;
+	button_remove_net = NULL;
+	button_edit_net = NULL;
+	button_sort_net = NULL;
+	button_favor_net = NULL;
 	selected_net = NULL;
 	selected_serv = NULL;
 	selected_cmd = NULL;
