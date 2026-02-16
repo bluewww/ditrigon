@@ -1,55 +1,43 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
-  <requires lib="gtk" version="4.0"/>
+  <!-- interface-name servlist-edit-window.ui -->
   <requires lib="Adw" version="1.0"/>
-
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.7"/>
   <object class="AdwPreferencesWindow" id="servlist_edit_window">
-    <property name="default-width">680</property>
     <property name="default-height">600</property>
+    <property name="default-width">680</property>
     <property name="search-enabled">True</property>
-
-    <!-- General Page -->
     <child>
       <object class="AdwPreferencesPage" id="page_general">
-        <property name="title" translatable="yes">General</property>
         <property name="icon-name">preferences-system-symbolic</property>
-
-        <!-- Network Identity Group -->
+        <property name="title" translatable="yes">General</property>
         <child>
           <object class="AdwPreferencesGroup" id="group_identity">
             <property name="title" translatable="yes">Network Identity</property>
           </object>
         </child>
-
-        <!-- Connection Options Group -->
         <child>
           <object class="AdwPreferencesGroup" id="group_connection">
             <property name="title" translatable="yes">Connection Options</property>
           </object>
         </child>
-
-        <!-- Security Group -->
         <child>
           <object class="AdwPreferencesGroup" id="group_security">
             <property name="title" translatable="yes">Security</property>
           </object>
         </child>
-
-        <!-- Authentication Group -->
         <child>
           <object class="AdwPreferencesGroup" id="group_auth">
             <property name="title" translatable="yes">Authentication</property>
           </object>
         </child>
-
-        <!-- User Information Group -->
         <child>
           <object class="AdwPreferencesGroup" id="group_user_info">
             <property name="title" translatable="yes">User Information</property>
           </object>
         </child>
-
-        <!-- Advanced Group -->
         <child>
           <object class="AdwPreferencesGroup" id="group_advanced">
             <property name="title" translatable="yes">Advanced</property>
@@ -57,13 +45,10 @@
         </child>
       </object>
     </child>
-
-    <!-- Servers Page -->
     <child>
       <object class="AdwPreferencesPage" id="page_servers">
-        <property name="title" translatable="yes">Servers</property>
         <property name="icon-name">network-server-symbolic</property>
-
+        <property name="title" translatable="yes">Servers</property>
         <child>
           <object class="AdwPreferencesGroup" id="group_servers">
             <child>
@@ -73,9 +58,6 @@
                 <child>
                   <object class="GtkBox">
                     <property name="spacing">6</property>
-                    <style>
-                      <class name="toolbar"/>
-                    </style>
                     <child>
                       <object class="GtkButton" id="servers_add_button">
                         <property name="icon-name">list-add-symbolic</property>
@@ -94,13 +76,13 @@
                         <property name="tooltip-text" translatable="yes">Edit Server</property>
                       </object>
                     </child>
+                    <style>
+                      <class name="toolbar"/>
+                    </style>
                   </object>
                 </child>
                 <child>
                   <object class="GtkScrolledWindow" id="servers_scroll">
-                    <property name="vexpand">True</property>
-                    <property name="height-request">300</property>
-                    <property name="hscrollbar-policy">never</property>
                     <property name="child">
                       <object class="GtkListBox" id="servers_list">
                         <property name="selection-mode">single</property>
@@ -109,6 +91,9 @@
                         </style>
                       </object>
                     </property>
+                    <property name="height-request">300</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vexpand">True</property>
                   </object>
                 </child>
               </object>
@@ -117,13 +102,10 @@
         </child>
       </object>
     </child>
-
-    <!-- Autojoin Channels Page -->
     <child>
       <object class="AdwPreferencesPage" id="page_channels">
-        <property name="title" translatable="yes">Autojoin Channels</property>
         <property name="icon-name">view-list-symbolic</property>
-
+        <property name="title" translatable="yes">Autojoin Channels</property>
         <child>
           <object class="AdwPreferencesGroup" id="group_channels">
             <child>
@@ -133,9 +115,6 @@
                 <child>
                   <object class="GtkBox">
                     <property name="spacing">6</property>
-                    <style>
-                      <class name="toolbar"/>
-                    </style>
                     <child>
                       <object class="GtkButton" id="channels_add_button">
                         <property name="icon-name">list-add-symbolic</property>
@@ -154,13 +133,13 @@
                         <property name="tooltip-text" translatable="yes">Edit Channel</property>
                       </object>
                     </child>
+                    <style>
+                      <class name="toolbar"/>
+                    </style>
                   </object>
                 </child>
                 <child>
                   <object class="GtkScrolledWindow" id="channels_scroll">
-                    <property name="vexpand">True</property>
-                    <property name="height-request">300</property>
-                    <property name="hscrollbar-policy">never</property>
                     <property name="child">
                       <object class="GtkListBox" id="channels_list">
                         <property name="selection-mode">single</property>
@@ -169,6 +148,9 @@
                         </style>
                       </object>
                     </property>
+                    <property name="height-request">300</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vexpand">True</property>
                   </object>
                 </child>
               </object>
@@ -177,13 +159,10 @@
         </child>
       </object>
     </child>
-
-    <!-- Connect Commands Page -->
     <child>
       <object class="AdwPreferencesPage" id="page_commands">
-        <property name="title" translatable="yes">Connect Commands</property>
         <property name="icon-name">applications-engineering-symbolic</property>
-
+        <property name="title" translatable="yes">Connect Commands</property>
         <child>
           <object class="AdwPreferencesGroup" id="group_commands">
             <child>
@@ -193,9 +172,6 @@
                 <child>
                   <object class="GtkBox">
                     <property name="spacing">6</property>
-                    <style>
-                      <class name="toolbar"/>
-                    </style>
                     <child>
                       <object class="GtkButton" id="commands_add_button">
                         <property name="icon-name">list-add-symbolic</property>
@@ -214,13 +190,13 @@
                         <property name="tooltip-text" translatable="yes">Edit Command</property>
                       </object>
                     </child>
+                    <style>
+                      <class name="toolbar"/>
+                    </style>
                   </object>
                 </child>
                 <child>
                   <object class="GtkScrolledWindow" id="commands_scroll">
-                    <property name="vexpand">True</property>
-                    <property name="height-request">300</property>
-                    <property name="hscrollbar-policy">never</property>
                     <property name="child">
                       <object class="GtkListBox" id="commands_list">
                         <property name="selection-mode">single</property>
@@ -229,6 +205,9 @@
                         </style>
                       </object>
                     </property>
+                    <property name="height-request">300</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vexpand">True</property>
                   </object>
                 </child>
               </object>
