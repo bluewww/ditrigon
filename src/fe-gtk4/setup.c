@@ -603,6 +603,8 @@ typedef struct
 	GtkWidget *font_row;
 	GtkWidget *font_value_label;
 	char *custom_font;
+	gboolean use_default;
+	gboolean use_default_initialized;
 	gboolean updating;
 } SetupAdwFontControl;
 
@@ -664,7 +666,12 @@ setup_adw_font_sync (SetupAdwFontControl *control)
 
 	font_name = setup_get_str (control->set);
 	default_font = fe_get_default_font ();
-	use_default = setup_adw_font_is_default (font_name);
+	if (!control->use_default_initialized)
+	{
+		control->use_default = setup_adw_font_is_default (font_name);
+		control->use_default_initialized = TRUE;
+	}
+	use_default = control->use_default;
 
 	control->updating = TRUE;
 	adw_switch_row_set_active (ADW_SWITCH_ROW (control->switch_row), use_default);
@@ -717,6 +724,8 @@ setup_adw_font_choose_finish_cb (GObject *source, GAsyncResult *result, gpointer
 		g_free (control->custom_font);
 		control->custom_font = g_strdup (font_name);
 	}
+	control->use_default = FALSE;
+	control->use_default_initialized = TRUE;
 	g_free (font_name);
 	pango_font_description_free (font_desc);
 
@@ -770,6 +779,7 @@ setup_adw_font_use_default_cb (GObject *object, GParamSpec *pspec, gpointer user
 	SetupAdwFontControl *control;
 	const char *default_font;
 	const char *current;
+	const char *font_name;
 	gboolean use_default;
 
 	(void) pspec;
@@ -785,6 +795,8 @@ setup_adw_font_use_default_cb (GObject *object, GParamSpec *pspec, gpointer user
 
 	current = setup_get_str (control->set);
 	use_default = adw_switch_row_get_active (ADW_SWITCH_ROW (control->switch_row));
+	control->use_default = use_default;
+	control->use_default_initialized = TRUE;
 	if (use_default)
 	{
 		if (current && current[0] && !setup_adw_font_is_default (current))
@@ -796,8 +808,9 @@ setup_adw_font_use_default_cb (GObject *object, GParamSpec *pspec, gpointer user
 	}
 	else
 	{
-		const char *font_name = (control->custom_font && control->custom_font[0]) ?
-			control->custom_font : default_font;
+		font_name = (control->custom_font && control->custom_font[0]) ?
+			control->custom_font :
+			(current && current[0] ? current : default_font);
 		g_strlcpy (setup_get_str (control->set), font_name, (gsize) control->set->extra);
 	}
 
