@@ -89,31 +89,33 @@
                 <property name="child">
                   <object class="GtkBox">
                     <property name="orientation">vertical</property>
-                    <property name="spacing">0</property>
                     <child>
                       <object class="GtkBox">
-                        <property name="margin-end">6</property>
-                        <property name="margin-start">6</property>
-                        <property name="margin-top">6</property>
-                        <property name="spacing">6</property>
                         <child>
-                          <object class="GtkMenuButton">
-                            <property name="icon-name">view-more-symbolic</property>
-                            <property name="menu-model">network_menu</property>
-                            <property name="tooltip-text" translatable="yes">Network Actions</property>
+                          <object class="GtkSearchBar" id="servlist_search_bar">
+                            <property name="child">
+                              <object class="GtkSearchEntry" id="servlist_networks_search_entry">
+                                <property name="hexpand">True</property>
+                                <property name="placeholder-text" translatable="yes">Search networks</property>
+                              </object>
+                            </property>
+                            <property name="css-classes">inline</property>
+                            <property name="search-mode-enabled">True</property>
                           </object>
                         </child>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkSearchBar" id="servlist_search_bar">
-                        <property name="child">
-                          <object class="GtkSearchEntry" id="servlist_networks_search_entry">
-                            <property name="hexpand">True</property>
-                            <property name="placeholder-text" translatable="yes">Search networks</property>
+                        <child>
+                          <object class="GtkMenuButton">
+                            <property name="halign">center</property>
+                            <property name="icon-name">view-more-symbolic</property>
+                            <property name="margin-bottom">6</property>
+                            <property name="margin-end">6</property>
+                            <property name="margin-start">6</property>
+                            <property name="margin-top">6</property>
+                            <property name="menu-model">network_menu</property>
+                            <property name="tooltip-text" translatable="yes">Network Actions</property>
+                            <property name="valign">center</property>
                           </object>
-                        </property>
-                        <property name="search-mode-enabled">True</property>
+                        </child>
                       </object>
                     </child>
                     <child>
@@ -137,6 +139,10 @@
                         </child>
                         <child>
                           <object class="GtkActionBar">
+                            <property name="margin-bottom">3</property>
+                            <property name="margin-end">3</property>
+                            <property name="margin-start">3</property>
+                            <property name="margin-top">3</property>
                             <child type="start">
                               <object class="GtkBox">
                                 <property name="spacing">6</property>
@@ -183,6 +189,7 @@
                         </child>
                       </object>
                     </child>
+                    <style/>
                   </object>
                 </property>
                 <property name="title" translatable="yes">Networks</property>
