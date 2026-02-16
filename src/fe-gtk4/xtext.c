@@ -1702,16 +1702,40 @@ xtext_scroll_to_end (void)
 	gtk_text_view_scroll_mark_onscreen (GTK_TEXT_VIEW (log_view), mark);
 }
 
+/* check if we are scrolled to the bottom */
 static void
-xtext_show_session_rendered (session *sess, gboolean keep_scroll)
+xtext_is_at_end (void)
 {
-	GString *log;
 	GtkAdjustment *vadj;
 	double old_value;
 	double upper;
 	double page;
+
+	vadj = NULL;
+	old_value = 0.0;
+
+	if (log_view)
+	{
+		vadj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (log_view));
+		if (vadj)
+		{
+			old_value = gtk_adjustment_get_value (vadj);
+			upper = gtk_adjustment_get_upper (vadj);
+			page = gtk_adjustment_get_page_size (vadj);
+			return (old_value + page) >= (upper - 2.0);
+		}
+	}
+
+	return TRUE;
+}
+
+static void
+xtext_show_session_rendered (session *sess)
+{
+	GString *log;
 	double max_value;
 	gboolean was_at_end;
+	GtkAdjustment *vadj;
 
 	if (!log_buffer)
 		return;
@@ -1720,42 +1744,21 @@ xtext_show_session_rendered (session *sess, gboolean keep_scroll)
 	if (session_logs && sess)
 		log = g_hash_table_lookup (session_logs, sess);
 
-	vadj = NULL;
-	old_value = 0.0;
-	was_at_end = TRUE;
-	if (keep_scroll && log_view)
-	{
-		vadj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (log_view));
-		if (vadj)
-		{
-			old_value = gtk_adjustment_get_value (vadj);
-			upper = gtk_adjustment_get_upper (vadj);
-			page = gtk_adjustment_get_page_size (vadj);
-			was_at_end = (old_value + page) >= (upper - 2.0);
-		}
-	}
+	/* TODO: remove this later */
+	/* was_at_end = TRUE; */
+	/* vadj = NULL; */
+
+
 
 	xtext_render_session = (sess && is_session (sess)) ? sess : NULL;
 	xtext_render_raw_all (log ? log->str : "");
 	xtext_render_session = NULL;
 
-	if (!keep_scroll || was_at_end || !vadj)
-	{
-		xtext_scroll_to_end ();
-		return;
-	}
-
-	upper = gtk_adjustment_get_upper (vadj);
-	page = gtk_adjustment_get_page_size (vadj);
-	max_value = upper - page;
-	if (max_value < 0.0)
-		max_value = 0.0;
-	if (old_value > max_value)
-		old_value = max_value;
-	if (old_value < 0.0)
-		old_value = 0.0;
-
-	gtk_adjustment_set_value (vadj, old_value);
+	/* if (was_at_end || !vadj) */
+	/* { */
+	xtext_scroll_to_end ();
+	/* return; */
+	/* } */
 }
 
 static gboolean
@@ -1767,7 +1770,7 @@ xtext_resize_refresh_idle_cb (gpointer user_data)
 	if (!log_view || !current_tab || !is_session (current_tab))
 		return G_SOURCE_REMOVE;
 
-	xtext_show_session_rendered (current_tab, TRUE);
+	xtext_show_session_rendered (current_tab);
 	return G_SOURCE_REMOVE;
 }
 
@@ -2088,7 +2091,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 void
 fe_gtk4_xtext_show_session (session *sess)
 {
-	xtext_show_session_rendered (sess, FALSE);
+	xtext_show_session_rendered (sess);
 }
 
 void
