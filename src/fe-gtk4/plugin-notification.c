@@ -78,13 +78,20 @@ is_ignored (char *nick)
 static void
 show_notification (const char *title, const char *text)
 {
+	const char *channel;
+	const char *network;
+	const char *servname;
 	char *stripped_title, *stripped_text;
 
 	/* Strip all colors */
 	stripped_title = hexchat_strip (ph, title, -1, 7);
 	stripped_text = hexchat_strip (ph, text, -1, 7);
-	
-	notification_backend_show (stripped_title, stripped_text);
+
+	channel = hexchat_get_info (ph, "channel");
+	network = hexchat_get_info (ph, "network");
+	servname = network ? network : hexchat_get_info (ph, "server");
+
+	notification_backend_show_for_context (stripped_title, stripped_text, servname, channel);
 
 	hexchat_free (ph, stripped_title);
 	hexchat_free (ph, stripped_text);
@@ -205,6 +212,31 @@ tray_cmd_cb (char *word[], char *word_eol[], gpointer userdata)
 	return HEXCHAT_EAT_NONE;
 }
 
+static void
+notification_activated_cb (const char *servname, const char *channel, void *userdata)
+{
+	hexchat_context *ctx;
+
+	(void) userdata;
+
+	if (!ph)
+		return;
+
+	ctx = NULL;
+	if (channel && channel[0])
+		ctx = hexchat_find_context (ph, servname, channel);
+	if (!ctx && servname && servname[0])
+		ctx = hexchat_find_context (ph, servname, NULL);
+	if (!ctx)
+		ctx = hexchat_find_context (ph, NULL, NULL);
+
+	if (ctx)
+		hexchat_set_context (ph, ctx);
+
+	hexchat_command (ph, "GUI SHOW");
+	hexchat_command (ph, "GUI FOCUS");
+}
+
 int
 notification_plugin_init (hexchat_plugin *plugin_handle, char **plugin_name, char **plugin_desc, char **plugin_version, char *arg)
 {
@@ -221,6 +253,7 @@ notification_plugin_init (hexchat_plugin *plugin_handle, char **plugin_name, cha
 			g_debug("Failed loading notification plugin: %s\n", error);
 		return 0;
 	}
+	notification_backend_set_activation_callback (notification_activated_cb, NULL);
 
 	hexchat_hook_print (ph, "Channel Msg Hilight", HEXCHAT_PRI_LOWEST, incoming_hilight_cb, NULL);
 	hexchat_hook_print (ph, "Channel Action Hilight", HEXCHAT_PRI_LOWEST, incoming_hilight_cb, NULL);
@@ -248,6 +281,7 @@ notification_plugin_init (hexchat_plugin *plugin_handle, char **plugin_name, cha
 int
 notification_plugin_deinit (void *unused_param)
 {
+	notification_backend_set_activation_callback (NULL, NULL);
 	notification_backend_deinit ();
 	return 1;
 }

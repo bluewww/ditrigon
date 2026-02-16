@@ -19,8 +19,12 @@
 #ifndef HEXCHAT_PLUGIN_NOTIFICATION_BACKEND_H
 #define HEXCHAT_PLUGIN_NOTIFICATION_BACKEND_H
 
+typedef void (*notification_backend_activate_cb) (const char *servname, const char *channel, void *userdata);
+
 int notification_backend_supported (void);
 void notification_backend_show (const char *title, const char *text);
+void notification_backend_show_for_context (const char *title, const char *text, const char *servname, const char *channel);
+void notification_backend_set_activation_callback (notification_backend_activate_cb callback, void *userdata);
 int notification_backend_init (const char **error);
 void notification_backend_deinit (void);
 

@@ -16,14 +16,35 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include "notification-backend.h"
+
 void
 notification_backend_show (const char *title, const char *text)
 {
+	(void) title;
+	(void) text;
+}
+
+void
+notification_backend_show_for_context (const char *title, const char *text, const char *servname, const char *channel)
+{
+	(void) title;
+	(void) text;
+	(void) servname;
+	(void) channel;
+}
+
+void
+notification_backend_set_activation_callback (notification_backend_activate_cb callback, void *userdata)
+{
+	(void) callback;
+	(void) userdata;
 }
 
 int
 notification_backend_init (const char **error)
 {
+	(void) error;
 	return 0;
 }
 
