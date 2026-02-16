@@ -4,6 +4,11 @@
 #include "../common/url.h"
 #include <adwaita.h>
 
+#ifdef USE_PLUGIN
+int notification_plugin_init (void *, char **, char **, char **, char *);
+int notification_plugin_deinit (void *);
+#endif
+
 GtkWidget *main_window;
 GtkWidget *main_box;
 GtkWidget *menu_bar;
@@ -44,6 +49,24 @@ static AdwNavigationPage *main_nav_content_page;
 #define MAINGUI_UI_BASE "/org/hexchat/ui/gtk4/maingui"
 
 static int done_intro;
+
+#ifdef USE_PLUGIN
+static int
+fe_idle (gpointer data)
+{
+	session *sess;
+
+	(void) data;
+
+	sess = sess_list ? sess_list->data : NULL;
+	if (!sess)
+		return G_SOURCE_REMOVE;
+
+	plugin_add (sess, NULL, NULL, notification_plugin_init, notification_plugin_deinit, NULL, FALSE);
+
+	return G_SOURCE_REMOVE;
+}
+#endif
 
 static int
 maingui_right_pane_min_size (void)
@@ -1250,6 +1273,11 @@ fe_new_window (struct session *sess, int focus)
 
 	if (focus)
 		gtk_window_present (GTK_WINDOW (main_window));
+
+#ifdef USE_PLUGIN
+	if (!sess_list->next)
+		g_idle_add (fe_idle, NULL);
+#endif
 
 	if (done_intro)
 		return;
