@@ -3,6 +3,8 @@
 #include "../common/url.h"
 #include "../common/userlist.h"
 
+#define XTEXT_UI_PATH "/org/hexchat/ui/gtk4/maingui/xtext-scroll.ui"
+
 typedef struct
 {
 	int fg;
@@ -1927,12 +1929,10 @@ fe_gtk4_xtext_cleanup (void)
 GtkWidget *
 fe_gtk4_xtext_create_widget (void)
 {
+	GtkBuilder *builder;
 	GtkWidget *scroll;
 	GdkRGBA stamp_rgba;
 
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_hexpand (scroll, TRUE);
-	gtk_widget_set_vexpand (scroll, TRUE);
 	if (log_view && xtext_resize_tick_id != 0)
 	{
 		gtk_widget_remove_tick_callback (log_view, xtext_resize_tick_id);
@@ -1945,11 +1945,12 @@ fe_gtk4_xtext_create_widget (void)
 	}
 	xtext_last_view_width = -1;
 
-	log_view = gtk_text_view_new ();
-	gtk_text_view_set_editable (GTK_TEXT_VIEW (log_view), FALSE);
-	gtk_text_view_set_cursor_visible (GTK_TEXT_VIEW (log_view), FALSE);
-	gtk_text_view_set_monospace (GTK_TEXT_VIEW (log_view), TRUE);
-	gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (log_view), GTK_WRAP_WORD_CHAR);
+	builder = fe_gtk4_builder_new_from_resource (XTEXT_UI_PATH);
+	scroll = fe_gtk4_builder_get_widget (builder, "xtext_scroll", GTK_TYPE_SCROLLED_WINDOW);
+	log_view = fe_gtk4_builder_get_widget (builder, "xtext_log_view", GTK_TYPE_TEXT_VIEW);
+	g_object_ref (scroll);
+	g_object_unref (builder);
+
 	gtk_text_view_set_tabs (GTK_TEXT_VIEW (log_view), NULL);
 	{
 		GtkGesture *gesture;
@@ -1973,7 +1974,6 @@ fe_gtk4_xtext_create_widget (void)
 		g_signal_connect (motion, "leave", G_CALLBACK (xtext_motion_leave_cb), NULL);
 		gtk_widget_add_controller (log_view, motion);
 	}
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), log_view);
 
 	log_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (log_view));
 

@@ -40,6 +40,7 @@
 		<file>ui/gtk4/dialogs/servlist-edit-window.ui</file>
 		<file>ui/gtk4/maingui/main-box.ui</file>
 		<file>ui/gtk4/maingui/chat-layout.ui</file>
+		<file>ui/gtk4/maingui/xtext-scroll.ui</file>
 		<file>ui/gtk4/maingui/legacy-content-paned.ui</file>
 		<file>ui/gtk4/maingui/adw-nav-split.ui</file>
 		<file>ui/gtk4/setup/preferences-window.ui</file>
