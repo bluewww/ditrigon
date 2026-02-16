@@ -42,18 +42,21 @@ static GtkWidget *button_favor_net;
 
 static GtkWidget *edit_win;
 static GtkWidget *edit_lists[N_TREES];
-static GtkWidget *edit_notebook;
-static GtkWidget *edit_entry_netname;
-static GtkWidget *edit_entry_nick;
-static GtkWidget *edit_entry_nick2;
-static GtkWidget *edit_entry_user;
-static GtkWidget *edit_entry_real;
-static GtkWidget *edit_entry_pass;
-static GtkWidget *edit_entry_charset;
-static GtkWidget *edit_label_nick;
-static GtkWidget *edit_label_nick2;
-static GtkWidget *edit_label_user;
-static GtkWidget *edit_label_real;
+static AdwEntryRow *edit_row_netname;
+static AdwEntryRow *edit_row_nick;
+static AdwEntryRow *edit_row_nick2;
+static AdwEntryRow *edit_row_user;
+static AdwEntryRow *edit_row_real;
+static AdwPasswordEntryRow *edit_row_pass;
+static AdwComboRow *edit_row_login;
+static AdwEntryRow *edit_row_charset;
+static GtkDropDown *edit_charset_dropdown;
+static AdwSwitchRow *edit_row_use_global;
+static AdwSwitchRow *edit_row_connect_selected;
+static AdwSwitchRow *edit_row_auto_connect;
+static AdwSwitchRow *edit_row_bypass_proxy;
+static AdwSwitchRow *edit_row_use_ssl;
+static AdwSwitchRow *edit_row_allow_invalid;
 
 static ircnet *selected_net;
 static ircserver *selected_serv;
@@ -65,7 +68,6 @@ static int netlist_win_width;
 static int netlist_win_height;
 static int netedit_win_width;
 static int netedit_win_height;
-static int netedit_active_tab;
 
 /* Keep these in sync with login_types[] order. */
 static int login_types_conf[] =
@@ -128,42 +130,6 @@ static const char *pages[] =
 	NULL
 };
 
-static const char *const edit_page_names[N_TREES] =
-{
-	"servers",
-	"channels",
-	"commands"
-};
-
-static int
-servlist_edit_get_current_page (void)
-{
-	const char *name;
-	int i;
-
-	if (!edit_notebook)
-		return SERVER_TREE;
-
-	name = adw_view_stack_get_visible_child_name (ADW_VIEW_STACK (edit_notebook));
-	for (i = 0; i < N_TREES; i++)
-	{
-		if (g_strcmp0 (name, edit_page_names[i]) == 0)
-			return i;
-	}
-
-	return SERVER_TREE;
-}
-
-static void
-servlist_edit_set_current_page (int page)
-{
-	page = CLAMP (page, 0, N_TREES - 1);
-
-	if (!edit_notebook)
-		return;
-
-	adw_view_stack_set_visible_child_name (ADW_VIEW_STACK (edit_notebook), edit_page_names[page]);
-}
 
 static void servlist_networks_populate (GtkWidget *list, GSList *netlist);
 static GtkWidget *servlist_open_edit (GtkWidget *parent, ircnet *net);
@@ -211,22 +177,6 @@ servlist_sanitize_command (const char *cmd)
 	return g_strdup (cmd ? cmd : "");
 }
 
-static void
-servlist_update_from_entry (char **str, GtkWidget *entry)
-{
-	const char *text;
-
-	if (!str || !entry)
-		return;
-
-	text = gtk_editable_get_text (GTK_EDITABLE (entry));
-	g_free (*str);
-
-	if (!text || text[0] == 0)
-		*str = NULL;
-	else
-		*str = g_strdup (text);
-}
 
 static int
 servlist_get_login_desc_index (int conf_value)
@@ -1316,15 +1266,11 @@ servlist_addchannel (void)
 static void
 servlist_addbutton_cb (GtkWidget *item, gpointer userdata)
 {
-	guint page;
+	int page;
 
 	(void) item;
-	(void) userdata;
 
-	if (!edit_notebook)
-		return;
-
-	page = servlist_edit_get_current_page ();
+	page = GPOINTER_TO_INT (userdata);
 	switch (page)
 	{
 	case SERVER_TREE:
@@ -1412,15 +1358,11 @@ servlist_deletechannel_cb (void)
 static void
 servlist_deletebutton_cb (GtkWidget *item, gpointer userdata)
 {
-	guint page;
+	int page;
 
 	(void) item;
-	(void) userdata;
 
-	if (!edit_notebook)
-		return;
-
-	page = servlist_edit_get_current_page ();
+	page = GPOINTER_TO_INT (userdata);
 	switch (page)
 	{
 	case SERVER_TREE:
@@ -1440,16 +1382,12 @@ servlist_deletebutton_cb (GtkWidget *item, gpointer userdata)
 static void
 servlist_editbutton_cb (GtkWidget *item, gpointer userdata)
 {
-	guint page;
+	int page;
 
 	(void) item;
-	(void) userdata;
 
-	if (!edit_notebook)
-		return;
-
-	page = servlist_edit_get_current_page ();
-	if (page < N_TREES)
+	page = GPOINTER_TO_INT (userdata);
+	if (page >= 0 && page < N_TREES)
 		servlist_start_editing (GTK_LIST_BOX (edit_lists[page]));
 }
 
@@ -1461,12 +1399,12 @@ servlist_keypress_cb (GtkEventControllerKey *controller,
 	gpointer userdata)
 {
 	int delta;
-	guint page;
+	int page;
 
 	(void) controller;
 	(void) keycode;
 
-	if (!selected_net || !edit_notebook)
+	if (!selected_net)
 		return FALSE;
 	if (!(state & GDK_SHIFT_MASK))
 		return FALSE;
@@ -1479,8 +1417,7 @@ servlist_keypress_cb (GtkEventControllerKey *controller,
 	if (!delta)
 		return FALSE;
 
-	(void) userdata;
-	page = servlist_edit_get_current_page ();
+	page = GPOINTER_TO_INT (userdata);
 	switch (page)
 	{
 	case SERVER_TREE:
@@ -1513,208 +1450,6 @@ servlist_keypress_cb (GtkEventControllerKey *controller,
 	return TRUE;
 }
 
-static void
-servlist_toggle_global_user (gboolean sensitive)
-{
-	if (!edit_entry_nick || !edit_entry_nick2 || !edit_entry_user || !edit_entry_real)
-		return;
-
-	gtk_widget_set_sensitive (edit_entry_nick, sensitive);
-	gtk_widget_set_sensitive (edit_label_nick, sensitive);
-	gtk_widget_set_sensitive (edit_entry_nick2, sensitive);
-	gtk_widget_set_sensitive (edit_label_nick2, sensitive);
-	gtk_widget_set_sensitive (edit_entry_user, sensitive);
-	gtk_widget_set_sensitive (edit_label_user, sensitive);
-	gtk_widget_set_sensitive (edit_entry_real, sensitive);
-	gtk_widget_set_sensitive (edit_label_real, sensitive);
-}
-
-static void
-servlist_check_cb (GtkWidget *check, gpointer num_p)
-{
-	int num;
-	guint32 mask;
-	gboolean active;
-
-	if (!selected_net)
-		return;
-
-	num = GPOINTER_TO_INT (num_p);
-	mask = (guint32) (1 << num);
-	active = gtk_check_button_get_active (GTK_CHECK_BUTTON (check));
-
-	if (mask == FLAG_CYCLE || mask == FLAG_USE_PROXY)
-	{
-		/* reversed for compatibility with old semantics */
-		if (active)
-			selected_net->flags &= ~mask;
-		else
-			selected_net->flags |= mask;
-	}
-	else
-	{
-		if (active)
-			selected_net->flags |= mask;
-		else
-			selected_net->flags &= ~mask;
-	}
-
-	if (mask == FLAG_USE_GLOBAL)
-		servlist_toggle_global_user (!active);
-}
-
-static GtkWidget *
-servlist_create_check (int num, int state, GtkWidget *grid, int row, int col, const char *labeltext)
-{
-	GtkWidget *check;
-
-	check = gtk_check_button_new_with_label (labeltext ? labeltext : "");
-	gtk_check_button_set_active (GTK_CHECK_BUTTON (check), state ? TRUE : FALSE);
-	g_signal_connect (check, "toggled", G_CALLBACK (servlist_check_cb), GINT_TO_POINTER (num));
-	gtk_grid_attach (GTK_GRID (grid), check, col, row, 2, 1);
-
-	return check;
-}
-
-static GtkWidget *
-servlist_create_entry (GtkWidget *grid, const char *labeltext, int row,
-	const char *def, GtkWidget **label_ret, const char *tip)
-{
-	GtkWidget *label;
-	GtkWidget *entry;
-
-	label = gtk_label_new (labeltext ? labeltext : "");
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	if (label_ret)
-		*label_ret = label;
-	gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
-
-	entry = gtk_entry_new ();
-	gtk_editable_set_text (GTK_EDITABLE (entry), def ? def : "");
-	if (tip)
-		gtk_widget_set_tooltip_text (entry, tip);
-	gtk_grid_attach (GTK_GRID (grid), entry, 1, row, 1, 1);
-
-	return entry;
-}
-
-static void
-servlist_combo_cb (GtkEditable *editable, gpointer userdata)
-{
-	(void) userdata;
-
-	if (!selected_net)
-		return;
-
-	g_free (selected_net->encoding);
-	selected_net->encoding = g_strdup (gtk_editable_get_text (editable));
-}
-
-static void
-servlist_charset_selected_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
-{
-	GtkDropDown *dd;
-	guint index;
-
-	(void) pspec;
-	(void) userdata;
-
-	dd = GTK_DROP_DOWN (object);
-	index = gtk_drop_down_get_selected (dd);
-	if (index == GTK_INVALID_LIST_POSITION)
-		return;
-	if (!edit_entry_charset)
-		return;
-	if (!pages[index])
-		return;
-
-	gtk_editable_set_text (GTK_EDITABLE (edit_entry_charset), pages[index]);
-}
-
-static GtkWidget *
-servlist_create_charsetcombo (void)
-{
-	GtkWidget *box;
-	GtkWidget *entry;
-	GtkWidget *dd;
-	guint i;
-	guint selected;
-
-	box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	entry = gtk_entry_new ();
-	gtk_widget_set_hexpand (entry, TRUE);
-	gtk_editable_set_text (GTK_EDITABLE (entry),
-		selected_net && selected_net->encoding ? selected_net->encoding : pages[0]);
-	g_signal_connect (entry, "changed", G_CALLBACK (servlist_combo_cb), NULL);
-	gtk_box_append (GTK_BOX (box), entry);
-	edit_entry_charset = entry;
-
-	dd = gtk_drop_down_new_from_strings (pages);
-	selected = 0;
-	for (i = 0; pages[i]; i++)
-	{
-		if (selected_net && selected_net->encoding && g_strcmp0 (selected_net->encoding, pages[i]) == 0)
-		{
-			selected = i;
-			break;
-		}
-	}
-	gtk_drop_down_set_selected (GTK_DROP_DOWN (dd), selected);
-	g_signal_connect (dd, "notify::selected", G_CALLBACK (servlist_charset_selected_cb), NULL);
-	gtk_box_append (GTK_BOX (box), dd);
-
-	return box;
-}
-
-static void
-servlist_logintypecombo_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
-{
-	GtkDropDown *dd;
-	guint index;
-	int length;
-
-	(void) pspec;
-	(void) userdata;
-
-	if (!selected_net)
-		return;
-
-	dd = GTK_DROP_DOWN (object);
-	index = gtk_drop_down_get_selected (dd);
-	if (index == GTK_INVALID_LIST_POSITION)
-		return;
-	length = (int) (sizeof (login_types_conf) / sizeof (login_types_conf[0]));
-	if ((int) index >= length)
-		return;
-
-	selected_net->logintype = login_types_conf[index];
-
-	if (login_types_conf[index] == LOGIN_CUSTOM && edit_notebook)
-		servlist_edit_set_current_page (CMD_TREE);
-
-	if (edit_entry_pass)
-	{
-		if (login_types_conf[index] == LOGIN_SASLEXTERNAL)
-			gtk_widget_set_sensitive (edit_entry_pass, FALSE);
-		else
-			gtk_widget_set_sensitive (edit_entry_pass, TRUE);
-	}
-}
-
-static GtkWidget *
-servlist_create_logintypecombo (void)
-{
-	GtkWidget *dd;
-
-	dd = gtk_drop_down_new_from_strings (login_types);
-	gtk_drop_down_set_selected (GTK_DROP_DOWN (dd),
-		servlist_get_login_desc_index (selected_net ? selected_net->logintype : 0));
-	gtk_widget_set_tooltip_text (dd,
-		_("The way you identify yourself to the server. For custom login methods use connect commands."));
-	g_signal_connect (dd, "notify::selected", G_CALLBACK (servlist_logintypecombo_cb), NULL);
-
-	return dd;
-}
 
 static void
 servlist_cleanup_servers (ircnet *net)
@@ -1819,50 +1554,72 @@ servlist_cleanup_channels (ircnet *net)
 static void
 servlist_edit_update (ircnet *net)
 {
-	const char *name;
-	guint login_index;
-	int length;
+	const char *text;
 
 	if (!net)
 		return;
 
-	name = gtk_editable_get_text (GTK_EDITABLE (edit_entry_netname));
-	if (name && name[0])
+	/* Network name */
+	if (edit_row_netname)
 	{
-		g_free (net->name);
-		net->name = g_strdup (name);
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_netname));
+		if (text && text[0])
+		{
+			g_free (net->name);
+			net->name = g_strdup (text);
+		}
 	}
 
-	servlist_update_from_entry (&net->nick, edit_entry_nick);
-	servlist_update_from_entry (&net->nick2, edit_entry_nick2);
-	servlist_update_from_entry (&net->user, edit_entry_user);
-	servlist_update_from_entry (&net->real, edit_entry_real);
-	servlist_update_from_entry (&net->pass, edit_entry_pass);
-	servlist_update_from_entry (&net->encoding, edit_entry_charset);
-
-	if (edit_entry_charset && (!net->encoding || !net->encoding[0]))
+	/* Nick names, user, and real name */
+	if (edit_row_nick)
 	{
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_nick));
+		g_free (net->nick);
+		net->nick = (text && text[0]) ? g_strdup (text) : NULL;
+	}
+
+	if (edit_row_nick2)
+	{
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_nick2));
+		g_free (net->nick2);
+		net->nick2 = (text && text[0]) ? g_strdup (text) : NULL;
+	}
+
+	if (edit_row_user)
+	{
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_user));
+		g_free (net->user);
+		net->user = (text && text[0]) ? g_strdup (text) : NULL;
+	}
+
+	if (edit_row_real)
+	{
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_real));
+		g_free (net->real);
+		net->real = (text && text[0]) ? g_strdup (text) : NULL;
+	}
+
+	/* Password */
+	if (edit_row_pass)
+	{
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_pass));
+		g_free (net->pass);
+		net->pass = (text && text[0]) ? g_strdup (text) : NULL;
+	}
+
+	/* Character encoding */
+	if (edit_row_charset)
+	{
+		text = gtk_editable_get_text (GTK_EDITABLE (edit_row_charset));
 		g_free (net->encoding);
-		net->encoding = g_strdup (IRC_DEFAULT_CHARSET);
+		if (text && text[0])
+			net->encoding = g_strdup (text);
+		else
+			net->encoding = g_strdup (IRC_DEFAULT_CHARSET);
 	}
 
-	if (edit_notebook)
-		netedit_active_tab = servlist_edit_get_current_page ();
-
-	login_index = 0;
-	if (edit_notebook)
-	{
-		GtkWidget *grid;
-		GtkWidget *login_dd;
-
-		grid = g_object_get_data (G_OBJECT (edit_notebook), "hc-options-grid");
-		login_dd = grid ? g_object_get_data (G_OBJECT (grid), "hc-login-dd") : NULL;
-		if (login_dd)
-			login_index = gtk_drop_down_get_selected (GTK_DROP_DOWN (login_dd));
-	}
-	length = (int) (sizeof (login_types_conf) / sizeof (login_types_conf[0]));
-	if ((int) login_index >= 0 && (int) login_index < length)
-		net->logintype = login_types_conf[login_index];
+	/* Login type - already updated by signal handler */
+	/* Flags - already updated by signal handlers */
 
 	servlist_cleanup_servers (net);
 	servlist_cleanup_channels (net);
@@ -1894,18 +1651,21 @@ servlist_edit_close_request_cb (GtkWindow *window, gpointer userdata)
 
 	edit_win = NULL;
 	memset (edit_lists, 0, sizeof (edit_lists));
-	edit_notebook = NULL;
-	edit_entry_netname = NULL;
-	edit_entry_nick = NULL;
-	edit_entry_nick2 = NULL;
-	edit_entry_user = NULL;
-	edit_entry_real = NULL;
-	edit_entry_pass = NULL;
-	edit_entry_charset = NULL;
-	edit_label_nick = NULL;
-	edit_label_nick2 = NULL;
-	edit_label_user = NULL;
-	edit_label_real = NULL;
+	edit_row_netname = NULL;
+	edit_row_nick = NULL;
+	edit_row_nick2 = NULL;
+	edit_row_user = NULL;
+	edit_row_real = NULL;
+	edit_row_pass = NULL;
+	edit_row_login = NULL;
+	edit_row_charset = NULL;
+	edit_charset_dropdown = NULL;
+	edit_row_use_global = NULL;
+	edit_row_connect_selected = NULL;
+	edit_row_auto_connect = NULL;
+	edit_row_bypass_proxy = NULL;
+	edit_row_use_ssl = NULL;
+	edit_row_allow_invalid = NULL;
 	selected_serv = NULL;
 	selected_cmd = NULL;
 	selected_chan = NULL;
@@ -1913,192 +1673,358 @@ servlist_edit_close_request_cb (GtkWindow *window, gpointer userdata)
 	return FALSE;
 }
 
-static void
-servlist_edit_close_cb (GtkWidget *button, gpointer userdata)
-{
-	(void) button;
-	(void) userdata;
 
-	if (edit_win)
-		gtk_window_close (GTK_WINDOW (edit_win));
+static void
+servlist_edit_switch_toggled_cb (AdwSwitchRow *row, GParamSpec *pspec, gpointer user_data)
+{
+	int flag_num;
+	guint32 mask;
+	gboolean active;
+
+	(void) pspec;
+
+	if (!selected_net)
+		return;
+
+	flag_num = GPOINTER_TO_INT (user_data);
+	mask = (guint32) (1 << flag_num);
+	active = adw_switch_row_get_active (row);
+
+	/* FLAG_CYCLE and FLAG_USE_PROXY have inverted UI semantics */
+	if (mask == FLAG_CYCLE || mask == FLAG_USE_PROXY)
+	{
+		if (active)
+			selected_net->flags &= ~mask;
+		else
+			selected_net->flags |= mask;
+	}
+	else
+	{
+		if (active)
+			selected_net->flags |= mask;
+		else
+			selected_net->flags &= ~mask;
+	}
+}
+
+static void
+servlist_edit_global_user_toggled_cb (AdwSwitchRow *row, GParamSpec *pspec, gpointer user_data)
+{
+	gboolean active;
+	gboolean sensitive;
+
+	(void) pspec;
+	(void) user_data;
+
+	if (!selected_net)
+		return;
+
+	active = adw_switch_row_get_active (row);
+	sensitive = !active;
+
+	if (active)
+		selected_net->flags |= FLAG_USE_GLOBAL;
+	else
+		selected_net->flags &= ~FLAG_USE_GLOBAL;
+
+	if (edit_row_nick)
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_nick), sensitive);
+	if (edit_row_nick2)
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_nick2), sensitive);
+	if (edit_row_user)
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_user), sensitive);
+	if (edit_row_real)
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_real), sensitive);
+}
+
+static void
+servlist_edit_login_selected_cb (AdwComboRow *row, GParamSpec *pspec, gpointer user_data)
+{
+	guint index;
+	int length;
+
+	(void) pspec;
+	(void) user_data;
+
+	if (!selected_net)
+		return;
+
+	index = adw_combo_row_get_selected (row);
+	if (index == GTK_INVALID_LIST_POSITION)
+		return;
+
+	length = (int) (sizeof (login_types_conf) / sizeof (login_types_conf[0]));
+	if ((int) index >= length)
+		return;
+
+	selected_net->logintype = login_types_conf[index];
+
+	/* Disable password field for SASL EXTERNAL (cert-based auth) */
+	if (edit_row_pass)
+	{
+		if (login_types_conf[index] == LOGIN_SASLEXTERNAL)
+			gtk_widget_set_sensitive (GTK_WIDGET (edit_row_pass), FALSE);
+		else
+			gtk_widget_set_sensitive (GTK_WIDGET (edit_row_pass), TRUE);
+	}
+}
+
+static void
+servlist_edit_charset_entry_changed_cb (AdwEntryRow *row, gpointer user_data)
+{
+	const char *text;
+
+	(void) user_data;
+
+	if (!selected_net)
+		return;
+
+	text = gtk_editable_get_text (GTK_EDITABLE (row));
+	g_free (selected_net->encoding);
+	selected_net->encoding = g_strdup (text && text[0] ? text : IRC_DEFAULT_CHARSET);
+}
+
+static void
+servlist_edit_charset_dropdown_selected_cb (GObject *object, GParamSpec *pspec, gpointer user_data)
+{
+	GtkDropDown *dd;
+	guint index;
+	GtkStringObject *str_obj;
+	const char *text;
+
+	(void) pspec;
+	(void) user_data;
+
+	dd = GTK_DROP_DOWN (object);
+	index = gtk_drop_down_get_selected (dd);
+	if (index == GTK_INVALID_LIST_POSITION)
+		return;
+
+	str_obj = GTK_STRING_OBJECT (gtk_drop_down_get_selected_item (dd));
+	if (!str_obj)
+		return;
+
+	text = gtk_string_object_get_string (str_obj);
+	if (!edit_row_charset || !text)
+		return;
+
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_charset), text);
 }
 
 static GtkWidget *
 servlist_open_edit (GtkWidget *parent, ircnet *net)
 {
 	GtkWidget *window;
-	GtkWidget *pages_slot;
-	GtkWidget *pages_widget;
-	GtkWidget *scroll;
+	AdwPreferencesGroup *group;
 	GtkWidget *list;
-	GtkWidget *stack_box;
-	GtkWidget *switcher;
-	GtkWidget *add_button;
-	GtkWidget *remove_button;
-	GtkWidget *change_button;
-	GtkWidget *cancel_button;
-	GtkWidget *button;
-	GtkWidget *options_grid;
-	GtkWidget *check;
-	GtkWidget *label;
-	GtkWidget *row_box;
+	GtkWidget *add_button, *remove_button, *edit_button;
 	GtkBuilder *builder;
+	GtkStringList *string_list;
+	guint i, selected_index;
 	char *title;
-	int width;
-	int height;
+	int width, height;
 
 	builder = fe_gtk4_builder_new_from_resource (SERVLIST_EDIT_UI_PATH);
-	window = fe_gtk4_builder_get_widget (builder, "servlist_edit_window", GTK_TYPE_WINDOW);
-	edit_entry_netname = fe_gtk4_builder_get_widget (builder, "servlist_edit_name_entry", GTK_TYPE_ENTRY);
-	pages_slot = fe_gtk4_builder_get_widget (builder, "servlist_edit_pages_slot", GTK_TYPE_BOX);
-	options_grid = fe_gtk4_builder_get_widget (builder, "servlist_edit_options_grid", GTK_TYPE_GRID);
-	add_button = fe_gtk4_builder_get_widget (builder, "servlist_edit_add_button", GTK_TYPE_BUTTON);
-	remove_button = fe_gtk4_builder_get_widget (builder, "servlist_edit_remove_button", GTK_TYPE_BUTTON);
-	change_button = fe_gtk4_builder_get_widget (builder, "servlist_edit_change_button", GTK_TYPE_BUTTON);
-	cancel_button = fe_gtk4_builder_get_widget (builder, "servlist_edit_cancel_button", GTK_TYPE_BUTTON);
+	window = fe_gtk4_builder_get_widget (builder, "servlist_edit_window", ADW_TYPE_PREFERENCES_WINDOW);
+
+	/* Get the preference groups */
+	group = fe_gtk4_builder_get_widget (builder, "group_identity", ADW_TYPE_PREFERENCES_GROUP);
+
+	/* Network Identity Group */
+	edit_row_netname = ADW_ENTRY_ROW (adw_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_netname), _("Network name"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_netname), net->name ? net->name : "");
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_netname));
+
+	/* Connection Options Group */
+	group = fe_gtk4_builder_get_widget (builder, "group_connection", ADW_TYPE_PREFERENCES_GROUP);
+
+	edit_row_connect_selected = ADW_SWITCH_ROW (adw_switch_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_connect_selected), _("Connect to selected server only"));
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (edit_row_connect_selected), _("Don't cycle through servers when connection fails"));
+	adw_switch_row_set_active (edit_row_connect_selected, !(net->flags & FLAG_CYCLE));
+	g_signal_connect (edit_row_connect_selected, "notify::active", G_CALLBACK (servlist_edit_switch_toggled_cb), GINT_TO_POINTER (0));
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_connect_selected));
+
+	edit_row_auto_connect = ADW_SWITCH_ROW (adw_switch_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_auto_connect), _("Auto-connect on startup"));
+	adw_switch_row_set_active (edit_row_auto_connect, net->flags & FLAG_AUTO_CONNECT);
+	g_signal_connect (edit_row_auto_connect, "notify::active", G_CALLBACK (servlist_edit_switch_toggled_cb), GINT_TO_POINTER (3));
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_auto_connect));
+
+	edit_row_bypass_proxy = ADW_SWITCH_ROW (adw_switch_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_bypass_proxy), _("Bypass proxy server"));
+	adw_switch_row_set_active (edit_row_bypass_proxy, !(net->flags & FLAG_USE_PROXY));
+	g_signal_connect (edit_row_bypass_proxy, "notify::active", G_CALLBACK (servlist_edit_switch_toggled_cb), GINT_TO_POINTER (4));
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_bypass_proxy));
+
+	/* Security Group */
+	group = fe_gtk4_builder_get_widget (builder, "group_security", ADW_TYPE_PREFERENCES_GROUP);
+
+	edit_row_use_ssl = ADW_SWITCH_ROW (adw_switch_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_use_ssl), _("Use SSL for all servers"));
+	adw_switch_row_set_active (edit_row_use_ssl, net->flags & FLAG_USE_SSL);
+	g_signal_connect (edit_row_use_ssl, "notify::active", G_CALLBACK (servlist_edit_switch_toggled_cb), GINT_TO_POINTER (2));
+#ifndef USE_OPENSSL
+	gtk_widget_set_sensitive (GTK_WIDGET (edit_row_use_ssl), FALSE);
+#endif
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_use_ssl));
+
+	edit_row_allow_invalid = ADW_SWITCH_ROW (adw_switch_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_allow_invalid), _("Accept invalid SSL certificates"));
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (edit_row_allow_invalid), _("Only enable if you trust the server"));
+	adw_switch_row_set_active (edit_row_allow_invalid, net->flags & FLAG_ALLOW_INVALID);
+	g_signal_connect (edit_row_allow_invalid, "notify::active", G_CALLBACK (servlist_edit_switch_toggled_cb), GINT_TO_POINTER (5));
+#ifndef USE_OPENSSL
+	gtk_widget_set_sensitive (GTK_WIDGET (edit_row_allow_invalid), FALSE);
+#endif
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_allow_invalid));
+
+	/* Authentication Group */
+	group = fe_gtk4_builder_get_widget (builder, "group_auth", ADW_TYPE_PREFERENCES_GROUP);
+
+	string_list = gtk_string_list_new (login_types);
+	edit_row_login = ADW_COMBO_ROW (adw_combo_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_login), _("Login method"));
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (edit_row_login), _("How you identify to the server"));
+	adw_combo_row_set_model (edit_row_login, G_LIST_MODEL (string_list));
+	adw_combo_row_set_selected (edit_row_login, servlist_get_login_desc_index (net->logintype));
+	g_signal_connect (edit_row_login, "notify::selected", G_CALLBACK (servlist_edit_login_selected_cb), NULL);
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_login));
+
+	edit_row_pass = ADW_PASSWORD_ENTRY_ROW (adw_password_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_pass), _("Password"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_pass), net->pass ? net->pass : "");
+	if (net->logintype == LOGIN_SASLEXTERNAL)
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_pass), FALSE);
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_pass));
+
+	/* User Information Group */
+	group = fe_gtk4_builder_get_widget (builder, "group_user_info", ADW_TYPE_PREFERENCES_GROUP);
+
+	edit_row_use_global = ADW_SWITCH_ROW (adw_switch_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_use_global), _("Use global user information"));
+	adw_switch_row_set_active (edit_row_use_global, net->flags & FLAG_USE_GLOBAL);
+	g_signal_connect (edit_row_use_global, "notify::active", G_CALLBACK (servlist_edit_global_user_toggled_cb), NULL);
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_use_global));
+
+	edit_row_nick = ADW_ENTRY_ROW (adw_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_nick), _("Nick name"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_nick), net->nick ? net->nick : "");
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_nick));
+
+	edit_row_nick2 = ADW_ENTRY_ROW (adw_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_nick2), _("Second choice"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_nick2), net->nick2 ? net->nick2 : "");
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_nick2));
+
+	edit_row_real = ADW_ENTRY_ROW (adw_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_real), _("Real name"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_real), net->real ? net->real : "");
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_real));
+
+	edit_row_user = ADW_ENTRY_ROW (adw_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_user), _("User name"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_user), net->user ? net->user : "");
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_user));
+
+	/* Set initial sensitivity based on use_global flag */
+	if (net->flags & FLAG_USE_GLOBAL)
+	{
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_nick), FALSE);
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_nick2), FALSE);
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_user), FALSE);
+		gtk_widget_set_sensitive (GTK_WIDGET (edit_row_real), FALSE);
+	}
+
+	/* Advanced Group */
+	group = fe_gtk4_builder_get_widget (builder, "group_advanced", ADW_TYPE_PREFERENCES_GROUP);
+
+	edit_row_charset = ADW_ENTRY_ROW (adw_entry_row_new ());
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_charset), _("Character encoding"));
+	gtk_editable_set_text (GTK_EDITABLE (edit_row_charset), net->encoding ? net->encoding : IRC_DEFAULT_CHARSET);
+	g_signal_connect (edit_row_charset, "changed", G_CALLBACK (servlist_edit_charset_entry_changed_cb), NULL);
+
+	/* Add dropdown as suffix */
+	string_list = gtk_string_list_new (pages);
+	edit_charset_dropdown = GTK_DROP_DOWN (gtk_drop_down_new (G_LIST_MODEL (string_list), NULL));
+	selected_index = 0;
+	for (i = 0; pages[i]; i++)
+	{
+		if (net->encoding && g_strcmp0 (net->encoding, pages[i]) == 0)
+		{
+			selected_index = i;
+			break;
+		}
+	}
+	gtk_drop_down_set_selected (edit_charset_dropdown, selected_index);
+	g_signal_connect (edit_charset_dropdown, "notify::selected", G_CALLBACK (servlist_edit_charset_dropdown_selected_cb), NULL);
+	adw_entry_row_add_suffix (edit_row_charset, GTK_WIDGET (edit_charset_dropdown));
+	adw_preferences_group_add (group, GTK_WIDGET (edit_row_charset));
+
+	/* Get list widgets and buttons from UI */
+	list = fe_gtk4_builder_get_widget (builder, "servers_list", GTK_TYPE_LIST_BOX);
+	edit_lists[SERVER_TREE] = list;
+	add_button = fe_gtk4_builder_get_widget (builder, "servers_add_button", GTK_TYPE_BUTTON);
+	remove_button = fe_gtk4_builder_get_widget (builder, "servers_remove_button", GTK_TYPE_BUTTON);
+	edit_button = fe_gtk4_builder_get_widget (builder, "servers_edit_button", GTK_TYPE_BUTTON);
+	g_signal_connect (list, "row-selected", G_CALLBACK (servlist_server_row_cb), NULL);
+	g_signal_connect (add_button, "clicked", G_CALLBACK (servlist_addbutton_cb), GINT_TO_POINTER (SERVER_TREE));
+	g_signal_connect (remove_button, "clicked", G_CALLBACK (servlist_deletebutton_cb), GINT_TO_POINTER (SERVER_TREE));
+	g_signal_connect (edit_button, "clicked", G_CALLBACK (servlist_editbutton_cb), GINT_TO_POINTER (SERVER_TREE));
+	{
+		GtkEventController *controller = gtk_event_controller_key_new ();
+		g_signal_connect (controller, "key-pressed", G_CALLBACK (servlist_keypress_cb), GINT_TO_POINTER (SERVER_TREE));
+		gtk_widget_add_controller (list, controller);
+	}
+
+	list = fe_gtk4_builder_get_widget (builder, "channels_list", GTK_TYPE_LIST_BOX);
+	edit_lists[CHANNEL_TREE] = list;
+	add_button = fe_gtk4_builder_get_widget (builder, "channels_add_button", GTK_TYPE_BUTTON);
+	remove_button = fe_gtk4_builder_get_widget (builder, "channels_remove_button", GTK_TYPE_BUTTON);
+	edit_button = fe_gtk4_builder_get_widget (builder, "channels_edit_button", GTK_TYPE_BUTTON);
+	g_signal_connect (list, "row-selected", G_CALLBACK (servlist_channel_row_cb), NULL);
+	g_signal_connect (add_button, "clicked", G_CALLBACK (servlist_addbutton_cb), GINT_TO_POINTER (CHANNEL_TREE));
+	g_signal_connect (remove_button, "clicked", G_CALLBACK (servlist_deletebutton_cb), GINT_TO_POINTER (CHANNEL_TREE));
+	g_signal_connect (edit_button, "clicked", G_CALLBACK (servlist_editbutton_cb), GINT_TO_POINTER (CHANNEL_TREE));
+	{
+		GtkEventController *controller = gtk_event_controller_key_new ();
+		g_signal_connect (controller, "key-pressed", G_CALLBACK (servlist_keypress_cb), GINT_TO_POINTER (CHANNEL_TREE));
+		gtk_widget_add_controller (list, controller);
+	}
+
+	list = fe_gtk4_builder_get_widget (builder, "commands_list", GTK_TYPE_LIST_BOX);
+	edit_lists[CMD_TREE] = list;
+	add_button = fe_gtk4_builder_get_widget (builder, "commands_add_button", GTK_TYPE_BUTTON);
+	remove_button = fe_gtk4_builder_get_widget (builder, "commands_remove_button", GTK_TYPE_BUTTON);
+	edit_button = fe_gtk4_builder_get_widget (builder, "commands_edit_button", GTK_TYPE_BUTTON);
+	g_signal_connect (list, "row-selected", G_CALLBACK (servlist_command_row_cb), NULL);
+	g_signal_connect (add_button, "clicked", G_CALLBACK (servlist_addbutton_cb), GINT_TO_POINTER (CMD_TREE));
+	g_signal_connect (remove_button, "clicked", G_CALLBACK (servlist_deletebutton_cb), GINT_TO_POINTER (CMD_TREE));
+	g_signal_connect (edit_button, "clicked", G_CALLBACK (servlist_editbutton_cb), GINT_TO_POINTER (CMD_TREE));
+	{
+		GtkEventController *controller = gtk_event_controller_key_new ();
+		g_signal_connect (controller, "key-pressed", G_CALLBACK (servlist_keypress_cb), GINT_TO_POINTER (CMD_TREE));
+		gtk_widget_add_controller (list, controller);
+	}
+
 	g_object_ref_sink (window);
 	g_object_unref (builder);
 
 	title = g_strdup_printf (_("Edit %s - %s"), net->name ? net->name : _("Network"), PACKAGE_NAME);
 	gtk_window_set_title (GTK_WINDOW (window), title);
 	g_free (title);
-	width = netedit_win_width > 0 ? netedit_win_width : 820;
-	height = netedit_win_height > 0 ? netedit_win_height : 680;
+	width = netedit_win_width > 0 ? netedit_win_width : 680;
+	height = netedit_win_height > 0 ? netedit_win_height : 600;
 	gtk_window_set_default_size (GTK_WINDOW (window), width, height);
 	gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (parent));
 	gtk_window_set_modal (GTK_WINDOW (window), TRUE);
-	gtk_editable_set_text (GTK_EDITABLE (edit_entry_netname), net->name ? net->name : "");
 
-	stack_box = pages_slot;
-	gtk_widget_set_hexpand (stack_box, TRUE);
-	gtk_widget_set_vexpand (stack_box, TRUE);
-
-	switcher = adw_view_switcher_new ();
-	adw_view_switcher_set_policy (ADW_VIEW_SWITCHER (switcher), ADW_VIEW_SWITCHER_POLICY_WIDE);
-	gtk_widget_set_halign (switcher, GTK_ALIGN_START);
-	gtk_box_append (GTK_BOX (stack_box), switcher);
-
-	pages_widget = adw_view_stack_new ();
-	edit_notebook = pages_widget;
-	gtk_widget_set_hexpand (pages_widget, TRUE);
-	gtk_widget_set_vexpand (pages_widget, TRUE);
-	adw_view_switcher_set_stack (ADW_VIEW_SWITCHER (switcher), ADW_VIEW_STACK (pages_widget));
-	gtk_box_append (GTK_BOX (stack_box), pages_widget);
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-	list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (list), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), list);
-	adw_view_stack_add_titled_with_icon (ADW_VIEW_STACK (pages_widget), scroll,
-		edit_page_names[SERVER_TREE], _("Servers"), "network-server-symbolic");
-	g_signal_connect (list, "row-selected", G_CALLBACK (servlist_server_row_cb), NULL);
-	{
-		GtkEventController *controller = gtk_event_controller_key_new ();
-		g_signal_connect (controller, "key-pressed", G_CALLBACK (servlist_keypress_cb), NULL);
-		gtk_widget_add_controller (list, controller);
-	}
-	edit_lists[SERVER_TREE] = list;
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-	list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (list), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), list);
-	adw_view_stack_add_titled_with_icon (ADW_VIEW_STACK (pages_widget), scroll,
-		edit_page_names[CHANNEL_TREE], _("Autojoin channels"), "view-list-symbolic");
-	g_signal_connect (list, "row-selected", G_CALLBACK (servlist_channel_row_cb), NULL);
-	{
-		GtkEventController *controller = gtk_event_controller_key_new ();
-		g_signal_connect (controller, "key-pressed", G_CALLBACK (servlist_keypress_cb), NULL);
-		gtk_widget_add_controller (list, controller);
-	}
-	edit_lists[CHANNEL_TREE] = list;
-
-	scroll = gtk_scrolled_window_new ();
-	gtk_widget_set_vexpand (scroll, TRUE);
-	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-	list = gtk_list_box_new ();
-	gtk_list_box_set_selection_mode (GTK_LIST_BOX (list), GTK_SELECTION_SINGLE);
-	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), list);
-	adw_view_stack_add_titled_with_icon (ADW_VIEW_STACK (pages_widget), scroll,
-		edit_page_names[CMD_TREE], _("Connect commands"), "applications-engineering-symbolic");
-	g_signal_connect (list, "row-selected", G_CALLBACK (servlist_command_row_cb), NULL);
-	{
-		GtkEventController *controller = gtk_event_controller_key_new ();
-		g_signal_connect (controller, "key-pressed", G_CALLBACK (servlist_keypress_cb), NULL);
-		gtk_widget_add_controller (list, controller);
-	}
-	edit_lists[CMD_TREE] = list;
-
-	g_signal_connect (add_button, "clicked", G_CALLBACK (servlist_addbutton_cb), NULL);
-	g_signal_connect (remove_button, "clicked", G_CALLBACK (servlist_deletebutton_cb), NULL);
-	g_signal_connect (change_button, "clicked", G_CALLBACK (servlist_editbutton_cb), NULL);
-	g_object_set_data (G_OBJECT (edit_notebook), "hc-options-grid", options_grid);
-
-	check = servlist_create_check (0, !(net->flags & FLAG_CYCLE), options_grid, 0, 0,
-		_("Connect to selected server only"));
-	gtk_widget_set_tooltip_text (check,
-		_("Don't cycle through all the servers when the connection fails."));
-	servlist_create_check (3, net->flags & FLAG_AUTO_CONNECT, options_grid, 1, 0,
-		_("Connect to this network automatically"));
-	servlist_create_check (4, !(net->flags & FLAG_USE_PROXY), options_grid, 2, 0,
-		_("Bypass proxy server"));
-	check = servlist_create_check (2, net->flags & FLAG_USE_SSL, options_grid, 3, 0,
-		_("Use SSL for all the servers on this network"));
-#ifndef USE_OPENSSL
-	gtk_widget_set_sensitive (check, FALSE);
-#endif
-	check = servlist_create_check (5, net->flags & FLAG_ALLOW_INVALID, options_grid, 4, 0,
-		_("Accept invalid SSL certificates"));
-#ifndef USE_OPENSSL
-	gtk_widget_set_sensitive (check, FALSE);
-#endif
-	servlist_create_check (1, net->flags & FLAG_USE_GLOBAL, options_grid, 5, 0,
-		_("Use global user information"));
-
-	edit_entry_nick = servlist_create_entry (options_grid, _("Nick name:"), 6,
-		net->nick, &edit_label_nick, NULL);
-	edit_entry_nick2 = servlist_create_entry (options_grid, _("Second choice:"), 7,
-		net->nick2, &edit_label_nick2, NULL);
-	edit_entry_real = servlist_create_entry (options_grid, _("Real name:"), 8,
-		net->real, &edit_label_real, NULL);
-	edit_entry_user = servlist_create_entry (options_grid, _("User name:"), 9,
-		net->user, &edit_label_user, NULL);
-
-	label = gtk_label_new (_("Login method:"));
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_grid_attach (GTK_GRID (options_grid), label, 0, 10, 1, 1);
-	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-	button = servlist_create_logintypecombo ();
-	gtk_box_append (GTK_BOX (row_box), button);
-	gtk_grid_attach (GTK_GRID (options_grid), row_box, 1, 10, 1, 1);
-	g_object_set_data (G_OBJECT (options_grid), "hc-login-dd", button);
-
-	edit_entry_pass = servlist_create_entry (options_grid, _("Password:"), 11,
-		net->pass, NULL,
-		_("Password used for login. If in doubt, leave blank."));
-	gtk_entry_set_visibility (GTK_ENTRY (edit_entry_pass), FALSE);
-	if (net->logintype == LOGIN_SASLEXTERNAL)
-		gtk_widget_set_sensitive (edit_entry_pass, FALSE);
-
-	label = gtk_label_new (_("Character set:"));
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_grid_attach (GTK_GRID (options_grid), label, 0, 12, 1, 1);
-	row_box = servlist_create_charsetcombo ();
-	gtk_grid_attach (GTK_GRID (options_grid), row_box, 1, 12, 1, 1);
-	g_signal_connect (cancel_button, "clicked", G_CALLBACK (servlist_edit_close_cb), NULL);
-
-	if (net->flags & FLAG_USE_GLOBAL)
-		servlist_toggle_global_user (FALSE);
-
+	/* Populate the lists */
 	servlist_servers_populate (net, edit_lists[SERVER_TREE], NULL);
 	servlist_channels_populate (net, edit_lists[CHANNEL_TREE], NULL);
 	servlist_commands_populate (net, edit_lists[CMD_TREE], NULL);
 
-	servlist_edit_set_current_page (netedit_active_tab);
 	g_signal_connect (window, "close-request", G_CALLBACK (servlist_edit_close_request_cb), NULL);
 
 	return window;
@@ -2247,16 +2173,19 @@ fe_gtk4_servlistgui_cleanup (void)
 	selected_chan = NULL;
 	servlist_sess = NULL;
 	memset (edit_lists, 0, sizeof (edit_lists));
-	edit_notebook = NULL;
-	edit_entry_netname = NULL;
-	edit_entry_nick = NULL;
-	edit_entry_nick2 = NULL;
-	edit_entry_user = NULL;
-	edit_entry_real = NULL;
-	edit_entry_pass = NULL;
-	edit_entry_charset = NULL;
-	edit_label_nick = NULL;
-	edit_label_nick2 = NULL;
-	edit_label_user = NULL;
-	edit_label_real = NULL;
+	edit_row_netname = NULL;
+	edit_row_nick = NULL;
+	edit_row_nick2 = NULL;
+	edit_row_user = NULL;
+	edit_row_real = NULL;
+	edit_row_pass = NULL;
+	edit_row_login = NULL;
+	edit_row_charset = NULL;
+	edit_charset_dropdown = NULL;
+	edit_row_use_global = NULL;
+	edit_row_connect_selected = NULL;
+	edit_row_auto_connect = NULL;
+	edit_row_bypass_proxy = NULL;
+	edit_row_use_ssl = NULL;
+	edit_row_allow_invalid = NULL;
 }
