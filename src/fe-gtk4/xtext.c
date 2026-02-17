@@ -57,6 +57,7 @@ typedef struct
 
 static GHashTable *session_logs;
 static GHashTable *session_buffers;
+static GHashTable *session_at_bottom;
 static GHashTable *color_tags;
 static GtkTextTagTable *shared_tag_table;
 static GtkTextTag *tag_stamp;
@@ -86,6 +87,7 @@ static session *xtext_render_session;
 static gboolean xtext_buffers_stale;
 
 static void xtext_render_raw_append (GtkTextBuffer *buf, const char *raw);
+static gboolean xtext_is_at_end (void);
 static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
 static void xtext_tabs_to_spaces (char *text);
 static void xtext_color_to_rgba (int color_index, GdkRGBA *rgba);
@@ -908,6 +910,7 @@ session_buffer_ensure (session *sess)
 	buf = gtk_text_buffer_new (shared_tag_table);
 	gtk_text_buffer_get_end_iter (buf, &iter);
 	gtk_text_buffer_create_mark (buf, "end", &iter, FALSE);
+	gtk_text_buffer_create_mark (buf, "anchor", &iter, TRUE);
 	g_hash_table_insert (session_buffers, sess, buf);
 	return buf;
 }
@@ -1963,6 +1966,65 @@ xtext_render_raw_append (GtkTextBuffer *buf, const char *raw)
 	xtext_render_raw_at_iter (buf, &iter, raw ? raw : "");
 }
 
+static void
+xtext_save_scroll_position (session *sess)
+{
+	GtkTextBuffer *buf;
+	GtkTextMark *anchor;
+	GtkTextIter iter;
+	GdkRectangle visible;
+	gboolean at_end;
+	int bx, by;
+
+	if (!log_view || !sess || !is_session (sess))
+		return;
+
+	buf = g_hash_table_lookup (session_buffers, sess);
+	if (!buf)
+		return;
+
+	anchor = gtk_text_buffer_get_mark (buf, "anchor");
+	if (!anchor)
+		return;
+
+	at_end = xtext_is_at_end ();
+
+	if (session_at_bottom)
+		g_hash_table_insert (session_at_bottom, sess,
+			GINT_TO_POINTER (at_end));
+
+	if (!at_end)
+	{
+		/* Save the iter at the top of the visible area */
+		gtk_text_view_get_visible_rect (GTK_TEXT_VIEW (log_view), &visible);
+		gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (log_view),
+			GTK_TEXT_WINDOW_WIDGET, 0, 0, &bx, &by);
+		gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (log_view),
+			&iter, bx, by);
+		gtk_text_buffer_move_mark (buf, anchor, &iter);
+	}
+}
+
+static gboolean
+scroll_to_anchor_idle (gpointer data)
+{
+	GtkTextView *view = GTK_TEXT_VIEW (data);
+	GtkTextBuffer *buffer;
+	GtkTextMark *mark;
+
+	if (gtk_widget_get_width (GTK_WIDGET (view)) <= 0)
+		return G_SOURCE_CONTINUE;
+
+	buffer = gtk_text_view_get_buffer (view);
+	mark = gtk_text_buffer_get_mark (buffer, "anchor");
+	if (!mark)
+		return G_SOURCE_REMOVE;
+
+	gtk_text_view_scroll_to_mark (view, mark, 0.0, TRUE, 0.0, 0.0);
+
+	return G_SOURCE_REMOVE;
+}
+
 static gboolean
 scroll_to_end_idle (gpointer data)
 {
@@ -1988,7 +2050,6 @@ scroll_to_end_idle (gpointer data)
 static void
 xtext_scroll_to_end (void)
 {
-	GtkTextIter iter;
 	GtkTextMark *mark;
 
 	if (!log_buffer || !log_view)
@@ -2003,26 +2064,23 @@ xtext_scroll_to_end (void)
 }
 
 /* check if we are scrolled to the bottom */
-static void
+static gboolean
 xtext_is_at_end (void)
 {
 	GtkAdjustment *vadj;
-	double old_value;
+	double value;
 	double upper;
 	double page;
-
-	vadj = NULL;
-	old_value = 0.0;
 
 	if (log_view)
 	{
 		vadj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (log_view));
 		if (vadj)
 		{
-			old_value = gtk_adjustment_get_value (vadj);
+			value = gtk_adjustment_get_value (vadj);
 			upper = gtk_adjustment_get_upper (vadj);
 			page = gtk_adjustment_get_page_size (vadj);
-			return (old_value + page) >= (upper - 2.0);
+			return (value + page) >= (upper - 2.0);
 		}
 	}
 
@@ -2037,11 +2095,18 @@ xtext_show_session_rendered (session *sess)
 	GtkTextIter start;
 	GtkTextIter end;
 	gboolean is_empty;
+	gboolean restore_at_bottom;
 	int col_px;
 	int stamp_px;
 
 	if (!log_view)
 		return;
+
+	/* NOTE: current_tab is already set to the incoming session by
+	 * fe_set_channel() before this function is called, so we cannot
+	 * use it to identify the outgoing session.  The caller must save
+	 * the scroll position before updating current_tab.  See
+	 * fe_set_channel() in maingui.c. */
 
 	/* Clear hover/search state — marks belong to the old buffer */
 	xtext_link_hover_clear ();
@@ -2087,7 +2152,20 @@ xtext_show_session_rendered (session *sess)
 	}
 
 	xtext_buffers_stale = FALSE;
-	xtext_scroll_to_end ();
+
+	/* Restore scroll position: at-bottom or saved anchor */
+	restore_at_bottom = TRUE;
+	if (session_at_bottom)
+	{
+		gpointer val;
+		if (g_hash_table_lookup_extended (session_at_bottom, sess, NULL, &val))
+			restore_at_bottom = GPOINTER_TO_INT (val);
+	}
+
+	if (restore_at_bottom)
+		xtext_scroll_to_end ();
+	else
+		g_idle_add (scroll_to_anchor_idle, log_view);
 }
 
 static gboolean
@@ -2211,6 +2289,8 @@ fe_gtk4_xtext_init (void)
 	if (!session_buffers)
 		session_buffers = g_hash_table_new_full (g_direct_hash, g_direct_equal,
 			NULL, session_buffer_free);
+	if (!session_at_bottom)
+		session_at_bottom = g_hash_table_new (g_direct_hash, g_direct_equal);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
 	xtext_create_shared_tag_table ();
@@ -2234,6 +2314,11 @@ fe_gtk4_xtext_cleanup (void)
 	{
 		g_hash_table_unref (session_logs);
 		session_logs = NULL;
+	}
+	if (session_at_bottom)
+	{
+		g_hash_table_unref (session_at_bottom);
+		session_at_bottom = NULL;
 	}
 	if (color_tags)
 	{
@@ -2371,7 +2456,8 @@ fe_gtk4_append_log_text (const char *text)
 	xtext_render_session = (current_tab && is_session (current_tab)) ? current_tab : NULL;
 	xtext_render_raw_append (log_buffer, text);
 	xtext_render_session = NULL;
-	xtext_scroll_to_end ();
+	if (xtext_is_at_end ())
+		xtext_scroll_to_end ();
 }
 
 void
@@ -2410,7 +2496,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 			/* Re-render to apply a wider tab stop uniformly. */
 			xtext_render_raw_all (buf, log->str);
 			xtext_render_session = NULL;
-			if (sess == current_tab)
+			if (sess == current_tab && xtext_is_at_end ())
 				xtext_scroll_to_end ();
 			return;
 		}
@@ -2419,8 +2505,23 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	xtext_render_raw_append (buf, text);
 	xtext_render_session = NULL;
 
-	if (sess == current_tab)
+	if (sess == current_tab && xtext_is_at_end ())
 		xtext_scroll_to_end ();
+}
+
+void
+fe_gtk4_xtext_save_scroll_position (session *sess)
+{
+	xtext_save_scroll_position (sess);
+}
+
+void
+fe_gtk4_xtext_force_scroll_to_end (void)
+{
+	if (session_at_bottom && current_tab && is_session (current_tab))
+		g_hash_table_insert (session_at_bottom, current_tab,
+			GINT_TO_POINTER (TRUE));
+	xtext_scroll_to_end ();
 }
 
 void
@@ -2439,6 +2540,9 @@ fe_gtk4_xtext_remove_session (session *sess)
 
 	if (session_logs)
 		g_hash_table_remove (session_logs, sess);
+
+	if (session_at_bottom)
+		g_hash_table_remove (session_at_bottom, sess);
 
 	if (session_buffers)
 	{
@@ -2495,6 +2599,10 @@ fe_gtk4_xtext_clear_session (session *sess, int lines)
 		xtext_render_raw_all (buf, log->str);
 		xtext_render_session = NULL;
 	}
+
+	if (session_at_bottom)
+		g_hash_table_insert (session_at_bottom, sess,
+			GINT_TO_POINTER (TRUE));
 
 	if (sess == current_tab)
 		xtext_scroll_to_end ();

@@ -1037,6 +1037,7 @@ entry_send_cb (GtkWidget *button, gpointer userdata)
 		return;
 
 	send_command (text);
+	fe_gtk4_xtext_force_scroll_to_end ();
 	gtk_editable_set_text (GTK_EDITABLE (command_entry), "");
 	gtk_widget_grab_focus (command_entry);
 	entry_update_send_sensitivity ();
@@ -1872,6 +1873,8 @@ fe_set_channel (struct session *sess)
 		return;
 
 	prev = current_tab;
+	if (prev && prev != sess)
+		fe_gtk4_xtext_save_scroll_position (prev);
 	current_sess = sess;
 	current_tab = sess;
 	if (sess->server)
