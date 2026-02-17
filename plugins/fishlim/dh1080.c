@@ -115,9 +115,9 @@ dh1080_decode_b64 (const char *data, gsize *out_len)
 	while (str->len % 4 != 0)
 		g_string_append_c (str, '=');
 
-	ret = g_base64_decode_inplace (str->str, out_len);
-	g_string_free (str, FALSE);
-  	return ret;
+	ret = (guchar *) g_string_free_and_steal (str);
+	g_base64_decode_inplace ((char *) ret, out_len);
+	return ret;
 }
 
 static char *
