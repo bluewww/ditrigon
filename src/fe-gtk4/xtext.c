@@ -2101,6 +2101,9 @@ xtext_resize_tick_cb (GtkWidget *widget, GdkFrameClock *frame_clock, gpointer us
 	if (!widget || widget != log_view)
 		return G_SOURCE_CONTINUE;
 
+	if (!gtk_widget_get_realized (widget))
+		return G_SOURCE_CONTINUE;
+
 	width = gtk_widget_get_width (widget);
 	if (width <= 0 || width == xtext_last_view_width)
 		return G_SOURCE_CONTINUE;
