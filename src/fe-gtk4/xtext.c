@@ -281,6 +281,64 @@ xtext_prefix_has_nick (session *sess, const char *prefix, gsize len)
 	return has_nick;
 }
 
+/* Check whether the iter sits at the beginning of a wrap-continuation
+ * sequence inserted by xtext_render_formatted_wrapped ("\n\t\t").
+ * If so, advance past the three characters and return TRUE. */
+static gboolean
+xtext_skip_wrap_forward (GtkTextIter *iter)
+{
+	GtkTextIter probe;
+	gunichar ch;
+
+	probe = *iter;
+	ch = gtk_text_iter_get_char (&probe);
+	if (ch != '\n')
+		return FALSE;
+	if (!gtk_text_iter_forward_char (&probe))
+		return FALSE;
+	ch = gtk_text_iter_get_char (&probe);
+	if (ch != '\t')
+		return FALSE;
+	if (!gtk_text_iter_forward_char (&probe))
+		return FALSE;
+	ch = gtk_text_iter_get_char (&probe);
+	if (ch != '\t')
+		return FALSE;
+	if (!gtk_text_iter_forward_char (&probe))
+		return FALSE;
+	*iter = probe;
+	return TRUE;
+}
+
+/* Check whether the iter sits just after a wrap-continuation sequence
+ * ("\n\t\t").  If so, move backward past those three characters and
+ * return TRUE. */
+static gboolean
+xtext_skip_wrap_backward (GtkTextIter *iter)
+{
+	GtkTextIter probe;
+	gunichar ch;
+
+	probe = *iter;
+	if (!gtk_text_iter_backward_char (&probe))
+		return FALSE;
+	ch = gtk_text_iter_get_char (&probe);
+	if (ch != '\t')
+		return FALSE;
+	if (!gtk_text_iter_backward_char (&probe))
+		return FALSE;
+	ch = gtk_text_iter_get_char (&probe);
+	if (ch != '\t')
+		return FALSE;
+	if (!gtk_text_iter_backward_char (&probe))
+		return FALSE;
+	ch = gtk_text_iter_get_char (&probe);
+	if (ch != '\n')
+		return FALSE;
+	*iter = probe;
+	return TRUE;
+}
+
 static char *
 xtext_token_at_point (GtkTextView *view, double x, double y, GtkTextIter *start_out, GtkTextIter *end_out)
 {
@@ -291,7 +349,9 @@ xtext_token_at_point (GtkTextView *view, double x, double y, GtkTextIter *start_
 	int buffer_y;
 	GtkTextBuffer *buffer;
 	gunichar ch;
-	char *word;
+	char *raw_word;
+	GString *clean;
+	const char *p;
 
 	if (!view)
 		return NULL;
@@ -319,41 +379,84 @@ xtext_token_at_point (GtkTextView *view, double x, double y, GtkTextIter *start_
 		end = prev;
 	}
 
-	while (!gtk_text_iter_starts_line (&start))
+	for (;;)
 	{
-		GtkTextIter prev;
-		gunichar prev_ch;
+		if (gtk_text_iter_starts_line (&start))
+		{
+			GtkTextIter probe = start;
 
-		prev = start;
-		if (!gtk_text_iter_backward_char (&prev))
-			break;
-		prev_ch = gtk_text_iter_get_char (&prev);
-		if (xtext_is_space_char (prev_ch))
-			break;
-		start = prev;
+			if (!xtext_skip_wrap_backward (&probe))
+				break;
+			start = probe;
+			continue;
+		}
+		else
+		{
+			GtkTextIter prev;
+			gunichar prev_ch;
+
+			prev = start;
+			if (!gtk_text_iter_backward_char (&prev))
+				break;
+			prev_ch = gtk_text_iter_get_char (&prev);
+			if (xtext_is_space_char (prev_ch))
+				break;
+			start = prev;
+		}
 	}
 
-	while (!gtk_text_iter_ends_line (&end))
+	for (;;)
 	{
-		GtkTextIter next;
-		gunichar next_ch;
+		if (gtk_text_iter_ends_line (&end))
+		{
+			GtkTextIter probe = end;
 
-		next = end;
-		next_ch = gtk_text_iter_get_char (&next);
-		if (xtext_is_space_char (next_ch))
-			break;
-		if (!gtk_text_iter_forward_char (&end))
-			break;
+			if (!xtext_skip_wrap_forward (&probe))
+				break;
+			end = probe;
+			continue;
+		}
+		else
+		{
+			gunichar next_ch;
+
+			next_ch = gtk_text_iter_get_char (&end);
+			if (xtext_is_space_char (next_ch))
+				break;
+			if (!gtk_text_iter_forward_char (&end))
+				break;
+		}
 	}
 
 	if (gtk_text_iter_compare (&start, &end) >= 0)
 		return NULL;
 
 	buffer = gtk_text_view_get_buffer (view);
-	word = gtk_text_buffer_get_text (buffer, &start, &end, FALSE);
-	if (!word || !word[0])
+	raw_word = gtk_text_buffer_get_text (buffer, &start, &end, FALSE);
+	if (!raw_word || !raw_word[0])
 	{
-		g_free (word);
+		g_free (raw_word);
+		return NULL;
+	}
+
+	/* Strip wrap-continuation sequences ("\n\t\t") so the caller
+	 * sees a single contiguous token. */
+	clean = g_string_new (NULL);
+	for (p = raw_word; *p; )
+	{
+		if (p[0] == '\n' && p[1] == '\t' && p[2] == '\t')
+		{
+			p += 3;
+			continue;
+		}
+		g_string_append_c (clean, *p);
+		p++;
+	}
+	g_free (raw_word);
+
+	if (clean->len == 0)
+	{
+		g_string_free (clean, TRUE);
 		return NULL;
 	}
 
@@ -362,7 +465,35 @@ xtext_token_at_point (GtkTextView *view, double x, double y, GtkTextIter *start_
 	if (end_out)
 		*end_out = end;
 
-	return word;
+	return g_string_free (clean, FALSE);
+}
+
+/* Advance a buffer iter by n_chars visible characters, skipping over
+ * any wrap-continuation sequences ("\n\t\t") in the buffer. */
+static void
+xtext_iter_forward_chars_skip_wrap (GtkTextIter *iter, int n_chars)
+{
+	int i;
+
+	for (i = 0; i < n_chars; i++)
+	{
+		gunichar ch;
+
+		ch = gtk_text_iter_get_char (iter);
+		if (ch == '\n')
+		{
+			GtkTextIter probe = *iter;
+
+			if (xtext_skip_wrap_forward (&probe))
+			{
+				*iter = probe;
+				i--;
+				continue;
+			}
+		}
+		if (!gtk_text_iter_forward_char (iter))
+			break;
+	}
 }
 
 static void
@@ -447,8 +578,8 @@ xtext_classify_at_point (GtkTextView *view, session *sess, double x, double y, i
 		match_end = token_start;
 		start_chars = g_utf8_pointer_to_offset (token, token + start);
 		end_chars = g_utf8_pointer_to_offset (token, token + end);
-		gtk_text_iter_forward_chars (&match_start, start_chars);
-		gtk_text_iter_forward_chars (&match_end, end_chars);
+		xtext_iter_forward_chars_skip_wrap (&match_start, start_chars);
+		xtext_iter_forward_chars_skip_wrap (&match_end, end_chars);
 		if (match_start_out)
 			*match_start_out = match_start;
 		if (match_end_out)
