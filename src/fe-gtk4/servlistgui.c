@@ -1819,7 +1819,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	window = fe_gtk4_builder_get_widget (builder, "servlist_edit_window", ADW_TYPE_PREFERENCES_WINDOW);
 
 	/* Get the preference groups */
-	group = fe_gtk4_builder_get_widget (builder, "group_identity", ADW_TYPE_PREFERENCES_GROUP);
+	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_identity", ADW_TYPE_PREFERENCES_GROUP));
 
 	/* Network Identity Group */
 	edit_row_netname = ADW_ENTRY_ROW (adw_entry_row_new ());
@@ -1828,7 +1828,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	adw_preferences_group_add (group, GTK_WIDGET (edit_row_netname));
 
 	/* Connection Options Group */
-	group = fe_gtk4_builder_get_widget (builder, "group_connection", ADW_TYPE_PREFERENCES_GROUP);
+	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_connection", ADW_TYPE_PREFERENCES_GROUP));
 
 	edit_row_connect_selected = ADW_SWITCH_ROW (adw_switch_row_new ());
 	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_connect_selected), _("Connect to selected server only"));
@@ -1850,7 +1850,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	adw_preferences_group_add (group, GTK_WIDGET (edit_row_bypass_proxy));
 
 	/* Security Group */
-	group = fe_gtk4_builder_get_widget (builder, "group_security", ADW_TYPE_PREFERENCES_GROUP);
+	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_security", ADW_TYPE_PREFERENCES_GROUP));
 
 	edit_row_use_ssl = ADW_SWITCH_ROW (adw_switch_row_new ());
 	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_use_ssl), _("Use SSL for all servers"));
@@ -1872,7 +1872,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	adw_preferences_group_add (group, GTK_WIDGET (edit_row_allow_invalid));
 
 	/* Authentication Group */
-	group = fe_gtk4_builder_get_widget (builder, "group_auth", ADW_TYPE_PREFERENCES_GROUP);
+	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_auth", ADW_TYPE_PREFERENCES_GROUP));
 
 	string_list = gtk_string_list_new (login_types);
 	edit_row_login = ADW_COMBO_ROW (adw_combo_row_new ());
@@ -1891,7 +1891,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	adw_preferences_group_add (group, GTK_WIDGET (edit_row_pass));
 
 	/* User Information Group */
-	group = fe_gtk4_builder_get_widget (builder, "group_user_info", ADW_TYPE_PREFERENCES_GROUP);
+	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_user_info", ADW_TYPE_PREFERENCES_GROUP));
 
 	edit_row_use_global = ADW_SWITCH_ROW (adw_switch_row_new ());
 	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_use_global), _("Use global user information"));
@@ -1929,7 +1929,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	}
 
 	/* Advanced Group */
-	group = fe_gtk4_builder_get_widget (builder, "group_advanced", ADW_TYPE_PREFERENCES_GROUP);
+	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_advanced", ADW_TYPE_PREFERENCES_GROUP));
 
 	edit_row_charset = ADW_ENTRY_ROW (adw_entry_row_new ());
 	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (edit_row_charset), _("Character encoding"));
