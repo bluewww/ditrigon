@@ -739,6 +739,8 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	/* Create the popover */
 	gtk_widget_insert_action_group (parent, "nick", G_ACTION_GROUP (group));
 	active_nick_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	g_object_add_weak_pointer (G_OBJECT (active_nick_popover),
+		(gpointer *) &active_nick_popover);
 	gtk_widget_set_parent (active_nick_popover, parent);
 	g_object_set_data_full (G_OBJECT (active_nick_popover), "nick-actions",
 		g_object_ref (group), g_object_unref);
@@ -912,6 +914,8 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 
 	gtk_widget_insert_action_group (parent, "url", G_ACTION_GROUP (group));
 	active_url_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	g_object_add_weak_pointer (G_OBJECT (active_url_popover),
+		(gpointer *) &active_url_popover);
 	gtk_widget_set_parent (active_url_popover, parent);
 	g_object_set_data_full (G_OBJECT (active_url_popover), "url-actions",
 		g_object_ref (group), g_object_unref);

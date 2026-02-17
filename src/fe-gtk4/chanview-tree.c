@@ -737,6 +737,8 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 
 	/* Create the popover menu */
 	tree_ctx_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	g_object_add_weak_pointer (G_OBJECT (tree_ctx_popover),
+		(gpointer *) &tree_ctx_popover);
 	gtk_widget_set_parent (tree_ctx_popover, parent);
 
 	g_object_set_data_full (G_OBJECT (tree_ctx_popover), "chan-actions",
