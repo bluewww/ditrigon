@@ -1965,8 +1965,17 @@ static gboolean
 scroll_to_end_idle (gpointer data)
 {
 	GtkTextView *view = GTK_TEXT_VIEW (data);
-	GtkTextBuffer *buffer = gtk_text_view_get_buffer (view);
-	GtkTextMark *mark = gtk_text_buffer_get_mark (buffer, "end");
+	GtkTextBuffer *buffer;
+	GtkTextMark *mark;
+
+	/* Wait until the widget has a valid allocation before scrolling,
+	 * otherwise the scrollbar's internal GtkGizmo may be snapshotted
+	 * before it has been allocated. */
+	if (gtk_widget_get_width (GTK_WIDGET (view)) <= 0)
+		return G_SOURCE_CONTINUE;
+
+	buffer = gtk_text_view_get_buffer (view);
+	mark = gtk_text_buffer_get_mark (buffer, "end");
 
 	gtk_text_view_scroll_mark_onscreen (view, mark);
 
