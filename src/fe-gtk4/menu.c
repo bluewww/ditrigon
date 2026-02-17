@@ -1,4 +1,6 @@
-/* HexChat GTK4 menu model and window actions */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 menu model and window actions */
+
 #include "fe-gtk4.h"
 #include <adwaita.h>
 #include "../common/url.h"

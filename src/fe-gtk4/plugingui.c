@@ -1,4 +1,6 @@
-/* HexChat GTK4 plugin loading and management */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 plugin loading and management */
+
 #include "../common/hexchat.h"
 #define PLUGIN_C
 typedef struct session hexchat_context;

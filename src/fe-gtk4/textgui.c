@@ -1,4 +1,6 @@
-/* HexChat GTK4 text helpers */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 text helpers */
+
 #include "fe-gtk4.h"
 
 #include "../common/text.h"

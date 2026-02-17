@@ -1,4 +1,6 @@
-/* HexChat GTK4 main window and session UI */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 main window and session UI */
+
 #include "fe-gtk4.h"
 #include "sexy-spell-entry.h"
 #include "../common/url.h"

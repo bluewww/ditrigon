@@ -1,3 +1,5 @@
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+
 #ifndef HEXCHAT_FE_GTK4_H
 #define HEXCHAT_FE_GTK4_H
 

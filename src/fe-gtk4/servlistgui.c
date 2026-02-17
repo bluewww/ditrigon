@@ -1,4 +1,6 @@
-/* HexChat GTK4 server list window */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 server list window */
+
 #include "fe-gtk4.h"
 
 #include <string.h>

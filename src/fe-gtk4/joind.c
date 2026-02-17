@@ -1,4 +1,6 @@
-/* HexChat GTK4 join dialog */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 join dialog */
+
 #include "fe-gtk4.h"
 
 #include "../common/server.h"

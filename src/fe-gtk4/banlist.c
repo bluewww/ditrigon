@@ -1,4 +1,6 @@
-/* HexChat GTK4 ban list */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 ban list */
+
 #include "fe-gtk4.h"
 
 #ifndef RPL_BANLIST

@@ -1,4 +1,6 @@
-/* HexChat GTK4 keyboard helpers */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 keyboard helpers */
+
 #include "fe-gtk4.h"
 
 #include "../common/history.h"

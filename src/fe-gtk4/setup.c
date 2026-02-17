@@ -1,4 +1,6 @@
-/* HexChat GTK4 setup/preferences window */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 setup/preferences window */
+
 #include "fe-gtk4.h"
 #include "sexy-spell-entry.h"
 #include <adwaita.h>

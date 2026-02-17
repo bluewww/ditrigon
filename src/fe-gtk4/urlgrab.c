@@ -1,4 +1,6 @@
-/* HexChat GTK4 URL grabber */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 URL grabber */
+
 #include "fe-gtk4.h"
 
 #include "../common/url.h"

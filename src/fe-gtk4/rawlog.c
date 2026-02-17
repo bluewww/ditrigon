@@ -1,4 +1,6 @@
-/* HexChat GTK4 raw log output */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 raw log output */
+
 #include "fe-gtk4.h"
 
 #include "../common/cfgfiles.h"

@@ -1,4 +1,6 @@
-/* HexChat GTK4 ignore list */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 ignore list */
+
 #include "fe-gtk4.h"
 
 #include "../common/ignore.h"

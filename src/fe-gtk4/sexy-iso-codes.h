@@ -1,3 +1,4 @@
+/* SPDX-License_Identifier: GPL-2.0-or-later */
 /* gtkspell - a spell-checking addon for GTK text widgets
  * Copyright (c) 2013 Sandro Mani
  */

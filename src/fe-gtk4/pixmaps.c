@@ -1,4 +1,6 @@
-/* HexChat GTK4 pixmap/icon loader */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 pixmap/icon loader */
+
 #include "fe-gtk4.h"
 
 #include <stdio.h>

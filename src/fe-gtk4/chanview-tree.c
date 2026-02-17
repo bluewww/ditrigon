@@ -1,4 +1,6 @@
-/* HexChat GTK4 tree-style channel view */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 tree-style channel view */
+
 #include "fe-gtk4.h"
 #include "../common/chanopt.h"
 #include "../common/text.h"
@@ -722,8 +724,8 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 	section = g_menu_new ();
 	g_menu_append (section, _("Show Notifications"), "chan.show-notifications");
 	g_menu_append (section, _("Beep on Message"), "chan.beep-on-message");
-	g_menu_append (section, _("Blink Tray Icon"), "chan.blink-tray");
-	g_menu_append (section, _("Blink Task Bar"), "chan.blink-taskbar");
+	/* g_menu_append (section, _("Blink Tray Icon"), "chan.blink-tray"); */
+	/* g_menu_append (section, _("Blink Task Bar"), "chan.blink-taskbar"); */
 	g_menu_append_section (menu, _("Notifications"), G_MENU_MODEL (section));
 	g_object_unref (section);
 

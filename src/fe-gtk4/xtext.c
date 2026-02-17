@@ -1,4 +1,6 @@
-/* HexChat GTK4 text view/log buffer */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 text view/log buffer */
+
 #include "fe-gtk4.h"
 #include "../common/url.h"
 #include "../common/userlist.h"

@@ -1,4 +1,6 @@
-/* HexChat GTK4 editable NAME/CMD list dialog */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 editable NAME/CMD list dialog */
+
 #include "fe-gtk4.h"
 
 #include <stdio.h>

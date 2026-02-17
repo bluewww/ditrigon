@@ -1,4 +1,6 @@
+/* SPDX-License_Identifier: GPL-2.0-or-later */
 /* GTK4 compatibility shim for libsexy spell entry API */
+
 #include "config.h"
 
 #include "fe-gtk4.h"

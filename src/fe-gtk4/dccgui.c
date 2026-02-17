@@ -1,4 +1,6 @@
-/* HexChat GTK4 DCC windows */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 DCC windows */
+
 #include "fe-gtk4.h"
 
 #include "../common/dcc.h"

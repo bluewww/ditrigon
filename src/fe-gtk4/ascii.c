@@ -1,4 +1,6 @@
-/* HexChat GTK4 character chart */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 character chart */
+
 #include "fe-gtk4.h"
 
 #include <string.h>

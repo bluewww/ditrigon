@@ -1,4 +1,6 @@
-/* HexChat GTK4 tab-style channel view */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 tab-style channel view */
+
 #include "fe-gtk4.h"
 #include "../common/chanopt.h"
 #include "../common/text.h"

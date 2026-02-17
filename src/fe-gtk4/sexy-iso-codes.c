@@ -1,4 +1,6 @@
+/* SPDX-License_Identifier: GPL-2.0-or-later */
 /* gtkspell - ISO language/country name lookup */
+
 #include "config.h"
 
 #include "sexy-iso-codes.h"

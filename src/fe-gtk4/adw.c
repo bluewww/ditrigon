@@ -1,4 +1,6 @@
-/* HexChat GTK4 libadwaita integration */
+/* SPDX-License_Identifier: GPL-2.0-or-later */
+/* GTK4 libadwaita integration */
+
 #include "fe-gtk4.h"
 #include <adwaita.h>
 
