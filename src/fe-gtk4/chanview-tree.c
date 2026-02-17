@@ -751,6 +751,12 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 	rect.width = 1;
 	rect.height = 1;
 	gtk_popover_set_pointing_to (GTK_POPOVER (tree_ctx_popover), &rect);
+	/* no arrow */
+	gtk_popover_set_has_arrow (GTK_POPOVER (tree_ctx_popover), FALSE);
+	/* place it bottom right with respect to cursor */
+	gtk_popover_set_position (GTK_POPOVER (tree_ctx_popover), GTK_POS_BOTTOM);
+	gtk_widget_set_halign (GTK_WIDGET (tree_ctx_popover), GTK_ALIGN_START);
+
 	gtk_popover_popup (GTK_POPOVER (tree_ctx_popover));
 
 	g_object_unref (menu);

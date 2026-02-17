@@ -771,6 +771,12 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	rect.width = 1;
 	rect.height = 1;
 	gtk_popover_set_pointing_to (GTK_POPOVER (active_nick_popover), &rect);
+	/* no arrow */
+	gtk_popover_set_has_arrow (GTK_POPOVER (active_nick_popover), FALSE);
+	/* place it bottom right with respect to cursor */
+	gtk_popover_set_position (GTK_POPOVER (active_nick_popover), GTK_POS_BOTTOM);
+	gtk_widget_set_halign (GTK_WIDGET (active_nick_popover), GTK_ALIGN_START);
+
 	gtk_popover_popup (GTK_POPOVER (active_nick_popover));
 
 	g_object_unref (menu);
@@ -927,6 +933,12 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	rect.width = 1;
 	rect.height = 1;
 	gtk_popover_set_pointing_to (GTK_POPOVER (active_url_popover), &rect);
+	/* no arrow */
+	gtk_popover_set_has_arrow (GTK_POPOVER (active_url_popover), FALSE);
+	/* place it bottom right with respect to cursor */
+	gtk_popover_set_position (GTK_POPOVER (active_url_popover), GTK_POS_BOTTOM);
+	gtk_widget_set_halign (GTK_WIDGET (active_url_popover), GTK_ALIGN_START);
+
 	gtk_popover_popup (GTK_POPOVER (active_url_popover));
 
 	g_object_unref (menu);
