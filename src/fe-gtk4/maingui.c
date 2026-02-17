@@ -336,7 +336,7 @@ maingui_install_css (void)
 		"  min-width: 28px;\n"
 		"  min-height: 28px;\n"
 		"}\n"
-		".hc-input-send:enabled {\n"
+		".hc-input-send:not(:disabled) {\n"
 		"  background-color: alpha(@accent_bg_color, 0.24);\n"
 		"  color: @accent_fg_color;\n"
 		"}\n"
