@@ -16,7 +16,7 @@ GtkWidget *content_paned;
 GtkWidget *session_scroller;
 GtkWidget *session_list;
 GtkWidget *log_view;
-GtkTextBuffer *log_buffer;
+GtkTextBuffer *log_buffer; /* Points to the currently displayed session's buffer */
 GtkWidget *command_entry;
 GSimpleActionGroup *window_actions;
 static GtkWidget *main_right_paned;

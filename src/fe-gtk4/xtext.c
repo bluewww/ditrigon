@@ -54,7 +54,9 @@ typedef struct
 #define HC_IRC_CTRL_UNDERLINE ((unsigned char) '\x1f')
 
 static GHashTable *session_logs;
+static GHashTable *session_buffers;
 static GHashTable *color_tags;
+static GtkTextTagTable *shared_tag_table;
 static GtkTextTag *tag_stamp;
 static GtkTextTag *tag_bold;
 static GtkTextTag *tag_italic;
@@ -78,10 +80,12 @@ static guint xtext_resize_tick_id;
 static guint xtext_resize_idle_id;
 static int xtext_last_view_width;
 static session *xtext_render_session;
+static gboolean xtext_buffers_stale;
 
-static void xtext_render_raw_append (const char *raw);
+static void xtext_render_raw_append (GtkTextBuffer *buf, const char *raw);
 static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
 static void xtext_tabs_to_spaces (char *text);
+static void xtext_color_to_rgba (int color_index, GdkRGBA *rgba);
 
 static gboolean
 xtext_is_space_char (gunichar ch)
@@ -748,6 +752,79 @@ session_log_ensure (session *sess)
 }
 
 static void
+session_buffer_free (gpointer data)
+{
+	if (data)
+		g_object_unref ((GtkTextBuffer *) data);
+}
+
+static GtkTextBuffer *
+session_buffer_ensure (session *sess)
+{
+	GtkTextBuffer *buf;
+	GtkTextIter iter;
+
+	if (!session_buffers || !shared_tag_table || !sess || !is_session (sess))
+		return NULL;
+
+	buf = g_hash_table_lookup (session_buffers, sess);
+	if (buf)
+		return buf;
+
+	buf = gtk_text_buffer_new (shared_tag_table);
+	gtk_text_buffer_get_end_iter (buf, &iter);
+	gtk_text_buffer_create_mark (buf, "end", &iter, FALSE);
+	g_hash_table_insert (session_buffers, sess, buf);
+	return buf;
+}
+
+static GtkTextTag *
+xtext_create_tag_in_table (GtkTextTagTable *table, const char *name,
+	const char *first_property, ...)
+{
+	GtkTextTag *tag;
+	va_list args;
+
+	tag = gtk_text_tag_new (name);
+	if (first_property)
+	{
+		va_start (args, first_property);
+		g_object_set_valist (G_OBJECT (tag), first_property, args);
+		va_end (args);
+	}
+	gtk_text_tag_table_add (table, tag);
+	g_object_unref (tag); /* table holds a ref */
+	return tag;
+}
+
+static void
+xtext_create_shared_tag_table (void)
+{
+	GdkRGBA stamp_rgba;
+
+	if (shared_tag_table)
+		return;
+
+	shared_tag_table = gtk_text_tag_table_new ();
+
+	tag_bold = xtext_create_tag_in_table (shared_tag_table, "hc-bold",
+		"weight", PANGO_WEIGHT_BOLD, NULL);
+	tag_italic = xtext_create_tag_in_table (shared_tag_table, "hc-italic",
+		"style", PANGO_STYLE_ITALIC, NULL);
+	tag_underline = xtext_create_tag_in_table (shared_tag_table, "hc-underline",
+		"underline", PANGO_UNDERLINE_SINGLE, NULL);
+	tag_link_hover = xtext_create_tag_in_table (shared_tag_table, "hc-link-hover",
+		"underline", PANGO_UNDERLINE_SINGLE, NULL);
+	tag_nick_column = xtext_create_tag_in_table (shared_tag_table, "hc-nick-column",
+		"weight", PANGO_WEIGHT_SEMIBOLD, NULL);
+	tag_font = xtext_create_tag_in_table (shared_tag_table, "hc-font", NULL);
+
+	xtext_color_to_rgba (COL_FG, &stamp_rgba);
+	tag_stamp = xtext_create_tag_in_table (shared_tag_table, "hc-stamp",
+		"foreground-rgba", &stamp_rgba, NULL);
+}
+
+static void
 xtext_color_to_rgba (int color_index, GdkRGBA *rgba)
 {
 	int idx;
@@ -782,7 +859,7 @@ xtext_get_color_tag (int fg, int bg)
 	GtkTextTag *tag;
 	char tag_name[32];
 
-	if (!log_buffer)
+	if (!shared_tag_table)
 		return NULL;
 
 	if (fg < 0 && bg < 0)
@@ -799,9 +876,7 @@ xtext_get_color_tag (int fg, int bg)
 		return tag;
 
 	g_snprintf (tag_name, sizeof (tag_name), "hc-color-%d-%d", fg, bg);
-	tag = gtk_text_buffer_create_tag (log_buffer, tag_name, NULL);
-	if (!tag)
-		return NULL;
+	tag = gtk_text_tag_new (tag_name);
 
 	if (fg >= 0)
 	{
@@ -815,6 +890,9 @@ xtext_get_color_tag (int fg, int bg)
 		xtext_color_to_rgba (bg, &rgba);
 		g_object_set (tag, "background-rgba", &rgba, NULL);
 	}
+
+	gtk_text_tag_table_add (shared_tag_table, tag);
+	g_object_unref (tag); /* table holds a ref */
 
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
@@ -1216,7 +1294,7 @@ xtext_visible_map_free (HcVisibleMap *map)
 }
 
 static void
-xtext_insert_segment (GtkTextIter *iter, const char *text, gsize len, const HcTextStyle *style, GtkTextTag *layout_tag)
+xtext_insert_segment (GtkTextBuffer *buf, GtkTextIter *iter, const char *text, gsize len, const HcTextStyle *style, GtkTextTag *layout_tag)
 {
 	GtkTextTag *tags[6];
 	int n;
@@ -1224,7 +1302,7 @@ xtext_insert_segment (GtkTextIter *iter, const char *text, gsize len, const HcTe
 	int bg;
 	GtkTextTag *color_tag;
 
-	if (!log_buffer || !iter || !text || len == 0)
+	if (!buf || !iter || !text || len == 0)
 		return;
 
 	n = 0;
@@ -1261,41 +1339,41 @@ xtext_insert_segment (GtkTextIter *iter, const char *text, gsize len, const HcTe
 	switch (n)
 	{
 	case 0:
-		gtk_text_buffer_insert (log_buffer, iter, text, (int) len);
+		gtk_text_buffer_insert (buf, iter, text, (int) len);
 		break;
 	case 1:
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len, tags[0], NULL);
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len, tags[0], NULL);
 		break;
 	case 2:
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len,
 			tags[0], tags[1], NULL);
 		break;
 	case 3:
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len,
 			tags[0], tags[1], tags[2], NULL);
 		break;
 	case 4:
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len,
 			tags[0], tags[1], tags[2], tags[3], NULL);
 		break;
 	case 5:
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len,
 			tags[0], tags[1], tags[2], tags[3], tags[4], NULL);
 		break;
 	default:
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len,
 			tags[0], tags[1], tags[2], tags[3], tags[4], tags[5], NULL);
 		break;
 	}
 }
 
 static void
-xtext_insert_plain_text (GtkTextIter *iter, const char *text, gsize len, gboolean with_stamp_tag)
+xtext_insert_plain_text (GtkTextBuffer *buf, GtkTextIter *iter, const char *text, gsize len, gboolean with_stamp_tag)
 {
 	GtkTextTag *first_tag;
 	GtkTextTag *second_tag;
 
-	if (!log_buffer || !iter || !text || len == 0)
+	if (!buf || !iter || !text || len == 0)
 		return;
 
 	first_tag = with_stamp_tag ? tag_stamp : NULL;
@@ -1303,27 +1381,27 @@ xtext_insert_plain_text (GtkTextIter *iter, const char *text, gsize len, gboolea
 
 	if (!first_tag && !second_tag)
 	{
-		gtk_text_buffer_insert (log_buffer, iter, text, (int) len);
+		gtk_text_buffer_insert (buf, iter, text, (int) len);
 		return;
 	}
 	if (first_tag && second_tag)
 	{
-		gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len, first_tag, second_tag, NULL);
+		gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len, first_tag, second_tag, NULL);
 		return;
 	}
 
-	gtk_text_buffer_insert_with_tags (log_buffer, iter, text, (int) len,
+	gtk_text_buffer_insert_with_tags (buf, iter, text, (int) len,
 		first_tag ? first_tag : second_tag, NULL);
 }
 
 static void
-xtext_insert_plain_char (GtkTextIter *iter, char ch)
+xtext_insert_plain_char (GtkTextBuffer *buf, GtkTextIter *iter, char ch)
 {
 	char s[2];
 
 	s[0] = ch;
 	s[1] = 0;
-	xtext_insert_plain_text (iter, s, 1, FALSE);
+	xtext_insert_plain_text (buf, iter, s, 1, FALSE);
 }
 
 static gboolean
@@ -1353,7 +1431,7 @@ xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value)
 }
 
 static void
-xtext_render_formatted_stateful (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag,
+xtext_render_formatted_stateful (GtkTextBuffer *buf, GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag,
 	HcTextStyle *style_io)
 {
 	HcTextStyle style;
@@ -1387,7 +1465,7 @@ xtext_render_formatted_stateful (GtkTextIter *iter, const char *text, gsize len,
 		case HC_IRC_CTRL_HEX_COLOR:
 		{
 			if (i > seg_start)
-				xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
+				xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
 			switch (ch)
 			{
 			case HC_IRC_CTRL_BOLD:
@@ -1457,8 +1535,8 @@ xtext_render_formatted_stateful (GtkTextIter *iter, const char *text, gsize len,
 			case '\t':
 			{
 				if (i > seg_start)
-					xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
-				xtext_insert_segment (iter, " ", 1, &style, layout_tag);
+					xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
+				xtext_insert_segment (buf, iter, " ", 1, &style, layout_tag);
 				i++;
 				seg_start = i;
 				continue;
@@ -1470,7 +1548,7 @@ xtext_render_formatted_stateful (GtkTextIter *iter, const char *text, gsize len,
 		if (ch < HC_ASCII_PRINTABLE_MIN)
 		{
 			if (i > seg_start)
-				xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
+				xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
 			i++;
 			seg_start = i;
 			continue;
@@ -1487,20 +1565,20 @@ xtext_render_formatted_stateful (GtkTextIter *iter, const char *text, gsize len,
 	}
 
 	if (i > seg_start)
-		xtext_insert_segment (iter, text + seg_start, i - seg_start, &style, layout_tag);
+		xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
 
 	if (style_io)
 		*style_io = style;
 }
 
 static void
-xtext_render_formatted (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
+xtext_render_formatted (GtkTextBuffer *buf, GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
 {
-	xtext_render_formatted_stateful (iter, text, len, layout_tag, NULL);
+	xtext_render_formatted_stateful (buf, iter, text, len, layout_tag, NULL);
 }
 
 static void
-xtext_render_formatted_wrapped (GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
+xtext_render_formatted_wrapped (GtkTextBuffer *buf, GtkTextIter *iter, const char *text, gsize len, GtkTextTag *layout_tag)
 {
 	int wrap_width;
 	HcVisibleMap *map;
@@ -1513,7 +1591,7 @@ xtext_render_formatted_wrapped (GtkTextIter *iter, const char *text, gsize len, 
 	wrap_width = xtext_message_wrap_width_px ();
 	if (wrap_width <= 0 || !text || len == 0)
 	{
-		xtext_render_formatted (iter, text, len, layout_tag);
+		xtext_render_formatted (buf, iter, text, len, layout_tag);
 		return;
 	}
 
@@ -1521,7 +1599,7 @@ xtext_render_formatted_wrapped (GtkTextIter *iter, const char *text, gsize len, 
 	if (!map || map->plain->len == 0)
 	{
 		xtext_visible_map_free (map);
-		xtext_render_formatted (iter, text, len, layout_tag);
+		xtext_render_formatted (buf, iter, text, len, layout_tag);
 		return;
 	}
 
@@ -1536,7 +1614,7 @@ xtext_render_formatted_wrapped (GtkTextIter *iter, const char *text, gsize len, 
 	{
 		g_object_unref (layout);
 		xtext_visible_map_free (map);
-		xtext_render_formatted (iter, text, len, layout_tag);
+		xtext_render_formatted (buf, iter, text, len, layout_tag);
 		return;
 	}
 
@@ -1559,70 +1637,70 @@ xtext_render_formatted_wrapped (GtkTextIter *iter, const char *text, gsize len, 
 		if (raw_break <= raw_start || raw_break > len)
 			continue;
 
-		xtext_render_formatted_stateful (iter, text + raw_start, raw_break - raw_start, layout_tag, &style);
-		xtext_insert_plain_char (iter, '\n');
-		xtext_insert_plain_char (iter, '\t');
+		xtext_render_formatted_stateful (buf, iter, text + raw_start, raw_break - raw_start, layout_tag, &style);
+		xtext_insert_plain_char (buf, iter, '\n');
+		xtext_insert_plain_char (buf, iter, '\t');
 		raw_start = raw_break;
 	}
 
 	if (raw_start < len)
-		xtext_render_formatted_stateful (iter, text + raw_start, len - raw_start, layout_tag, &style);
+		xtext_render_formatted_stateful (buf, iter, text + raw_start, len - raw_start, layout_tag, &style);
 
 	g_object_unref (layout);
 	xtext_visible_map_free (map);
 }
 
 static void
-xtext_render_line (GtkTextIter *iter, const char *line, gsize len, gboolean append_newline)
+xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsize len, gboolean append_newline)
 {
 	HcLineColumns cols;
 	session *render_sess;
 	GtkTextTag *prefix_tag;
 
-	if (!iter)
+	if (!buf || !iter)
 		return;
 
 	xtext_split_line_columns (line, len, &cols);
 	if (cols.has_columns)
 	{
 		if (cols.stamp && cols.stamp_len > 0)
-			xtext_insert_plain_text (iter, cols.stamp, cols.stamp_len, TRUE);
+			xtext_insert_plain_text (buf, iter, cols.stamp, cols.stamp_len, TRUE);
 
 		if (cols.prefix && cols.prefix_len > 0)
 		{
 			if (cols.stamp && cols.stamp_len > 0)
-				xtext_insert_plain_char (iter, ' ');
+				xtext_insert_plain_char (buf, iter, ' ');
 			render_sess = xtext_render_session;
 			if (!render_sess || !is_session (render_sess))
 				render_sess = current_tab;
 			prefix_tag = NULL;
 			if (tag_nick_column && render_sess && xtext_prefix_has_nick (render_sess, cols.prefix, cols.prefix_len))
 				prefix_tag = tag_nick_column;
-			xtext_render_formatted (iter, cols.prefix, cols.prefix_len, prefix_tag);
+			xtext_render_formatted (buf, iter, cols.prefix, cols.prefix_len, prefix_tag);
 		}
 
 		if (cols.body && cols.body_len > 0)
 		{
-			xtext_insert_plain_char (iter, '\t');
+			xtext_insert_plain_char (buf, iter, '\t');
 			if (prefs.hex_text_wordwrap)
-				xtext_render_formatted_wrapped (iter, cols.body, cols.body_len, NULL);
+				xtext_render_formatted_wrapped (buf, iter, cols.body, cols.body_len, NULL);
 			else
-				xtext_render_formatted (iter, cols.body, cols.body_len, NULL);
+				xtext_render_formatted (buf, iter, cols.body, cols.body_len, NULL);
 		}
 	}
 	else
-		xtext_render_formatted (iter, line, len, NULL);
+		xtext_render_formatted (buf, iter, line, len, NULL);
 
 	if (append_newline)
-		xtext_insert_plain_char (iter, '\n');
+		xtext_insert_plain_char (buf, iter, '\n');
 }
 
 static void
-xtext_render_raw_at_iter (GtkTextIter *iter, const char *raw)
+xtext_render_raw_at_iter (GtkTextBuffer *buf, GtkTextIter *iter, const char *raw)
 {
 	const char *cursor;
 
-	if (!iter || !raw)
+	if (!buf || !iter || !raw)
 		return;
 
 	cursor = raw;
@@ -1644,7 +1722,7 @@ xtext_render_raw_at_iter (GtkTextIter *iter, const char *raw)
 			add_nl = FALSE;
 		}
 
-		xtext_render_line (iter, cursor, len, add_nl);
+		xtext_render_line (buf, iter, cursor, len, add_nl);
 
 		if (!nl)
 			break;
@@ -1653,14 +1731,14 @@ xtext_render_raw_at_iter (GtkTextIter *iter, const char *raw)
 }
 
 static void
-xtext_render_raw_all (const char *raw)
+xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 {
 	GtkTextIter start;
 	GtkTextIter end;
 	int col_px;
 	const char *text;
 
-	if (!log_buffer)
+	if (!buf)
 		return;
 
 	text = raw ? raw : "";
@@ -1669,23 +1747,23 @@ xtext_render_raw_all (const char *raw)
 
 	xtext_link_hover_clear ();
 
-	gtk_text_buffer_get_bounds (log_buffer, &start, &end);
-	gtk_text_buffer_delete (log_buffer, &start, &end);
+	gtk_text_buffer_get_bounds (buf, &start, &end);
+	gtk_text_buffer_delete (buf, &start, &end);
 
-	gtk_text_buffer_get_end_iter (log_buffer, &end);
-	xtext_render_raw_at_iter (&end, text);
+	gtk_text_buffer_get_end_iter (buf, &end);
+	xtext_render_raw_at_iter (buf, &end, text);
 }
 
 static void
-xtext_render_raw_append (const char *raw)
+xtext_render_raw_append (GtkTextBuffer *buf, const char *raw)
 {
 	GtkTextIter end;
 
-	if (!log_buffer)
+	if (!buf)
 		return;
 
-	gtk_text_buffer_get_end_iter (log_buffer, &end);
-	xtext_render_raw_at_iter (&end, raw ? raw : "");
+	gtk_text_buffer_get_end_iter (buf, &end);
+	xtext_render_raw_at_iter (buf, &end, raw ? raw : "");
 }
 
 static void
@@ -1697,9 +1775,10 @@ xtext_scroll_to_end (void)
 	if (!log_buffer || !log_view)
 		return;
 
-	printf("xtext_scroll_to_end ()\n");
-
 	mark = gtk_text_buffer_get_mark (log_buffer, "end");
+	if (!mark)
+		return;
+
 	gtk_text_buffer_get_iter_at_mark (log_buffer, &iter, mark);
 	/* scroll to end mark onscreen */
 	gtk_text_view_scroll_mark_onscreen (GTK_TEXT_VIEW (log_view), mark);
@@ -1735,35 +1814,57 @@ xtext_is_at_end (void)
 static void
 xtext_show_session_rendered (session *sess)
 {
+	GtkTextBuffer *buf;
 	GString *log;
-	double max_value;
-	gboolean was_at_end;
-	GtkAdjustment *vadj;
+	GtkTextIter start;
+	GtkTextIter end;
+	gboolean is_empty;
+	int col_px;
 
-	if (!log_buffer)
+	if (!log_view)
 		return;
 
+	/* Clear hover/search state — marks belong to the old buffer */
+	xtext_link_hover_clear ();
+	xtext_search_mark = NULL;
+
 	log = NULL;
-	if (session_logs && sess)
+	if (session_logs && sess && is_session (sess))
 		log = g_hash_table_lookup (session_logs, sess);
 
-	/* TODO: remove this later */
-	/* was_at_end = TRUE; */
-	/* vadj = NULL; */
+	buf = (sess && is_session (sess)) ? session_buffer_ensure (sess) : NULL;
+	if (!buf)
+	{
+		/* No valid session; show an empty buffer */
+		buf = gtk_text_buffer_new (shared_tag_table);
+		log_buffer = buf;
+		gtk_text_view_set_buffer (GTK_TEXT_VIEW (log_view), log_buffer);
+		g_object_unref (buf); /* text view holds a ref */
+		return;
+	}
 
-	if (sess && sess->server)
-	    printf ("xtext_show_session_rendered (name=%s)\n", sess->server->servername);
+	log_buffer = buf;
+	gtk_text_view_set_buffer (GTK_TEXT_VIEW (log_view), log_buffer);
 
+	/* Check if buffer needs rendering */
+	gtk_text_buffer_get_bounds (buf, &start, &end);
+	is_empty = gtk_text_iter_equal (&start, &end);
 
-	xtext_render_session = (sess && is_session (sess)) ? sess : NULL;
-	xtext_render_raw_all (log ? log->str : "");
-	xtext_render_session = NULL;
+	if ((is_empty || xtext_buffers_stale) && log && log->len > 0)
+	{
+		xtext_render_session = sess;
+		xtext_render_raw_all (buf, log->str);
+		xtext_render_session = NULL;
+	}
+	else
+	{
+		/* Buffer already has content; just recompute tab stop */
+		col_px = xtext_compute_message_column_px (log ? log->str : "");
+		xtext_set_message_tab_stop (col_px);
+	}
 
-	/* if (was_at_end || !vadj) */
-	/* { */
+	xtext_buffers_stale = FALSE;
 	xtext_scroll_to_end ();
-	/* return; */
-	/* } */
 }
 
 static gboolean
@@ -1775,6 +1876,8 @@ xtext_resize_refresh_idle_cb (gpointer user_data)
 	if (!log_view || !current_tab || !is_session (current_tab))
 		return G_SOURCE_REMOVE;
 
+	/* Force re-render to recalculate word-wrap for the new width */
+	xtext_buffers_stale = TRUE;
 	xtext_show_session_rendered (current_tab);
 	return G_SOURCE_REMOVE;
 }
@@ -1879,17 +1982,27 @@ fe_gtk4_xtext_init (void)
 	if (!session_logs)
 		session_logs = g_hash_table_new_full (g_direct_hash, g_direct_equal,
 			NULL, session_log_free);
+	if (!session_buffers)
+		session_buffers = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+			NULL, session_buffer_free);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
+	xtext_create_shared_tag_table ();
 	if (xtext_space_width_px <= 0)
 		xtext_space_width_px = HC_SPACE_WIDTH_FALLBACK_PX;
 	xtext_message_col_px = 0;
 	xtext_render_session = NULL;
+	xtext_buffers_stale = FALSE;
 }
 
 void
 fe_gtk4_xtext_cleanup (void)
 {
+	if (session_buffers)
+	{
+		g_hash_table_unref (session_buffers);
+		session_buffers = NULL;
+	}
 	if (session_logs)
 	{
 		g_hash_table_unref (session_logs);
@@ -1899,6 +2012,11 @@ fe_gtk4_xtext_cleanup (void)
 	{
 		g_hash_table_unref (color_tags);
 		color_tags = NULL;
+	}
+	if (shared_tag_table)
+	{
+		g_object_unref (shared_tag_table);
+		shared_tag_table = NULL;
 	}
 	if (xtext_font_desc)
 	{
@@ -1913,6 +2031,7 @@ fe_gtk4_xtext_cleanup (void)
 	tag_link_hover = NULL;
 	tag_nick_column = NULL;
 	tag_font = NULL;
+	log_buffer = NULL;
 	xtext_search_mark = NULL;
 	xtext_hover_start_mark = NULL;
 	xtext_hover_end_mark = NULL;
@@ -1934,6 +2053,7 @@ fe_gtk4_xtext_cleanup (void)
 	xtext_message_col_px = 0;
 	xtext_last_view_width = -1;
 	xtext_render_session = NULL;
+	xtext_buffers_stale = FALSE;
 }
 
 GtkWidget *
@@ -1941,8 +2061,6 @@ fe_gtk4_xtext_create_widget (void)
 {
 	GtkBuilder *builder;
 	GtkWidget *scroll;
-	GdkRGBA stamp_rgba;
-	GtkTextIter iter;
 
 	if (log_view && xtext_resize_tick_id != 0)
 	{
@@ -1986,36 +2104,7 @@ fe_gtk4_xtext_create_widget (void)
 		gtk_widget_add_controller (log_view, motion);
 	}
 
-	log_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (log_view));
-
-	tag_bold = gtk_text_buffer_create_tag (log_buffer, "hc-bold",
-		"weight", PANGO_WEIGHT_BOLD,
-		NULL);
-	tag_italic = gtk_text_buffer_create_tag (log_buffer, "hc-italic",
-		"style", PANGO_STYLE_ITALIC,
-		NULL);
-	tag_underline = gtk_text_buffer_create_tag (log_buffer, "hc-underline",
-		"underline", PANGO_UNDERLINE_SINGLE,
-		NULL);
-	tag_link_hover = gtk_text_buffer_create_tag (log_buffer, "hc-link-hover",
-		"underline", PANGO_UNDERLINE_SINGLE,
-		NULL);
-	tag_nick_column = gtk_text_buffer_create_tag (log_buffer, "hc-nick-column",
-		"weight", PANGO_WEIGHT_SEMIBOLD,
-		NULL);
-	tag_font = gtk_text_buffer_create_tag (log_buffer, "hc-font", NULL);
-
-	xtext_color_to_rgba (COL_FG, &stamp_rgba);
-	tag_stamp = gtk_text_buffer_create_tag (log_buffer, "hc-stamp",
-		"foreground-rgba", &stamp_rgba,
-		NULL);
-
-	if (color_tags)
-		g_hash_table_remove_all (color_tags);
-
-	/* Create mark with left gravity to scroll to end */
-	gtk_text_buffer_get_end_iter (log_buffer, &iter);
-	gtk_text_buffer_create_mark (log_buffer, "end", &iter, FALSE);
+	log_buffer = NULL;
 
 	xtext_search_mark = NULL;
 	xtext_hover_start_mark = NULL;
@@ -2032,6 +2121,7 @@ void
 fe_gtk4_xtext_apply_prefs (void)
 {
 	xtext_apply_font_pref ();
+	xtext_buffers_stale = TRUE;
 	if (current_tab && is_session (current_tab))
 		fe_gtk4_xtext_show_session (current_tab);
 }
@@ -2049,9 +2139,8 @@ fe_gtk4_append_log_text (const char *text)
 		return;
 	}
 
-	printf("fe_gtk4_append_log_text (\"%s\")\n", text);
 	xtext_render_session = (current_tab && is_session (current_tab)) ? current_tab : NULL;
-	xtext_render_raw_append (text);
+	xtext_render_raw_append (log_buffer, text);
 	xtext_render_session = NULL;
 	xtext_scroll_to_end ();
 }
@@ -2060,11 +2149,10 @@ void
 fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 {
 	GString *log;
+	GtkTextBuffer *buf;
 
 	if (!text || !text[0])
 		return;
-
-	printf("fe_gtk4_append_for_session (%s, \"%s\")\n", sess->server->servername, text);
 
 	if (!sess || !is_session (sess))
 	{
@@ -2076,25 +2164,33 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	if (log)
 		g_string_append (log, text);
 
-	if (sess == current_tab)
+	buf = session_buffer_ensure (sess);
+	if (!buf)
+		return;
+
+	xtext_render_session = sess;
+
+	if (log)
 	{
-		if (log)
+		int added_col_px;
+
+		added_col_px = xtext_compute_message_column_px (text);
+		if (added_col_px > xtext_message_col_px)
 		{
-			int added_col_px;
-
-			added_col_px = xtext_compute_message_column_px (text);
-			if (added_col_px > xtext_message_col_px)
-			{
-				/* Re-render to apply a wider tab stop uniformly. */
-				fe_gtk4_xtext_show_session (sess);
-				return;
-			}
+			/* Re-render to apply a wider tab stop uniformly. */
+			xtext_render_raw_all (buf, log->str);
+			xtext_render_session = NULL;
+			if (sess == current_tab)
+				xtext_scroll_to_end ();
+			return;
 		}
-
-		printf("\tsess == current_tab\n");
-		xtext_render_raw_append (text);
-		xtext_scroll_to_end ();
 	}
+
+	xtext_render_raw_append (buf, text);
+	xtext_render_session = NULL;
+
+	if (sess == current_tab)
+		xtext_scroll_to_end ();
 }
 
 void
@@ -2106,10 +2202,21 @@ fe_gtk4_xtext_show_session (session *sess)
 void
 fe_gtk4_xtext_remove_session (session *sess)
 {
-	if (!session_logs || !sess)
+	GtkTextBuffer *buf;
+
+	if (!sess)
 		return;
 
-	g_hash_table_remove (session_logs, sess);
+	if (session_logs)
+		g_hash_table_remove (session_logs, sess);
+
+	if (session_buffers)
+	{
+		buf = g_hash_table_lookup (session_buffers, sess);
+		if (buf && buf == log_buffer)
+			log_buffer = NULL;
+		g_hash_table_remove (session_buffers, sess);
+	}
 }
 
 const char *
@@ -2128,6 +2235,7 @@ void
 fe_gtk4_xtext_clear_session (session *sess, int lines)
 {
 	GString *log;
+	GtkTextBuffer *buf;
 
 	if (!sess)
 		sess = current_tab;
@@ -2150,8 +2258,16 @@ fe_gtk4_xtext_clear_session (session *sess, int lines)
 	else
 		session_log_trim_tail_lines (log, -lines);
 
+	buf = session_buffer_ensure (sess);
+	if (buf)
+	{
+		xtext_render_session = sess;
+		xtext_render_raw_all (buf, log->str);
+		xtext_render_session = NULL;
+	}
+
 	if (sess == current_tab)
-		fe_gtk4_xtext_show_session (sess);
+		xtext_scroll_to_end ();
 }
 
 static void
