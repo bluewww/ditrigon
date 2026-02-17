@@ -234,56 +234,10 @@ menu_target_session (void)
 	return NULL;
 }
 
-typedef struct
-{
-	GtkWidget *root_popover;
-	session *sess;
-	char *nick;
-	char *allnicks;
-} HcNickMenuContext;
-
-typedef struct
-{
-	HcNickMenuContext *ctx;
-	char *cmd;
-} HcNickMenuItemData;
-
-typedef struct
-{
-	GtkWidget *box;
-	GtkWidget *submenu_button;
-	int childcount;
-} HcNickMenuLevel;
-
 static GtkWidget *active_nick_popover;
-
-static void
-nick_menu_context_free (gpointer data)
-{
-	HcNickMenuContext *ctx;
-
-	ctx = data;
-	if (!ctx)
-		return;
-
-	g_free (ctx->nick);
-	g_free (ctx->allnicks);
-	g_free (ctx);
-}
-
-static void
-nick_menu_item_data_free (gpointer data, GClosure *closure)
-{
-	HcNickMenuItemData *item_data;
-
-	(void) closure;
-	item_data = data;
-	if (!item_data)
-		return;
-
-	g_free (item_data->cmd);
-	g_free (item_data);
-}
+static session *nick_ctx_sess;
+static char *nick_ctx_nick;
+static char *nick_ctx_allnicks;
 
 static void
 nick_menu_exec_command (session *sess, const char *cmd)
@@ -355,20 +309,16 @@ nick_menu_command_parse (session *sess, const char *cmd, const char *nick, const
 }
 
 static void
-nick_menu_item_activate_cb (GtkButton *button, gpointer userdata)
+nick_ctx_item_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcNickMenuItemData *item_data;
-	HcNickMenuContext *ctx;
+	const char *cmd;
 
-	(void) button;
-	item_data = userdata;
-	if (!item_data || !item_data->ctx)
-		return;
+	(void) param;
+	(void) userdata;
 
-	ctx = item_data->ctx;
-	nick_menu_command_parse (ctx->sess, item_data->cmd, ctx->nick, ctx->allnicks);
-	if (ctx->root_popover)
-		gtk_popover_popdown (GTK_POPOVER (ctx->root_popover));
+	cmd = g_object_get_data (G_OBJECT (action), "cmd");
+	if (cmd && nick_ctx_sess && is_session (nick_ctx_sess))
+		nick_menu_command_parse (nick_ctx_sess, cmd, nick_ctx_nick, nick_ctx_allnicks);
 }
 
 static void
@@ -481,111 +431,13 @@ nick_menu_resolve_icon_name (const char *icon)
 }
 
 static void
-popover_left_align_button_label (GtkWidget *button)
-{
-	GtkWidget *child;
-
-	if (!button || !GTK_IS_BUTTON (button))
-		return;
-
-	child = gtk_button_get_child (GTK_BUTTON (button));
-	if (child && GTK_IS_LABEL (child))
-	{
-		gtk_label_set_xalign (GTK_LABEL (child), 0.0f);
-		gtk_widget_set_halign (child, GTK_ALIGN_START);
-	}
-}
-
-static GtkWidget *
-nick_menu_new_row_content (const char *label, const char *icon, gboolean submenu)
-{
-	GtkWidget *row;
-	GtkWidget *image;
-	GtkWidget *text;
-	GtkWidget *arrow;
-	char *clean;
-	char *resolved_icon;
-
-	row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-	clean = strip_mnemonic (label ? label : "");
-	resolved_icon = nick_menu_resolve_icon_name (icon);
-
-	if (resolved_icon && resolved_icon[0])
-	{
-		image = gtk_image_new_from_icon_name (resolved_icon);
-		gtk_widget_set_valign (image, GTK_ALIGN_CENTER);
-		gtk_box_append (GTK_BOX (row), image);
-	}
-
-	text = gtk_label_new (clean);
-	gtk_label_set_xalign (GTK_LABEL (text), 0.0f);
-	gtk_widget_set_hexpand (text, TRUE);
-	gtk_box_append (GTK_BOX (row), text);
-
-	if (submenu)
-	{
-		arrow = gtk_image_new_from_icon_name ("go-next-symbolic");
-		gtk_widget_add_css_class (arrow, "dim-label");
-		gtk_widget_set_valign (arrow, GTK_ALIGN_CENTER);
-		gtk_box_append (GTK_BOX (row), arrow);
-	}
-
-	g_free (clean);
-	g_free (resolved_icon);
-	return row;
-}
-
-static GtkWidget *
-nick_menu_new_button (const char *label, const char *icon)
-{
-	GtkWidget *button;
-	GtkWidget *row;
-
-	button = gtk_button_new ();
-	row = nick_menu_new_row_content (label, icon, FALSE);
-	gtk_button_set_child (GTK_BUTTON (button), row);
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_hexpand (button, TRUE);
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	return button;
-}
-
-static GtkWidget *
-nick_menu_new_submenu_button (const char *label, const char *icon)
-{
-	GtkWidget *button;
-	GtkWidget *row;
-
-	button = gtk_menu_button_new ();
-	row = nick_menu_new_row_content (label, icon, TRUE);
-	gtk_menu_button_set_child (GTK_MENU_BUTTON (button), row);
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_hexpand (button, TRUE);
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	return button;
-}
-
-static void
-nick_menu_popover_closed_cb (GtkPopover *popover, gpointer user_data)
-{
-	(void) user_data;
-
-	if (active_nick_popover == GTK_WIDGET (popover))
-		active_nick_popover = NULL;
-
-	if (gtk_widget_get_parent (GTK_WIDGET (popover)))
-		gtk_widget_unparent (GTK_WIDGET (popover));
-}
-
-static void
 nick_menu_close_active (void)
 {
-	if (!active_nick_popover)
-		return;
-
-	if (gtk_widget_get_parent (active_nick_popover))
+	if (active_nick_popover)
+	{
 		gtk_widget_unparent (active_nick_popover);
-	active_nick_popover = NULL;
+		active_nick_popover = NULL;
+	}
 }
 
 static void
@@ -668,92 +520,127 @@ nick_menu_create_info_popover (GtkWidget *relative_to, session *sess, const char
 	return popover;
 }
 
+static GMenuItem *
+nick_menu_new_item_with_icon (const char *label, const char *action, const char *icon)
+{
+	GMenuItem *item;
+	char *resolved;
+	char *clean;
+
+	clean = strip_mnemonic (label ? label : "");
+	item = g_menu_item_new (clean, action);
+	g_free (clean);
+
+	resolved = nick_menu_resolve_icon_name (icon);
+	if (resolved)
+	{
+		GIcon *gicon;
+
+		gicon = g_themed_icon_new (resolved);
+		g_menu_item_set_icon (item, gicon);
+		g_object_unref (gicon);
+		g_free (resolved);
+	}
+
+	return item;
+}
+
 void
 fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess, const char *nick)
 {
-	GtkWidget *popover;
-	GtkWidget *root;
-	GtkWidget *header;
-	GtkWidget *header_name;
-	GtkWidget *header_context;
-	GPtrArray *levels;
-	HcNickMenuContext *ctx;
+	GSimpleActionGroup *group;
+	GSimpleAction *action;
+	GMenu *menu;
+	GMenu *section;
+	GMenu *current_menu;
+	GPtrArray *menu_stack;
+	GPtrArray *item_counts;
 	GSList *list;
-	HcNickMenuLevel *level;
+	GtkWidget *info_widget;
 	GdkRectangle rect;
+	char *header_label;
+	int item_idx;
 
 	if (!parent || !sess || !nick || !nick[0] || !is_session (sess))
 		return;
 
 	nick_menu_close_active ();
 
-	popover = gtk_popover_new ();
-	active_nick_popover = popover;
-	gtk_widget_set_parent (popover, parent);
-	g_signal_connect (popover, "closed",
-		G_CALLBACK (nick_menu_popover_closed_cb), NULL);
-	gtk_popover_set_autohide (GTK_POPOVER (popover), TRUE);
-	gtk_popover_set_cascade_popdown (GTK_POPOVER (popover), TRUE);
+	g_free (nick_ctx_nick);
+	g_free (nick_ctx_allnicks);
+	nick_ctx_sess = sess;
+	nick_ctx_nick = g_strdup (nick);
+	nick_ctx_allnicks = g_strdup (nick);
 
-	ctx = g_new0 (HcNickMenuContext, 1);
-	ctx->root_popover = popover;
-	ctx->sess = sess;
-	ctx->nick = g_strdup (nick);
-	ctx->allnicks = g_strdup (nick);
-	g_object_set_data_full (G_OBJECT (popover), "hc-nick-menu-context", ctx, nick_menu_context_free);
+	group = g_simple_action_group_new ();
+	item_idx = 0;
 
-	root = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-	gtk_widget_set_margin_start (root, 6);
-	gtk_widget_set_margin_end (root, 6);
-	gtk_widget_set_margin_top (root, 6);
-	gtk_widget_set_margin_bottom (root, 6);
-	gtk_widget_add_css_class (root, "menu");
-	gtk_popover_set_child (GTK_POPOVER (popover), root);
-
-	header = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_set_margin_start (header, 6);
-	gtk_widget_set_margin_end (header, 6);
-	gtk_widget_set_margin_bottom (header, 4);
-	header_name = gtk_label_new (nick);
-	gtk_label_set_xalign (GTK_LABEL (header_name), 0.0f);
-	gtk_widget_add_css_class (header_name, "heading");
-	header_context = gtk_label_new (sess->channel[0] ? sess->channel : "");
-	gtk_label_set_xalign (GTK_LABEL (header_context), 0.0f);
-	gtk_widget_add_css_class (header_context, "dim-label");
-	gtk_box_append (GTK_BOX (header), header_name);
-	if (sess->channel[0])
-		gtk_box_append (GTK_BOX (header), header_context);
-	gtk_box_append (GTK_BOX (root), header);
-	gtk_box_append (GTK_BOX (root), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
-
+	/* Build actions from popup_list */
+	list = popup_list;
+	while (list)
 	{
-		GtkWidget *info_button;
-		GtkWidget *info_popover;
+		struct popup *pop;
 
-		info_popover = nick_menu_create_info_popover (root, sess, nick);
-		if (info_popover)
+		pop = (struct popup *) list->data;
+		if (pop && g_ascii_strncasecmp (pop->name, "SUB", 3) != 0 &&
+			g_ascii_strncasecmp (pop->name, "ENDSUB", 6) != 0 &&
+			g_ascii_strncasecmp (pop->name, "SEP", 3) != 0)
 		{
-			info_button = nick_menu_new_submenu_button (_("User Details"), "avatar-default-symbolic");
-			gtk_menu_button_set_popover (GTK_MENU_BUTTON (info_button), info_popover);
-			gtk_box_append (GTK_BOX (root), info_button);
-			gtk_box_append (GTK_BOX (root), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
+			char *action_name;
+
+			action_name = g_strdup_printf ("item-%d", item_idx);
+			action = g_simple_action_new (action_name, NULL);
+			g_object_set_data_full (G_OBJECT (action), "cmd",
+				g_strdup (pop->cmd ? pop->cmd : ""), g_free);
+			g_signal_connect (action, "activate", G_CALLBACK (nick_ctx_item_cb), NULL);
+			g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+			g_object_unref (action);
+			g_free (action_name);
+			item_idx++;
 		}
+		list = list->next;
 	}
 
-	levels = g_ptr_array_new_with_free_func (g_free);
-	level = g_new0 (HcNickMenuLevel, 1);
-	level->box = root;
-	g_ptr_array_add (levels, level);
+	/* Build menu model */
+	menu = g_menu_new ();
+
+	/* Header section with nick name and User Details */
+	if (sess->channel[0])
+		header_label = g_strdup_printf ("%s — %s", nick, sess->channel);
+	else
+		header_label = g_strdup (nick);
+
+	section = g_menu_new ();
+	{
+		GMenuItem *details_item;
+		GIcon *details_icon;
+
+		details_item = g_menu_item_new (_("User Details"), NULL);
+		details_icon = g_themed_icon_new ("avatar-default-symbolic");
+		g_menu_item_set_icon (details_item, details_icon);
+		g_menu_item_set_attribute (details_item, "custom", "s", "user-details");
+		g_menu_append_item (section, details_item);
+		g_object_unref (details_item);
+		g_object_unref (details_icon);
+	}
+	g_menu_append_section (menu, header_label, G_MENU_MODEL (section));
+	g_object_unref (section);
+	g_free (header_label);
+
+	/* Dynamic items from popup_list */
+	menu_stack = g_ptr_array_new ();
+	item_counts = g_ptr_array_new_with_free_func (g_free);
+	section = g_menu_new ();
+	current_menu = menu;
+	item_idx = 0;
 
 	list = popup_list;
 	while (list)
 	{
 		struct popup *pop;
-		HcNickMenuLevel *current;
 
 		pop = (struct popup *) list->data;
-		current = g_ptr_array_index (levels, levels->len - 1);
-		if (!pop || !current)
+		if (!pop)
 		{
 			list = list->next;
 			continue;
@@ -761,49 +648,47 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 
 		if (!g_ascii_strncasecmp (pop->name, "SUB", 3))
 		{
-			GtkWidget *sub_button;
-			GtkWidget *sub_popover;
-			GtkWidget *sub_box;
-			HcNickMenuLevel *sub_level;
-			const char *sub_label;
+			GMenu *submenu;
+			char *sub_label;
+			int *count;
 
-			sub_label = pop->cmd ? pop->cmd : "";
-			sub_button = nick_menu_new_submenu_button (sub_label, NULL);
+			/* Flush current section before submenu */
+			if (g_menu_model_get_n_items (G_MENU_MODEL (section)) > 0)
+			{
+				g_menu_append_section (current_menu, NULL, G_MENU_MODEL (section));
+				g_object_unref (section);
+				section = g_menu_new ();
+			}
 
-			sub_popover = gtk_popover_new ();
-			sub_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-			gtk_widget_set_margin_start (sub_box, 6);
-			gtk_widget_set_margin_end (sub_box, 6);
-			gtk_widget_set_margin_top (sub_box, 6);
-			gtk_widget_set_margin_bottom (sub_box, 6);
-			gtk_widget_add_css_class (sub_box, "menu");
-			gtk_popover_set_child (GTK_POPOVER (sub_popover), sub_box);
-			gtk_popover_set_autohide (GTK_POPOVER (sub_popover), TRUE);
-			gtk_popover_set_cascade_popdown (GTK_POPOVER (sub_popover), TRUE);
-			gtk_menu_button_set_popover (GTK_MENU_BUTTON (sub_button), sub_popover);
-			gtk_box_append (GTK_BOX (current->box), sub_button);
-			current->childcount++;
+			sub_label = strip_mnemonic (pop->cmd ? pop->cmd : "");
+			submenu = g_menu_new ();
+			g_menu_append_submenu (current_menu, sub_label, G_MENU_MODEL (submenu));
+			g_free (sub_label);
 
-			sub_level = g_new0 (HcNickMenuLevel, 1);
-			sub_level->box = sub_box;
-			sub_level->submenu_button = sub_button;
-			g_ptr_array_add (levels, sub_level);
+			g_ptr_array_add (menu_stack, current_menu);
+			count = g_new0 (int, 1);
+			g_ptr_array_add (item_counts, count);
+			current_menu = submenu;
+			g_object_unref (submenu);
 			list = list->next;
 			continue;
 		}
 
 		if (!g_ascii_strncasecmp (pop->name, "ENDSUB", 6))
 		{
-			if (levels->len > 1)
+			/* Flush current section */
+			if (g_menu_model_get_n_items (G_MENU_MODEL (section)) > 0)
 			{
-				HcNickMenuLevel *finished;
-				HcNickMenuLevel *parent_level;
+				g_menu_append_section (current_menu, NULL, G_MENU_MODEL (section));
+				g_object_unref (section);
+				section = g_menu_new ();
+			}
 
-				finished = g_ptr_array_index (levels, levels->len - 1);
-				parent_level = g_ptr_array_index (levels, levels->len - 2);
-				if (finished && parent_level && finished->childcount < 1 && finished->submenu_button)
-					gtk_box_remove (GTK_BOX (parent_level->box), finished->submenu_button);
-				g_ptr_array_set_size (levels, levels->len - 1);
+			if (menu_stack->len > 0)
+			{
+				current_menu = g_ptr_array_index (menu_stack, menu_stack->len - 1);
+				g_ptr_array_set_size (menu_stack, menu_stack->len - 1);
+				g_ptr_array_set_size (item_counts, item_counts->len - 1);
 			}
 			list = list->next;
 			continue;
@@ -811,87 +696,95 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 
 		if (!g_ascii_strncasecmp (pop->name, "SEP", 3))
 		{
-			gtk_box_append (GTK_BOX (current->box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
+			/* Flush current section and start a new one */
+			if (g_menu_model_get_n_items (G_MENU_MODEL (section)) > 0)
+			{
+				g_menu_append_section (current_menu, NULL, G_MENU_MODEL (section));
+				g_object_unref (section);
+				section = g_menu_new ();
+			}
 			list = list->next;
 			continue;
 		}
 
+		/* Regular item */
 		{
-			GtkWidget *button;
-			HcNickMenuItemData *item_data;
 			char *label;
 			char *icon;
+			char *action_name;
+			GMenuItem *item;
 
 			nick_menu_extract_icon (pop->name, &label, &icon);
-			button = nick_menu_new_button (label, icon);
-			item_data = g_new0 (HcNickMenuItemData, 1);
-			item_data->ctx = ctx;
-			item_data->cmd = g_strdup (pop->cmd ? pop->cmd : "");
-			g_signal_connect_data (button, "clicked",
-				G_CALLBACK (nick_menu_item_activate_cb), item_data,
-				nick_menu_item_data_free, 0);
-			gtk_box_append (GTK_BOX (current->box), button);
-			current->childcount++;
+			action_name = g_strdup_printf ("nick.item-%d", item_idx);
+			item = nick_menu_new_item_with_icon (label, action_name, icon);
+			g_menu_append_item (section, item);
+			g_object_unref (item);
 			g_free (label);
 			g_free (icon);
+			g_free (action_name);
+			item_idx++;
 		}
 
 		list = list->next;
 	}
 
-	g_ptr_array_free (levels, TRUE);
+	/* Flush remaining section */
+	if (g_menu_model_get_n_items (G_MENU_MODEL (section)) > 0)
+		g_menu_append_section (current_menu, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
+
+	g_ptr_array_free (menu_stack, TRUE);
+	g_ptr_array_free (item_counts, TRUE);
+
+	/* Create the popover */
+	gtk_widget_insert_action_group (parent, "nick", G_ACTION_GROUP (group));
+	active_nick_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	gtk_widget_set_parent (active_nick_popover, parent);
+	g_object_set_data_full (G_OBJECT (active_nick_popover), "nick-actions",
+		g_object_ref (group), g_object_unref);
+
+	/* Add User Details custom widget */
+	info_widget = nick_menu_create_info_popover (active_nick_popover, sess, nick);
+	if (info_widget)
+	{
+		/* nick_menu_create_info_popover returns a GtkPopover, but we need the grid inside */
+		GtkWidget *grid;
+
+		grid = gtk_popover_get_child (GTK_POPOVER (info_widget));
+		if (grid)
+		{
+			g_object_ref (grid);
+			gtk_popover_set_child (GTK_POPOVER (info_widget), NULL);
+			gtk_popover_menu_add_child (GTK_POPOVER_MENU (active_nick_popover), grid, "user-details");
+			g_object_unref (grid);
+		}
+		g_object_ref_sink (info_widget);
+		g_object_unref (info_widget);
+	}
 
 	rect.x = (int) x;
 	rect.y = (int) y;
 	rect.width = 1;
 	rect.height = 1;
-	gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-	gtk_popover_popup (GTK_POPOVER (popover));
-}
+	gtk_popover_set_pointing_to (GTK_POPOVER (active_nick_popover), &rect);
+	gtk_popover_popup (GTK_POPOVER (active_nick_popover));
 
-typedef struct
-{
-	GtkWidget *popover;
-	session *sess;
-	char *url;
-} HcUrlMenuContext;
+	g_object_unref (menu);
+	g_object_unref (group);
+}
 
 static GtkWidget *active_url_popover;
-
-static void
-url_menu_context_free (gpointer data)
-{
-	HcUrlMenuContext *ctx;
-
-	ctx = data;
-	if (!ctx)
-		return;
-
-	g_free (ctx->url);
-	g_free (ctx);
-}
-
-static void
-url_menu_popover_closed_cb (GtkPopover *popover, gpointer user_data)
-{
-	(void) user_data;
-
-	if (active_url_popover == GTK_WIDGET (popover))
-		active_url_popover = NULL;
-
-	if (gtk_widget_get_parent (GTK_WIDGET (popover)))
-		gtk_widget_unparent (GTK_WIDGET (popover));
-}
+static session *url_ctx_sess;
+static char *url_ctx_url;
 
 static void
 url_menu_close_active (void)
 {
-	if (!active_url_popover)
-		return;
-
-	if (gtk_widget_get_parent (active_url_popover))
+	if (active_url_popover)
+	{
 		gtk_widget_unparent (active_url_popover);
-	active_url_popover = NULL;
+		active_url_popover = NULL;
+	}
 }
 
 static void
@@ -908,62 +801,56 @@ url_menu_open_with_command (session *sess, const char *url)
 }
 
 static void
-url_menu_open_cb (GtkButton *button, gpointer userdata)
+url_ctx_open_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcUrlMenuContext *ctx;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	ctx = userdata;
-	if (!ctx || !ctx->url || !ctx->url[0])
-		return;
-
-	fe_open_url (ctx->url);
-	gtk_popover_popdown (GTK_POPOVER (ctx->popover));
+	if (url_ctx_url && url_ctx_url[0])
+		fe_open_url (url_ctx_url);
 }
 
 static void
-url_menu_open_browser_cb (GtkButton *button, gpointer userdata)
+url_ctx_open_browser_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcUrlMenuContext *ctx;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	ctx = userdata;
-	if (!ctx || !ctx->url || !ctx->url[0])
-		return;
-
-	fe_open_url (ctx->url);
-	gtk_popover_popdown (GTK_POPOVER (ctx->popover));
+	if (url_ctx_url && url_ctx_url[0])
+		fe_open_url (url_ctx_url);
 }
 
 static void
-url_menu_open_new_window_cb (GtkButton *button, gpointer userdata)
+url_ctx_open_new_window_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcUrlMenuContext *ctx;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	ctx = userdata;
-	if (!ctx || !ctx->url || !ctx->url[0])
+	if (!url_ctx_url || !url_ctx_url[0])
 		return;
 
-	if ((g_ascii_strncasecmp (ctx->url, "irc://", 6) == 0 ||
-		g_ascii_strncasecmp (ctx->url, "ircs://", 7) == 0) &&
-		ctx->sess && is_session (ctx->sess))
-		url_menu_open_with_command (ctx->sess, ctx->url);
+	if ((g_ascii_strncasecmp (url_ctx_url, "irc://", 6) == 0 ||
+		g_ascii_strncasecmp (url_ctx_url, "ircs://", 7) == 0) &&
+		url_ctx_sess && is_session (url_ctx_sess))
+		url_menu_open_with_command (url_ctx_sess, url_ctx_url);
 	else
-		fe_open_url (ctx->url);
-	gtk_popover_popdown (GTK_POPOVER (ctx->popover));
+		fe_open_url (url_ctx_url);
 }
 
 static void
-url_menu_copy_cb (GtkButton *button, gpointer userdata)
+url_ctx_copy_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcUrlMenuContext *ctx;
 	GdkDisplay *display;
 	GdkClipboard *clipboard;
 
-	(void) button;
-	ctx = userdata;
-	if (!ctx || !ctx->url || !ctx->url[0])
+	(void) action;
+	(void) param;
+	(void) userdata;
+
+	if (!url_ctx_url || !url_ctx_url[0])
 		return;
 
 	display = gdk_display_get_default ();
@@ -971,17 +858,16 @@ url_menu_copy_cb (GtkButton *button, gpointer userdata)
 		return;
 
 	clipboard = gdk_display_get_clipboard (display);
-	gdk_clipboard_set_text (clipboard, ctx->url);
-	gtk_popover_popdown (GTK_POPOVER (ctx->popover));
+	gdk_clipboard_set_text (clipboard, url_ctx_url);
 }
 
 void
 fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess, const char *url)
 {
-	GtkWidget *popover;
-	GtkWidget *box;
-	GtkWidget *button;
-	HcUrlMenuContext *ctx;
+	GSimpleActionGroup *group;
+	GSimpleAction *action;
+	GMenu *menu;
+	GMenu *section;
 	GdkRectangle rect;
 
 	if (!parent || !url || !url[0])
@@ -989,67 +875,56 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 
 	url_menu_close_active ();
 
-	popover = gtk_popover_new ();
-	active_url_popover = popover;
-	gtk_widget_set_parent (popover, parent);
-	g_signal_connect (popover, "closed",
-		G_CALLBACK (url_menu_popover_closed_cb), NULL);
-	gtk_popover_set_autohide (GTK_POPOVER (popover), TRUE);
-	gtk_popover_set_cascade_popdown (GTK_POPOVER (popover), TRUE);
+	g_free (url_ctx_url);
+	url_ctx_url = g_strdup (url);
+	url_ctx_sess = sess;
 
-	ctx = g_new0 (HcUrlMenuContext, 1);
-	ctx->popover = popover;
-	ctx->sess = sess;
-	ctx->url = g_strdup (url);
-	g_object_set_data_full (G_OBJECT (popover), "hc-url-menu-context",
-		ctx, url_menu_context_free);
+	group = g_simple_action_group_new ();
 
-	box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-	gtk_widget_set_margin_start (box, 6);
-	gtk_widget_set_margin_end (box, 6);
-	gtk_widget_set_margin_top (box, 6);
-	gtk_widget_set_margin_bottom (box, 6);
-	gtk_widget_add_css_class (box, "menu");
-	gtk_popover_set_child (GTK_POPOVER (popover), box);
+	action = g_simple_action_new ("open", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (url_ctx_open_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	button = gtk_button_new_with_label (_("Open Link"));
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_hexpand (button, TRUE);
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	popover_left_align_button_label (button);
-	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_cb), ctx);
-	gtk_box_append (GTK_BOX (box), button);
+	action = g_simple_action_new ("open-browser", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (url_ctx_open_browser_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	button = gtk_button_new_with_label (_("Open Link in Browser"));
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_hexpand (button, TRUE);
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	popover_left_align_button_label (button);
-	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_browser_cb), ctx);
-	gtk_box_append (GTK_BOX (box), button);
+	action = g_simple_action_new ("open-new-window", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (url_ctx_open_new_window_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	button = gtk_button_new_with_label (_("Open Link in New Window"));
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_hexpand (button, TRUE);
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	popover_left_align_button_label (button);
-	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_open_new_window_cb), ctx);
-	gtk_box_append (GTK_BOX (box), button);
+	action = g_simple_action_new ("copy", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (url_ctx_copy_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	button = gtk_button_new_with_label (_("Copy Selected Link"));
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_hexpand (button, TRUE);
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	popover_left_align_button_label (button);
-	g_signal_connect (button, "clicked", G_CALLBACK (url_menu_copy_cb), ctx);
-	gtk_box_append (GTK_BOX (box), button);
+	menu = g_menu_new ();
+	section = g_menu_new ();
+	g_menu_append (section, _("Open Link"), "url.open");
+	g_menu_append (section, _("Open Link in Browser"), "url.open-browser");
+	g_menu_append (section, _("Open Link in New Window"), "url.open-new-window");
+	g_menu_append (section, _("Copy Selected Link"), "url.copy");
+	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
+
+	gtk_widget_insert_action_group (parent, "url", G_ACTION_GROUP (group));
+	active_url_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	gtk_widget_set_parent (active_url_popover, parent);
+	g_object_set_data_full (G_OBJECT (active_url_popover), "url-actions",
+		g_object_ref (group), g_object_unref);
 
 	rect.x = (int) x;
 	rect.y = (int) y;
 	rect.width = 1;
 	rect.height = 1;
-	gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-	gtk_popover_popup (GTK_POPOVER (popover));
+	gtk_popover_set_pointing_to (GTK_POPOVER (active_url_popover), &rect);
+	gtk_popover_popup (GTK_POPOVER (active_url_popover));
+
+	g_object_unref (menu);
+	g_object_unref (group);
 }
 
 static void
