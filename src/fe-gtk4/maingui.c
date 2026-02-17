@@ -1737,8 +1737,6 @@ fe_set_topic (struct session *sess, char *topic, char *stripped_topic)
 	shown_topic = prefs.hex_text_stripcolor_topic && stripped_topic ? stripped_topic : topic;
 	if (sess == current_tab)
 	{
-		if (log_view)
-			gtk_widget_set_tooltip_text (log_view, shown_topic && shown_topic[0] ? shown_topic : NULL);
 		if (prefs.hex_gui_topicbar && topic_supports_session_type (sess))
 			fe_gtk4_adw_set_window_subtitle (shown_topic);
 		else
@@ -1824,8 +1822,6 @@ fe_clear_channel (struct session *sess)
 	preserve = maingui_preserve_disconnect_text (sess);
 	if (!preserve)
 		fe_text_clear (sess, 0);
-	if (!preserve && sess == current_tab && log_view)
-		gtk_widget_set_tooltip_text (log_view, NULL);
 	if (sess == current_tab)
 		topic_update_for_session (sess);
 }
