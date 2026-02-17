@@ -42,25 +42,8 @@ static GtkWidget *tree_view;
 static gboolean tree_select_syncing;
 static gboolean tree_css_loaded;
 
-typedef struct
-{
-	GtkWidget *popover;
-	session *sess;
-	guint8 *setting;
-	gboolean logging_setting;
-} HcSessionToggleData;
-
-typedef struct
-{
-	GtkWidget *popover;
-	server *serv;
-} HcServerToggleData;
-
-typedef struct
-{
-	GtkWidget *popover;
-	session *sess;
-} HcSessionActionData;
+static session *tree_ctx_sess;
+static GtkWidget *tree_ctx_popover;
 
 static gboolean tree_group_by_server (void);
 static const char *tree_server_state_text (server *serv);
@@ -437,15 +420,6 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	g_free (tooltip_text);
 }
 
-static session *
-tree_action_session (HcSessionActionData *data)
-{
-	if (!data || !data->sess || !is_session (data->sess))
-		return NULL;
-
-	return data->sess;
-}
-
 static gboolean
 tree_toggle_initial (guint8 setting, int global_value)
 {
@@ -455,297 +429,328 @@ tree_toggle_initial (guint8 setting, int global_value)
 }
 
 static void
-tree_popover_close_cb (GtkButton *button, gpointer userdata)
+tree_ctx_close_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcSessionActionData *data;
-	session *sess;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	data = userdata;
-	sess = tree_action_session (data);
-	if (sess)
-		fe_close_window (sess);
-	if (data && data->popover)
-		gtk_popover_popdown (GTK_POPOVER (data->popover));
+	printf("tree_ctx_close_cb()\n");
+	if (tree_ctx_sess)
+	    printf("\ttree_ctx_sess=%p, is_session=%d\n", tree_ctx_sess, is_session (tree_ctx_sess));
+	else
+	    printf("\ttree_ctx_sess=NULL");
+
+
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		fe_close_window (tree_ctx_sess);
+	if (tree_ctx_popover)
+		gtk_popover_popdown (GTK_POPOVER (tree_ctx_popover));
 }
 
 static void
-tree_popover_disconnect_cb (GtkButton *button, gpointer userdata)
+tree_ctx_disconnect_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcSessionActionData *data;
-	session *sess;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	data = userdata;
-	sess = tree_action_session (data);
-	if (sess)
-		handle_command (sess, "DISCON", FALSE);
-	if (data && data->popover)
-		gtk_popover_popdown (GTK_POPOVER (data->popover));
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		handle_command (tree_ctx_sess, "DISCON", FALSE);
+	if (tree_ctx_popover)
+		gtk_popover_popdown (GTK_POPOVER (tree_ctx_popover));
 }
 
 static void
-tree_popover_reconnect_cb (GtkButton *button, gpointer userdata)
+tree_ctx_reconnect_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcSessionActionData *data;
-	session *sess;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	data = userdata;
-	sess = tree_action_session (data);
-	if (sess)
-		handle_command (sess, "RECONNECT", FALSE);
-	if (data && data->popover)
-		gtk_popover_popdown (GTK_POPOVER (data->popover));
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		handle_command (tree_ctx_sess, "RECONNECT", FALSE);
+	if (tree_ctx_popover)
+		gtk_popover_popdown (GTK_POPOVER (tree_ctx_popover));
 }
 
 static void
-tree_popover_chanlist_cb (GtkButton *button, gpointer userdata)
+tree_ctx_chanlist_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcSessionActionData *data;
-	session *sess;
+	(void) action;
+	(void) param;
+	(void) userdata;
 
-	(void) button;
-	data = userdata;
-	sess = tree_action_session (data);
-	if (sess && sess->server)
-		chanlist_opengui (sess->server, TRUE);
-	if (data && data->popover)
-		gtk_popover_popdown (GTK_POPOVER (data->popover));
+	if (tree_ctx_sess && is_session (tree_ctx_sess) && tree_ctx_sess->server)
+		chanlist_opengui (tree_ctx_sess->server, TRUE);
+	if (tree_ctx_popover)
+		gtk_popover_popdown (GTK_POPOVER (tree_ctx_popover));
 }
 
 static void
-tree_popover_session_toggle_cb (GtkCheckButton *check, gpointer userdata)
+tree_ctx_toggle_setting (GSimpleAction *action, guint8 *setting, gboolean is_logging)
 {
-	HcSessionToggleData *data;
-	session *sess;
+	GVariant *state;
 	gboolean active;
 	guint8 old_value;
 
-	data = userdata;
-	if (!data || !data->setting)
+	if (!tree_ctx_sess || !is_session (tree_ctx_sess) || !setting)
 		return;
 
-	sess = data->sess;
-	if (!sess || !is_session (sess))
-		return;
+	state = g_action_get_state (G_ACTION (action));
+	active = !g_variant_get_boolean (state);
+	g_variant_unref (state);
 
-	active = gtk_check_button_get_active (check);
-	old_value = *data->setting;
-	*data->setting = active ? SET_ON : SET_OFF;
+	old_value = *setting;
+	*setting = active ? SET_ON : SET_OFF;
 
-	if (data->logging_setting && old_value != *data->setting)
-		log_open_or_close (sess);
+	if (is_logging && old_value != *setting)
+		log_open_or_close (tree_ctx_sess);
 
-	chanopt_save (sess);
+	g_simple_action_set_state (action, g_variant_new_boolean (active));
+	chanopt_save (tree_ctx_sess);
 	chanopt_save_all (FALSE);
-	if (data->popover)
-		gtk_popover_popdown (GTK_POPOVER (data->popover));
 }
 
 static void
-tree_popover_autoconn_cb (GtkCheckButton *check, gpointer userdata)
+tree_ctx_balloon_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
-	HcServerToggleData *data;
+	(void) param;
+	(void) userdata;
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		tree_ctx_toggle_setting (action, &tree_ctx_sess->alert_balloon, FALSE);
+}
+
+static void
+tree_ctx_beep_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	(void) param;
+	(void) userdata;
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		tree_ctx_toggle_setting (action, &tree_ctx_sess->alert_beep, FALSE);
+}
+
+static void
+tree_ctx_tray_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	(void) param;
+	(void) userdata;
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		tree_ctx_toggle_setting (action, &tree_ctx_sess->alert_tray, FALSE);
+}
+
+static void
+tree_ctx_taskbar_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	(void) param;
+	(void) userdata;
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		tree_ctx_toggle_setting (action, &tree_ctx_sess->alert_taskbar, FALSE);
+}
+
+static void
+tree_ctx_logging_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	(void) param;
+	(void) userdata;
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		tree_ctx_toggle_setting (action, &tree_ctx_sess->text_logging, TRUE);
+}
+
+static void
+tree_ctx_scrollback_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	(void) param;
+	(void) userdata;
+	if (tree_ctx_sess && is_session (tree_ctx_sess))
+		tree_ctx_toggle_setting (action, &tree_ctx_sess->text_scrollback, FALSE);
+}
+
+static void
+tree_ctx_autoconn_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	GVariant *state;
 	ircnet *net;
 	gboolean active;
 
-	data = userdata;
-	if (!data || !data->serv || !data->serv->network)
+	(void) param;
+	(void) userdata;
+
+	if (!tree_ctx_sess || !is_session (tree_ctx_sess) ||
+		!tree_ctx_sess->server || !tree_ctx_sess->server->network)
 		return;
 
-	net = (ircnet *) data->serv->network;
-	active = gtk_check_button_get_active (check);
+	state = g_action_get_state (G_ACTION (action));
+	active = !g_variant_get_boolean (state);
+	g_variant_unref (state);
+
+	net = (ircnet *) tree_ctx_sess->server->network;
 	if (active)
 		net->flags |= FLAG_AUTO_CONNECT;
 	else
 		net->flags &= ~FLAG_AUTO_CONNECT;
 
+	g_simple_action_set_state (action, g_variant_new_boolean (active));
 	servlist_save ();
-	if (data->popover)
-		gtk_popover_popdown (GTK_POPOVER (data->popover));
-}
-
-static GtkWidget *
-tree_popover_add_action (GtkWidget *box, const char *label, GCallback cb,
-	gpointer data, GClosureNotify destroy_data)
-{
-	GtkWidget *button;
-	GtkWidget *child;
-
-	button = gtk_button_new_with_label (label);
-	gtk_widget_add_css_class (button, "flat");
-	gtk_widget_set_halign (button, GTK_ALIGN_FILL);
-	gtk_widget_set_hexpand (button, TRUE);
-	child = gtk_button_get_child (GTK_BUTTON (button));
-	if (child && GTK_IS_LABEL (child))
-	{
-		gtk_label_set_xalign (GTK_LABEL (child), 0.0f);
-		gtk_widget_set_halign (child, GTK_ALIGN_START);
-	}
-	g_signal_connect_data (button, "clicked", cb, data, destroy_data, 0);
-	gtk_box_append (GTK_BOX (box), button);
-	return button;
-}
-
-static GtkWidget *
-tree_popover_add_toggle (GtkWidget *box, const char *label, gboolean active, GCallback cb,
-	gpointer data, GClosureNotify destroy_data)
-{
-	GtkWidget *check;
-
-	check = gtk_check_button_new_with_label (label);
-	gtk_widget_set_halign (check, GTK_ALIGN_FILL);
-	gtk_widget_set_hexpand (check, TRUE);
-	gtk_check_button_set_active (GTK_CHECK_BUTTON (check), active);
-	g_signal_connect_data (check, "toggled", cb, data, destroy_data, 0);
-	gtk_box_append (GTK_BOX (box), check);
-	return check;
-}
-
-static void
-tree_popover_add_section_title (GtkWidget *box, const char *title)
-{
-	GtkWidget *label;
-
-	label = gtk_label_new (title);
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_widget_add_css_class (label, "heading");
-	gtk_box_append (GTK_BOX (box), label);
 }
 
 static void
 tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 {
-	GtkWidget *popover;
-	GtkWidget *box;
-	HcSessionActionData *action_data;
-	HcSessionToggleData *toggle_data;
-	HcServerToggleData *server_toggle_data;
+	GSimpleActionGroup *group;
+	GMenu *menu;
+	GMenu *section;
+	GSimpleAction *action;
 	gboolean is_priv;
-	int global_balloon;
-	int global_beep;
-	int global_tray;
-	int global_taskbar;
+	int global_balloon, global_beep, global_tray, global_taskbar;
 	GdkRectangle rect;
 
 	if (!parent || !sess || !is_session (sess))
 		return;
 
-	popover = gtk_popover_new ();
-	gtk_widget_set_parent (popover, parent);
-	g_signal_connect_swapped (popover, "closed",
-		G_CALLBACK (gtk_widget_unparent), popover);
+	/* Clean up previous popover if still around */
+	if (tree_ctx_popover)
+	{
+		gtk_widget_unparent (tree_ctx_popover);
+		tree_ctx_popover = NULL;
+	}
 
-	box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-	gtk_widget_set_margin_start (box, 6);
-	gtk_widget_set_margin_end (box, 6);
-	gtk_widget_set_margin_top (box, 6);
-	gtk_widget_set_margin_bottom (box, 6);
-	gtk_widget_add_css_class (box, "menu");
-	gtk_popover_set_child (GTK_POPOVER (popover), box);
+	tree_ctx_sess = sess;
 
-	action_data = g_new0 (HcSessionActionData, 1);
-	action_data->popover = popover;
-	action_data->sess = sess;
-	tree_popover_add_action (box, _("Close"), G_CALLBACK (tree_popover_close_cb),
-		action_data, (GClosureNotify) g_free);
+	group = g_simple_action_group_new ();
+
+	/* Regular actions */
+	action = g_simple_action_new ("close", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_close_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
 	if (sess->server)
 	{
-		action_data = g_new0 (HcSessionActionData, 1);
-		action_data->popover = popover;
-		action_data->sess = sess;
-		tree_popover_add_action (box, sess->server->connected ? _("Disconnect") : _("Reconnect"),
-			sess->server->connected ?
-				G_CALLBACK (tree_popover_disconnect_cb) :
-				G_CALLBACK (tree_popover_reconnect_cb),
-			action_data, (GClosureNotify) g_free);
+		if (sess->server->connected)
+		{
+			action = g_simple_action_new ("disconnect", NULL);
+			g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_disconnect_cb), NULL);
+			g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+			g_object_unref (action);
+		}
+		else
+		{
+			action = g_simple_action_new ("reconnect", NULL);
+			g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_reconnect_cb), NULL);
+			g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+			g_object_unref (action);
+		}
 
-		action_data = g_new0 (HcSessionActionData, 1);
-		action_data->popover = popover;
-		action_data->sess = sess;
-		tree_popover_add_action (box, _("Channel List"), G_CALLBACK (tree_popover_chanlist_cb),
-			action_data, (GClosureNotify) g_free);
+		action = g_simple_action_new ("channel-list", NULL);
+		g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_chanlist_cb), NULL);
+		g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+		g_object_unref (action);
 	}
 
-	gtk_box_append (GTK_BOX (box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
-	tree_popover_add_section_title (box, _("Notifications"));
-
+	/* Toggle actions */
 	is_priv = sess->type == SESS_DIALOG;
 	global_balloon = is_priv ? prefs.hex_input_balloon_priv : prefs.hex_input_balloon_chans;
 	global_beep = is_priv ? prefs.hex_input_beep_priv : prefs.hex_input_beep_chans;
 	global_tray = is_priv ? prefs.hex_input_tray_priv : prefs.hex_input_tray_chans;
 	global_taskbar = is_priv ? prefs.hex_input_flash_priv : prefs.hex_input_flash_chans;
 
-	toggle_data = g_new0 (HcSessionToggleData, 1);
-	toggle_data->popover = popover;
-	toggle_data->sess = sess;
-	toggle_data->setting = &sess->alert_balloon;
-	tree_popover_add_toggle (box, _("Show Notifications"),
-		tree_toggle_initial (sess->alert_balloon, global_balloon),
-		G_CALLBACK (tree_popover_session_toggle_cb), toggle_data, (GClosureNotify) g_free);
+	action = g_simple_action_new_stateful ("show-notifications", NULL,
+		g_variant_new_boolean (tree_toggle_initial (sess->alert_balloon, global_balloon)));
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_balloon_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	toggle_data = g_new0 (HcSessionToggleData, 1);
-	toggle_data->popover = popover;
-	toggle_data->sess = sess;
-	toggle_data->setting = &sess->alert_beep;
-	tree_popover_add_toggle (box, _("Beep on Message"),
-		tree_toggle_initial (sess->alert_beep, global_beep),
-		G_CALLBACK (tree_popover_session_toggle_cb), toggle_data, (GClosureNotify) g_free);
+	action = g_simple_action_new_stateful ("beep-on-message", NULL,
+		g_variant_new_boolean (tree_toggle_initial (sess->alert_beep, global_beep)));
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_beep_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	toggle_data = g_new0 (HcSessionToggleData, 1);
-	toggle_data->popover = popover;
-	toggle_data->sess = sess;
-	toggle_data->setting = &sess->alert_tray;
-	tree_popover_add_toggle (box, _("Blink Tray Icon"),
-		tree_toggle_initial (sess->alert_tray, global_tray),
-		G_CALLBACK (tree_popover_session_toggle_cb), toggle_data, (GClosureNotify) g_free);
+	action = g_simple_action_new_stateful ("blink-tray", NULL,
+		g_variant_new_boolean (tree_toggle_initial (sess->alert_tray, global_tray)));
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_tray_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	toggle_data = g_new0 (HcSessionToggleData, 1);
-	toggle_data->popover = popover;
-	toggle_data->sess = sess;
-	toggle_data->setting = &sess->alert_taskbar;
-	tree_popover_add_toggle (box, _("Blink Task Bar"),
-		tree_toggle_initial (sess->alert_taskbar, global_taskbar),
-		G_CALLBACK (tree_popover_session_toggle_cb), toggle_data, (GClosureNotify) g_free);
+	action = g_simple_action_new_stateful ("blink-taskbar", NULL,
+		g_variant_new_boolean (tree_toggle_initial (sess->alert_taskbar, global_taskbar)));
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_taskbar_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	gtk_box_append (GTK_BOX (box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
-	tree_popover_add_section_title (box, _("Session Settings"));
+	action = g_simple_action_new_stateful ("log-to-disk", NULL,
+		g_variant_new_boolean (tree_toggle_initial (sess->text_logging, prefs.hex_irc_logging)));
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_logging_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
-	toggle_data = g_new0 (HcSessionToggleData, 1);
-	toggle_data->popover = popover;
-	toggle_data->sess = sess;
-	toggle_data->setting = &sess->text_logging;
-	toggle_data->logging_setting = TRUE;
-	tree_popover_add_toggle (box, _("Log to Disk"),
-		tree_toggle_initial (sess->text_logging, prefs.hex_irc_logging),
-		G_CALLBACK (tree_popover_session_toggle_cb), toggle_data, (GClosureNotify) g_free);
-
-	toggle_data = g_new0 (HcSessionToggleData, 1);
-	toggle_data->popover = popover;
-	toggle_data->sess = sess;
-	toggle_data->setting = &sess->text_scrollback;
-	tree_popover_add_toggle (box, _("Reload Scrollback"),
-		tree_toggle_initial (sess->text_scrollback, prefs.hex_text_replay),
-		G_CALLBACK (tree_popover_session_toggle_cb), toggle_data, (GClosureNotify) g_free);
+	action = g_simple_action_new_stateful ("reload-scrollback", NULL,
+		g_variant_new_boolean (tree_toggle_initial (sess->text_scrollback, prefs.hex_text_replay)));
+	g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_scrollback_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
 
 	if (sess->type == SESS_SERVER && sess->server && sess->server->network)
 	{
-		server_toggle_data = g_new0 (HcServerToggleData, 1);
-		server_toggle_data->popover = popover;
-		server_toggle_data->serv = sess->server;
-		tree_popover_add_toggle (box, _("Auto-Connect"),
-			((((ircnet *) sess->server->network)->flags & FLAG_AUTO_CONNECT) != 0),
-			G_CALLBACK (tree_popover_autoconn_cb), server_toggle_data, (GClosureNotify) g_free);
+		action = g_simple_action_new_stateful ("auto-connect", NULL,
+			g_variant_new_boolean ((((ircnet *) sess->server->network)->flags & FLAG_AUTO_CONNECT) != 0));
+		g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_autoconn_cb), NULL);
+		g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+		g_object_unref (action);
 	}
+
+
+	gtk_widget_insert_action_group (parent, "chan", G_ACTION_GROUP (group));
+
+	/* Build the menu model */
+	menu = g_menu_new ();
+
+	section = g_menu_new ();
+	g_menu_append (section, _("Close"), "chan.close");
+	if (sess->server)
+	{
+		if (sess->server->connected)
+			g_menu_append (section, _("Disconnect"), "chan.disconnect");
+		else
+			g_menu_append (section, _("Reconnect"), "chan.reconnect");
+		g_menu_append (section, _("Channel List"), "chan.channel-list");
+	}
+	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
+
+	section = g_menu_new ();
+	g_menu_append (section, _("Show Notifications"), "chan.show-notifications");
+	g_menu_append (section, _("Beep on Message"), "chan.beep-on-message");
+	g_menu_append (section, _("Blink Tray Icon"), "chan.blink-tray");
+	g_menu_append (section, _("Blink Task Bar"), "chan.blink-taskbar");
+	g_menu_append_section (menu, _("Notifications"), G_MENU_MODEL (section));
+	g_object_unref (section);
+
+	section = g_menu_new ();
+	g_menu_append (section, _("Log to Disk"), "chan.log-to-disk");
+	g_menu_append (section, _("Reload Scrollback"), "chan.reload-scrollback");
+	if (sess->type == SESS_SERVER && sess->server && sess->server->network)
+		g_menu_append (section, _("Auto-Connect"), "chan.auto-connect");
+	g_menu_append_section (menu, _("Session Settings"), G_MENU_MODEL (section));
+	g_object_unref (section);
+
+	/* Create the popover menu */
+	tree_ctx_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	gtk_widget_set_parent (tree_ctx_popover, parent);
+
+	g_object_set_data_full (G_OBJECT (tree_ctx_popover), "chan-actions",
+		g_object_ref (group), g_object_unref);
 
 	rect.x = (int) x;
 	rect.y = (int) y;
 	rect.width = 1;
 	rect.height = 1;
-	gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-	gtk_popover_popup (GTK_POPOVER (popover));
+	gtk_popover_set_pointing_to (GTK_POPOVER (tree_ctx_popover), &rect);
+	gtk_popover_popup (GTK_POPOVER (tree_ctx_popover));
+
+	g_object_unref (menu);
+	g_object_unref (group);
 }
 
 static void
@@ -1406,6 +1411,13 @@ fe_gtk4_chanview_tree_cleanup (void)
 		g_hash_table_unref (tree_unread_counts);
 		tree_unread_counts = NULL;
 	}
+
+	if (tree_ctx_popover)
+	{
+		gtk_widget_unparent (tree_ctx_popover);
+		tree_ctx_popover = NULL;
+	}
+	tree_ctx_sess = NULL;
 
 	g_clear_object (&tree_selection);
 	g_clear_object (&tree_model);
