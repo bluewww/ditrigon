@@ -850,7 +850,7 @@ servlist_close_request_cb (GtkWindow *window, gpointer userdata)
 	}
 
 	if (edit_win)
-		gtk_window_destroy (GTK_WINDOW (edit_win));
+		adw_dialog_force_close (ADW_DIALOG (edit_win));
 
 	servlist_savegui ();
 
@@ -1617,18 +1617,18 @@ servlist_edit_update (ircnet *net)
 	servlist_cleanup_commands (net);
 }
 
-static gboolean
-servlist_edit_close_request_cb (GtkWindow *window, gpointer userdata)
+static void
+servlist_edit_closed_cb (AdwDialog *dialog, gpointer userdata)
 {
 	(void) userdata;
 
-	if (window)
+	if (dialog)
 	{
 		int width;
 		int height;
 
-		width = gtk_widget_get_width (GTK_WIDGET (window));
-		height = gtk_widget_get_height (GTK_WIDGET (window));
+		width = adw_dialog_get_content_width (dialog);
+		height = adw_dialog_get_content_height (dialog);
 		if (width > 0)
 			netedit_win_width = width;
 		if (height > 0)
@@ -1660,8 +1660,6 @@ servlist_edit_close_request_cb (GtkWindow *window, gpointer userdata)
 	selected_serv = NULL;
 	selected_cmd = NULL;
 	selected_chan = NULL;
-
-	return FALSE;
 }
 
 
@@ -1816,7 +1814,7 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	int width, height;
 
 	builder = fe_gtk4_builder_new_from_resource (SERVLIST_EDIT_UI_PATH);
-	window = fe_gtk4_builder_get_widget (builder, "servlist_edit_window", ADW_TYPE_PREFERENCES_WINDOW);
+	window = fe_gtk4_builder_get_widget (builder, "servlist_edit_window", ADW_TYPE_PREFERENCES_DIALOG);
 
 	/* Get the preference groups */
 	group = ADW_PREFERENCES_GROUP (fe_gtk4_builder_get_widget (builder, "group_identity", ADW_TYPE_PREFERENCES_GROUP));
@@ -2003,20 +2001,19 @@ servlist_open_edit (GtkWidget *parent, ircnet *net)
 	g_object_unref (builder);
 
 	title = g_strdup_printf (_("Edit %s - %s"), net->name ? net->name : _("Network"), PACKAGE_NAME);
-	gtk_window_set_title (GTK_WINDOW (window), title);
+	adw_dialog_set_title (ADW_DIALOG (window), title);
 	g_free (title);
 	width = netedit_win_width > 0 ? netedit_win_width : 680;
 	height = netedit_win_height > 0 ? netedit_win_height : 600;
-	gtk_window_set_default_size (GTK_WINDOW (window), width, height);
-	gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (parent));
-	gtk_window_set_modal (GTK_WINDOW (window), TRUE);
+	adw_dialog_set_content_width (ADW_DIALOG (window), width);
+	adw_dialog_set_content_height (ADW_DIALOG (window), height);
 
 	/* Populate the lists */
 	servlist_servers_populate (net, edit_lists[SERVER_TREE], NULL);
 	servlist_channels_populate (net, edit_lists[CHANNEL_TREE], NULL);
 	servlist_commands_populate (net, edit_lists[CMD_TREE], NULL);
 
-	g_signal_connect (window, "close-request", G_CALLBACK (servlist_edit_close_request_cb), NULL);
+	g_signal_connect (window, "closed", G_CALLBACK (servlist_edit_closed_cb), NULL);
 
 	return window;
 }
@@ -2032,13 +2029,13 @@ servlist_edit_cb (GtkWidget *button, gpointer userdata)
 
 	if (edit_win)
 	{
-		gtk_window_present (GTK_WINDOW (edit_win));
+		adw_dialog_present (ADW_DIALOG (edit_win), serverlist_win);
 		return;
 	}
 
 	edit_win = servlist_open_edit (serverlist_win, selected_net);
 	if (edit_win)
-		gtk_window_present (GTK_WINDOW (edit_win));
+		adw_dialog_present (ADW_DIALOG (edit_win), serverlist_win);
 }
 
 void
@@ -2142,7 +2139,7 @@ void
 fe_gtk4_servlistgui_cleanup (void)
 {
 	if (edit_win)
-		gtk_window_destroy (GTK_WINDOW (edit_win));
+		adw_dialog_force_close (ADW_DIALOG (edit_win));
 	if (serverlist_win)
 		gtk_window_destroy (GTK_WINDOW (serverlist_win));
 

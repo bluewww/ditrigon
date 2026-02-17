@@ -765,7 +765,7 @@ setup_adw_font_row_activated_cb (GtkListBoxRow *row, gpointer userdata)
 	gtk_font_dialog_set_title (req->dialog, _("Select font"));
 	gtk_font_dialog_set_modal (req->dialog, TRUE);
 	gtk_font_dialog_choose_font (req->dialog,
-		prefs_window ? GTK_WINDOW (prefs_window) : NULL,
+		prefs_window ? GTK_WINDOW (gtk_widget_get_root (prefs_window)) : NULL,
 		initial,
 		NULL,
 		setup_adw_font_choose_finish_cb,
@@ -1047,15 +1047,14 @@ setup_create_page_adw (const setting *set)
 	return page;
 }
 
-static gboolean
-prefs_window_close_request_cb (GtkWindow *window, gpointer userdata)
+static void
+prefs_window_closed_cb (AdwDialog *dialog, gpointer userdata)
 {
-	(void) window;
+	(void) dialog;
 	(void) userdata;
 
 	save_config ();
 	prefs_window = NULL;
-	return FALSE;
 }
 
 void
@@ -1066,15 +1065,13 @@ setup_open (void)
 
 	if (prefs_window)
 	{
-		gtk_window_present (GTK_WINDOW (prefs_window));
+		adw_dialog_present (ADW_DIALOG (prefs_window), main_window);
 		return;
 	}
 
 	prefs_window = setup_ui_window_new ();
-	if (main_window)
-		gtk_window_set_transient_for (GTK_WINDOW (prefs_window), GTK_WINDOW (main_window));
 
-	adw_preferences_window_set_search_enabled (ADW_PREFERENCES_WINDOW (prefs_window), TRUE);
+	adw_preferences_dialog_set_search_enabled (ADW_PREFERENCES_DIALOG (prefs_window), TRUE);
 
 	for (i = 0; setting_pages[i].title; i++)
 	{
@@ -1085,12 +1082,12 @@ setup_open (void)
 		icon_name = (i < (int) G_N_ELEMENTS (setting_page_icons)) ? setting_page_icons[i] : NULL;
 		if (icon_name && icon_name[0])
 			adw_preferences_page_set_icon_name (ADW_PREFERENCES_PAGE (page), icon_name);
-		adw_preferences_window_add (ADW_PREFERENCES_WINDOW (prefs_window), ADW_PREFERENCES_PAGE (page));
+		adw_preferences_dialog_add (ADW_PREFERENCES_DIALOG (prefs_window), ADW_PREFERENCES_PAGE (page));
 		g_object_unref (page);
 	}
 
-	g_signal_connect (prefs_window, "close-request",
-		G_CALLBACK (prefs_window_close_request_cb), NULL);
+	g_signal_connect (prefs_window, "closed",
+		G_CALLBACK (prefs_window_closed_cb), NULL);
 
 	setup_apply_menu_visibility ();
 	setup_apply_input_spell ();
@@ -1098,7 +1095,7 @@ setup_open (void)
 	setup_apply_input_style ();
 	setup_apply_text_font ();
 
-	gtk_window_present (GTK_WINDOW (prefs_window));
+	adw_dialog_present (ADW_DIALOG (prefs_window), main_window);
 }
 
 void
@@ -1113,6 +1110,6 @@ fe_gtk4_setup_cleanup (void)
 	if (!prefs_window)
 		return;
 
-	gtk_window_destroy (GTK_WINDOW (prefs_window));
+	adw_dialog_force_close (ADW_DIALOG (prefs_window));
 	prefs_window = NULL;
 }
