@@ -1733,6 +1733,9 @@ xtext_render_raw_at_iter (GtkTextBuffer *buf, GtkTextIter *iter, const char *raw
 static void
 xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 {
+	GtkTextIter iter;
+	GtkTextMark *mark;
+
 	GtkTextIter start;
 	GtkTextIter end;
 	int col_px;
@@ -1750,20 +1753,43 @@ xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 	gtk_text_buffer_get_bounds (buf, &start, &end);
 	gtk_text_buffer_delete (buf, &start, &end);
 
-	gtk_text_buffer_get_end_iter (buf, &end);
-	xtext_render_raw_at_iter (buf, &end, text);
+	/* gtk_text_buffer_get_end_iter (buf, &end); */
+	/* xtext_render_raw_at_iter (buf, &end, text); */
+	mark = gtk_text_buffer_get_mark (buf, "end");
+	gtk_text_buffer_get_iter_at_mark (buf, &iter, mark);
+	xtext_render_raw_at_iter (buf, &iter, text);
+
 }
 
 static void
 xtext_render_raw_append (GtkTextBuffer *buf, const char *raw)
 {
-	GtkTextIter end;
+	GtkTextIter iter;
+	GtkTextMark *mark;
 
 	if (!buf)
 		return;
 
-	gtk_text_buffer_get_end_iter (buf, &end);
-	xtext_render_raw_at_iter (buf, &end, raw ? raw : "");
+	/* gtk_text_buffer_get_end_iter (buf, &end); */
+	/* xtext_render_raw_at_iter (buf, &end, raw ? raw : ""); */
+
+	mark = gtk_text_buffer_get_mark (buf, "end");
+	gtk_text_buffer_get_iter_at_mark (buf, &iter, mark);
+
+	xtext_render_raw_at_iter (buf, &iter, raw ? raw : "");
+}
+
+static gboolean
+scroll_to_end_idle (gpointer data)
+{
+	GtkTextView *view = GTK_TEXT_VIEW (data);
+	GtkTextBuffer *buffer = gtk_text_view_get_buffer (view);
+	GtkTextMark *mark = gtk_text_buffer_get_mark (buffer, "end");
+
+	gtk_text_view_scroll_mark_onscreen (view, mark);
+
+	/* run once */
+	return G_SOURCE_REMOVE;
 }
 
 static void
@@ -1779,9 +1805,8 @@ xtext_scroll_to_end (void)
 	if (!mark)
 		return;
 
-	gtk_text_buffer_get_iter_at_mark (log_buffer, &iter, mark);
-	/* scroll to end mark onscreen */
-	gtk_text_view_scroll_mark_onscreen (GTK_TEXT_VIEW (log_view), mark);
+	/* schedule scroll to mark in idle to prevent races */
+	g_idle_add (scroll_to_end_idle, log_view);
 }
 
 /* check if we are scrolled to the bottom */
