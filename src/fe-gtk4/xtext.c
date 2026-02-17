@@ -1921,15 +1921,27 @@ xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 {
 	GtkTextIter iter;
 	GtkTextMark *mark;
+	GtkTextMark *anchor;
 
 	GtkTextIter start;
 	GtkTextIter end;
 	int col_px;
 	int stamp_px;
+	int anchor_offset;
 	const char *text;
 
 	if (!buf)
 		return;
+
+	/* Remember anchor offset so we can restore it after the
+	 * delete-reinsert cycle (the delete collapses it to 0). */
+	anchor = gtk_text_buffer_get_mark (buf, "anchor");
+	anchor_offset = -1;
+	if (anchor)
+	{
+		gtk_text_buffer_get_iter_at_mark (buf, &iter, anchor);
+		anchor_offset = gtk_text_iter_get_offset (&iter);
+	}
 
 	text = raw ? raw : "";
 	col_px = xtext_compute_message_column_px (text, &stamp_px);
@@ -1940,12 +1952,19 @@ xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 	gtk_text_buffer_get_bounds (buf, &start, &end);
 	gtk_text_buffer_delete (buf, &start, &end);
 
-	/* gtk_text_buffer_get_end_iter (buf, &end); */
-	/* xtext_render_raw_at_iter (buf, &end, text); */
 	mark = gtk_text_buffer_get_mark (buf, "end");
 	gtk_text_buffer_get_iter_at_mark (buf, &iter, mark);
 	xtext_render_raw_at_iter (buf, &iter, text);
 
+	/* Restore anchor to its previous offset (clamped to new length). */
+	if (anchor && anchor_offset > 0)
+	{
+		int len = gtk_text_buffer_get_char_count (buf);
+		if (anchor_offset > len)
+			anchor_offset = len;
+		gtk_text_buffer_get_iter_at_offset (buf, &iter, anchor_offset);
+		gtk_text_buffer_move_mark (buf, anchor, &iter);
+	}
 }
 
 static void
