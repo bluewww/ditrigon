@@ -2053,7 +2053,11 @@ xtext_show_session_rendered (session *sess)
 	if (!buf)
 	{
 		/* No valid session; show an empty buffer */
+		GtkTextIter end_iter;
+
 		buf = gtk_text_buffer_new (shared_tag_table);
+		gtk_text_buffer_get_end_iter (buf, &end_iter);
+		gtk_text_buffer_create_mark (buf, "end", &end_iter, FALSE);
 		log_buffer = buf;
 		gtk_text_view_set_buffer (GTK_TEXT_VIEW (log_view), log_buffer);
 		g_object_unref (buf); /* text view holds a ref */
@@ -2355,7 +2359,7 @@ fe_gtk4_append_log_text (const char *text)
 	if (!text)
 		return;
 
-	if (!log_buffer || !log_view)
+	if (!log_buffer || !log_view || hexchat_is_quitting)
 	{
 		fputs (text, stdout);
 		fflush (stdout);
