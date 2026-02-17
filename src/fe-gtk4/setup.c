@@ -760,7 +760,7 @@ setup_adw_font_row_activated_cb (GtkListBoxRow *row, gpointer userdata)
 		initial = pango_font_description_from_string (text);
 
 	req = g_new0 (SetupAdwFontRequest, 1);
-	req->row = g_object_ref (row);
+	req->row = GTK_WIDGET (g_object_ref (row));
 	req->dialog = gtk_font_dialog_new ();
 	gtk_font_dialog_set_title (req->dialog, _("Select font"));
 	gtk_font_dialog_set_modal (req->dialog, TRUE);
