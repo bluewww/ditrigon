@@ -88,6 +88,7 @@ void fe_gtk4_userlist_init (void);
 void fe_gtk4_userlist_cleanup (void);
 GtkWidget *fe_gtk4_userlist_create_widget (void);
 void fe_gtk4_userlist_show (session *sess);
+void fe_gtk4_userlist_remove_session (session *sess);
 void fe_gtk4_userlist_set_visible (gboolean visible);
 gboolean fe_gtk4_userlist_get_visible (void);
 

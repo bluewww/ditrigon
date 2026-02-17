@@ -1480,6 +1480,7 @@ fe_close_window (struct session *sess)
 
 	was_current = (sess == current_tab);
 	session_sidebar_remove (sess);
+	fe_gtk4_userlist_remove_session (sess);
 	fe_gtk4_xtext_remove_session (sess);
 
 	if (sess == current_tab)
