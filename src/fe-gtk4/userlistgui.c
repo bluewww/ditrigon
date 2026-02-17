@@ -1065,7 +1065,7 @@ fe_gtk4_userlist_create_widget (void)
 		gtk_widget_set_margin_end (userlist_search_entry, 8);
 		gtk_widget_set_margin_top (userlist_search_entry, 2);
 		gtk_widget_set_margin_bottom (userlist_search_entry, 8);
-		gtk_entry_set_placeholder_text (GTK_ENTRY (userlist_search_entry), _("Search Users"));
+		gtk_search_entry_set_placeholder_text (GTK_SEARCH_ENTRY (userlist_search_entry), _("Search Users"));
 		gtk_editable_set_text (GTK_EDITABLE (userlist_search_entry), "");
 		gtk_box_append (GTK_BOX (userlist_panel), userlist_search_entry);
 
