@@ -1159,7 +1159,7 @@ tree_update_selected_session (void)
 	GtkTreeListRow *row;
 	HcChanNode *node;
 
-	printf("selecting tree stuff\n");
+	/* printf("selecting tree stuff\n"); */
 	if (tree_select_syncing || !tree_selection || !tree_model)
 		return;
 

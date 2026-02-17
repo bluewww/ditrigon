@@ -66,6 +66,7 @@ static GtkTextTag *tag_nick_column;
 static GtkTextTag *tag_font;
 static PangoFontDescription *xtext_font_desc;
 static int xtext_space_width_px;
+static int xtext_stamp_col_px;
 static int xtext_message_col_px;
 static char *xtext_search_text;
 static GtkTextMark *xtext_search_mark;
@@ -1030,29 +1031,49 @@ xtext_prefix_looks_reasonable (const char *text, gsize len)
 }
 
 static int
+xtext_line_stamp_width_px (const HcLineColumns *cols)
+{
+	if (!cols || !cols->has_columns || cols->stamp_len == 0)
+		return 0;
+
+	return xtext_measure_plain_width (cols->stamp, cols->stamp_len);
+}
+
+static int
+xtext_line_prefix_width_px (const HcLineColumns *cols)
+{
+	char *prefix_clean;
+	int width;
+
+	if (!cols || !cols->has_columns || cols->prefix_len == 0)
+		return 0;
+
+	prefix_clean = strip_color (cols->prefix, (int) cols->prefix_len, STRIP_ALL);
+	if (!prefix_clean)
+		return 0;
+	xtext_tabs_to_spaces (prefix_clean);
+	width = xtext_measure_plain_width (prefix_clean, strlen (prefix_clean));
+	g_free (prefix_clean);
+
+	return width;
+}
+
+static int
 xtext_line_left_width_px (const HcLineColumns *cols)
 {
 	int width;
-	char *prefix_clean;
 
 	if (!cols || !cols->has_columns)
 		return 0;
 
-	width = 0;
-	if (cols->stamp_len > 0)
-		width += xtext_measure_plain_width (cols->stamp, cols->stamp_len);
+	width = xtext_line_stamp_width_px (cols);
 	if (cols->prefix_len == 0)
 		return width + xtext_space_width_px;
 
 	if (width > 0)
 		width += xtext_space_width_px;
 
-	prefix_clean = strip_color (cols->prefix, (int) cols->prefix_len, STRIP_ALL);
-	if (!prefix_clean)
-		return width + xtext_space_width_px;
-	xtext_tabs_to_spaces (prefix_clean);
-	width += xtext_measure_plain_width (prefix_clean, strlen (prefix_clean));
-	g_free (prefix_clean);
+	width += xtext_line_prefix_width_px (cols);
 
 	return width + xtext_space_width_px;
 }
@@ -1111,16 +1132,21 @@ xtext_split_line_columns (const char *line, gsize len, HcLineColumns *cols)
 }
 
 static int
-xtext_compute_message_column_px (const char *raw)
+xtext_compute_message_column_px (const char *raw, int *out_stamp_col_px)
 {
 	const char *cursor;
 	int col_px;
+	int stamp_px;
 	int max_indent_px;
+
+	if (out_stamp_col_px)
+		*out_stamp_col_px = 0;
 
 	if (!raw || !raw[0] || !log_view)
 		return 0;
 
 	col_px = 0;
+	stamp_px = 0;
 	max_indent_px = prefs.hex_text_max_indent > 0 ? prefs.hex_text_max_indent : G_MAXINT;
 
 	cursor = raw;
@@ -1134,7 +1160,10 @@ xtext_compute_message_column_px (const char *raw)
 		len = nl ? (gsize) (nl - cursor) : strlen (cursor);
 		xtext_split_line_columns (cursor, len, &cols);
 		if (cols.has_columns)
+		{
 			col_px = MAX (col_px, xtext_line_left_width_px (&cols));
+			stamp_px = MAX (stamp_px, xtext_line_stamp_width_px (&cols));
+		}
 
 		if (!nl)
 			break;
@@ -1146,29 +1175,44 @@ xtext_compute_message_column_px (const char *raw)
 	if (col_px < 0)
 		col_px = 0;
 
+	if (out_stamp_col_px)
+		*out_stamp_col_px = stamp_px;
+
 	return col_px;
 }
 
 static void
-xtext_set_message_tab_stop (int px)
+xtext_set_message_tab_stop (int msg_px, int stamp_px)
 {
 	PangoTabArray *tabs;
+	int nick_right_px;
 
 	if (!log_view)
 		return;
 
-	if (px <= 0)
+	if (msg_px <= 0)
 	{
 		gtk_text_view_set_tabs (GTK_TEXT_VIEW (log_view), NULL);
+		xtext_stamp_col_px = 0;
 		xtext_message_col_px = 0;
 		return;
 	}
 
-	tabs = pango_tab_array_new (1, TRUE);
-	pango_tab_array_set_tab (tabs, 0, PANGO_TAB_LEFT, px);
+	/* Tab 0: right-aligned tab where the nick column ends.
+	 * The nick text following this tab is right-aligned so it
+	 * ends at nick_right_px (= message column minus a space gap).
+	 * Tab 1: left-aligned tab where the message body starts. */
+	nick_right_px = msg_px - xtext_space_width_px;
+	if (nick_right_px < 0)
+		nick_right_px = 0;
+
+	tabs = pango_tab_array_new (2, TRUE);
+	pango_tab_array_set_tab (tabs, 0, PANGO_TAB_RIGHT, nick_right_px);
+	pango_tab_array_set_tab (tabs, 1, PANGO_TAB_LEFT, msg_px);
 	gtk_text_view_set_tabs (GTK_TEXT_VIEW (log_view), tabs);
 	pango_tab_array_free (tabs);
-	xtext_message_col_px = px;
+	xtext_stamp_col_px = stamp_px;
+	xtext_message_col_px = msg_px;
 }
 
 static HcVisibleMap *
@@ -1640,6 +1684,7 @@ xtext_render_formatted_wrapped (GtkTextBuffer *buf, GtkTextIter *iter, const cha
 		xtext_render_formatted_stateful (buf, iter, text + raw_start, raw_break - raw_start, layout_tag, &style);
 		xtext_insert_plain_char (buf, iter, '\n');
 		xtext_insert_plain_char (buf, iter, '\t');
+		xtext_insert_plain_char (buf, iter, '\t');
 		raw_start = raw_break;
 	}
 
@@ -1668,8 +1713,8 @@ xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsiz
 
 		if (cols.prefix && cols.prefix_len > 0)
 		{
-			if (cols.stamp && cols.stamp_len > 0)
-				xtext_insert_plain_char (buf, iter, ' ');
+			/* Tab 0 (PANGO_TAB_RIGHT): right-aligns the nick within its column */
+			xtext_insert_plain_char (buf, iter, '\t');
 			render_sess = xtext_render_session;
 			if (!render_sess || !is_session (render_sess))
 				render_sess = current_tab;
@@ -1681,6 +1726,11 @@ xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsiz
 
 		if (cols.body && cols.body_len > 0)
 		{
+			/* When there is no prefix, we still need to advance past
+			 * tab 0 (the right-aligned nick tab) to reach tab 1. */
+			if (!cols.prefix || cols.prefix_len == 0)
+				xtext_insert_plain_char (buf, iter, '\t');
+			/* Tab 1 (PANGO_TAB_LEFT): body starts at the message column */
 			xtext_insert_plain_char (buf, iter, '\t');
 			if (prefs.hex_text_wordwrap)
 				xtext_render_formatted_wrapped (buf, iter, cols.body, cols.body_len, NULL);
@@ -1739,14 +1789,15 @@ xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 	GtkTextIter start;
 	GtkTextIter end;
 	int col_px;
+	int stamp_px;
 	const char *text;
 
 	if (!buf)
 		return;
 
 	text = raw ? raw : "";
-	col_px = xtext_compute_message_column_px (text);
-	xtext_set_message_tab_stop (col_px);
+	col_px = xtext_compute_message_column_px (text, &stamp_px);
+	xtext_set_message_tab_stop (col_px, stamp_px);
 
 	xtext_link_hover_clear ();
 
@@ -1845,6 +1896,7 @@ xtext_show_session_rendered (session *sess)
 	GtkTextIter end;
 	gboolean is_empty;
 	int col_px;
+	int stamp_px;
 
 	if (!log_view)
 		return;
@@ -1884,8 +1936,8 @@ xtext_show_session_rendered (session *sess)
 	else
 	{
 		/* Buffer already has content; just recompute tab stop */
-		col_px = xtext_compute_message_column_px (log ? log->str : "");
-		xtext_set_message_tab_stop (col_px);
+		col_px = xtext_compute_message_column_px (log ? log->str : "", &stamp_px);
+		xtext_set_message_tab_stop (col_px, stamp_px);
 	}
 
 	xtext_buffers_stale = FALSE;
@@ -2015,6 +2067,7 @@ fe_gtk4_xtext_init (void)
 	xtext_create_shared_tag_table ();
 	if (xtext_space_width_px <= 0)
 		xtext_space_width_px = HC_SPACE_WIDTH_FALLBACK_PX;
+	xtext_stamp_col_px = 0;
 	xtext_message_col_px = 0;
 	xtext_render_session = NULL;
 	xtext_buffers_stale = FALSE;
@@ -2075,6 +2128,7 @@ fe_gtk4_xtext_cleanup (void)
 		xtext_resize_tick_id = 0;
 	}
 	xtext_space_width_px = 0;
+	xtext_stamp_col_px = 0;
 	xtext_message_col_px = 0;
 	xtext_last_view_width = -1;
 	xtext_render_session = NULL;
@@ -2134,6 +2188,7 @@ fe_gtk4_xtext_create_widget (void)
 	xtext_search_mark = NULL;
 	xtext_hover_start_mark = NULL;
 	xtext_hover_end_mark = NULL;
+	xtext_stamp_col_px = 0;
 	xtext_message_col_px = 0;
 	xtext_resize_tick_id = gtk_widget_add_tick_callback (log_view, xtext_resize_tick_cb, NULL, NULL);
 	xtext_render_session = NULL;
@@ -2198,8 +2253,9 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	if (log)
 	{
 		int added_col_px;
+		int added_stamp_px;
 
-		added_col_px = xtext_compute_message_column_px (text);
+		added_col_px = xtext_compute_message_column_px (text, &added_stamp_px);
 		if (added_col_px > xtext_message_col_px)
 		{
 			/* Re-render to apply a wider tab stop uniformly. */
