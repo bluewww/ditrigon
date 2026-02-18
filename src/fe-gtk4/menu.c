@@ -2124,7 +2124,7 @@ fe_gtk4_rebuild_menu_bar (void)
 
 	section = g_menu_new ();
 	g_menu_append (section, _("Search in Chat..."), "win.window-search");
-	g_menu_append (section, _("Copy Selection"), "win.window-copy-selection");
+	/* g_menu_append (section, _("Copy Selection"), "win.window-copy-selection"); */
 	g_menu_append (section, _("Save Transcript..."), "win.window-save-text");
 	g_menu_append (section, _("Clear Text"), "win.clear-log");
 	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
