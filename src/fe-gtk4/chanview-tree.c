@@ -596,6 +596,40 @@ tree_ctx_autoconn_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 }
 
 static void
+tree_ctx_autojoin_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	GVariant *state;
+	ircnet *net;
+	gboolean active;
+
+	(void) param;
+	(void) userdata;
+
+	if (!tree_ctx_sess || !is_session (tree_ctx_sess) ||
+		!tree_ctx_sess->server || !tree_ctx_sess->server->network)
+		return;
+
+	state = g_action_get_state (G_ACTION (action));
+	active = !g_variant_get_boolean (state);
+	g_variant_unref (state);
+
+	net = (ircnet *) tree_ctx_sess->server->network;
+	if (active)
+	{
+		servlist_favchan_add (net, tree_ctx_sess->channel);
+	}
+	else
+	{
+		favchannel *fav = servlist_favchan_find (net, tree_ctx_sess->channel, NULL);
+		if (fav)
+			servlist_favchan_remove (net, fav);
+	}
+
+	g_simple_action_set_state (action, g_variant_new_boolean (active));
+	servlist_save ();
+}
+
+static void
 tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 {
 	GSimpleActionGroup *group;
@@ -701,6 +735,14 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 		g_object_unref (action);
 	}
 
+	if (sess->type == SESS_CHANNEL && sess->server && sess->server->network)
+	{
+		action = g_simple_action_new_stateful ("autojoin", NULL,
+			g_variant_new_boolean (joinlist_is_in_list (sess->server, sess->channel)));
+		g_signal_connect (action, "activate", G_CALLBACK (tree_ctx_autojoin_cb), NULL);
+		g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+		g_object_unref (action);
+	}
 
 	gtk_widget_insert_action_group (parent, "chan", G_ACTION_GROUP (group));
 
@@ -733,6 +775,8 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 	g_menu_append (section, _("Reload Scrollback"), "chan.reload-scrollback");
 	if (sess->type == SESS_SERVER && sess->server && sess->server->network)
 		g_menu_append (section, _("Auto-Connect"), "chan.auto-connect");
+	if (sess->type == SESS_CHANNEL && sess->server && sess->server->network)
+		g_menu_append (section, _("Autojoin Channel"), "chan.autojoin");
 	g_menu_append_section (menu, _("Session Settings"), G_MENU_MODEL (section));
 	g_object_unref (section);
 
