@@ -23,6 +23,10 @@
 #include "palette.h"
 #include "pixmaps.h"
 
+#define FOCUS_NEW_NONE 0
+#define FOCUS_NEW_ALL 1
+#define FOCUS_NEW_ONLY_ASKED 2
+
 extern GMainLoop *frontend_loop;
 
 extern GtkWidget *main_window;
@@ -62,6 +66,7 @@ GtkApplication *fe_gtk4_get_application (void);
 session *fe_gtk4_window_target_session (void);
 void fe_gtk4_append_log_text (const char *text);
 void fe_gtk4_session_sidebar_update_label (session *sess);
+void fe_gtk4_session_switch_to (session *sess);
 
 void fe_gtk4_chanview_init (void);
 void fe_gtk4_chanview_cleanup (void);

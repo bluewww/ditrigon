@@ -1181,7 +1181,7 @@ tree_update_selected_session (void)
 
 	node = (HcChanNode *) gtk_tree_list_row_get_item (row);
 	if (node && node->sess && is_session (node->sess))
-		fe_set_channel (node->sess);
+		fe_gtk4_session_switch_to (node->sess);
 
 	g_object_unref (row);
 }

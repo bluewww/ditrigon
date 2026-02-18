@@ -1319,7 +1319,14 @@ fe_new_window (struct session *sess, int focus)
 		sess->server->front_session = sess;
 	if (!sess->server->server_session)
 		sess->server->server_session = sess;
-	select_tab = (!current_tab || focus) ? TRUE : FALSE;
+	if (!current_tab)
+		select_tab = TRUE;
+	else if (prefs.hex_gui_tab_newtofront == FOCUS_NEW_ALL)
+		select_tab = TRUE;
+	else if (prefs.hex_gui_tab_newtofront == FOCUS_NEW_ONLY_ASKED && focus)
+		select_tab = TRUE;
+	else
+		select_tab = FALSE;
 	if (select_tab)
 		current_tab = sess;
 
@@ -1503,7 +1510,7 @@ fe_close_window (struct session *sess)
 		replacement = sess_list->data;
 
 	if (replacement)
-		fe_set_channel (replacement);
+		fe_gtk4_session_switch_to (replacement);
 	else
 	{
 		fe_gtk4_xtext_show_session (NULL);
@@ -1584,7 +1591,7 @@ fe_ctrl_gui (session *sess, fe_gui_action action, int arg)
 	case FE_GUI_FOCUS:
 		if (sess)
 		{
-			fe_set_channel (sess);
+			fe_gtk4_session_switch_to (sess);
 		}
 		if (main_window)
 		{
@@ -1613,7 +1620,7 @@ fe_ctrl_gui (session *sess, fe_gui_action action, int arg)
 	case FE_GUI_ATTACH:
 		/* GTK4 frontend is currently single-window; keep GUI ATTACH/DETACH compatible. */
 		if (sess)
-			fe_set_channel (sess);
+			fe_gtk4_session_switch_to (sess);
 		if (main_window)
 			gtk_window_present (GTK_WINDOW (main_window));
 		break;
@@ -1867,7 +1874,7 @@ fe_dlgbuttons_update (struct session *sess)
 }
 
 void
-fe_set_channel (struct session *sess)
+fe_gtk4_session_switch_to (session *sess)
 {
 	session *prev;
 
@@ -1891,6 +1898,15 @@ fe_set_channel (struct session *sess)
 	topic_update_for_session (sess);
 	fe_set_title (sess);
 	fe_gtk4_menu_sync_actions ();
+}
+
+void
+fe_set_channel (struct session *sess)
+{
+	if (!sess)
+		return;
+
+	fe_gtk4_session_sidebar_update_label (sess);
 }
 
 void

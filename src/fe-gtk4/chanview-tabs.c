@@ -495,7 +495,7 @@ tabs_row_selected_cb (GtkListBox *box, GtkListBoxRow *row, gpointer userdata)
 	if (!sess || !is_session (sess))
 		return;
 
-	fe_set_channel (sess);
+	fe_gtk4_session_switch_to (sess);
 }
 
 void
