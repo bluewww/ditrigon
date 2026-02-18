@@ -2426,6 +2426,17 @@ fe_gtk4_menu_register_actions (void)
 
 	g_action_map_add_action_entries (G_ACTION_MAP (window_actions), win_actions,
 		G_N_ELEMENTS (win_actions), NULL);
+
+	gtk_application_set_accels_for_action (fe_gtk4_get_application (),
+		"win.window-search", (const char *[]) { "<Control>f", NULL });
+	gtk_application_set_accels_for_action (fe_gtk4_get_application (),
+		"win.window-search-next", (const char *[]) { "<Control>g", NULL });
+	gtk_application_set_accels_for_action (fe_gtk4_get_application (),
+		"win.window-search-prev", (const char *[]) { "<Control><Shift>g", NULL });
+	gtk_application_set_accels_for_action (fe_gtk4_get_application (),
+		"win.toggle-fullscreen", (const char *[]) { "F11", NULL });
+	gtk_application_set_accels_for_action (fe_gtk4_get_application (),
+		"win.quit", (const char *[]) { "<Control>q", NULL });
 }
 
 void
