@@ -298,7 +298,7 @@ static const setting appearance_settings[] =
 	{ST_TOGGLE, N_("Colored nick names"), P_OFFINTNL (hex_text_color_nicks)},
 	{ST_TOGGLE, N_("Indent nick names"), P_OFFINTNL (hex_text_indent)},
 	{ST_TOGGLE, N_("Show marker line"), P_OFFINTNL (hex_text_show_marker)},
-	{ST_ENTRY, N_("Background image:"), P_OFFSETNL (hex_text_background), NULL, NULL, sizeof (prefs.hex_text_background)},
+	/* {ST_ENTRY, N_("Background image:"), P_OFFSETNL (hex_text_background), NULL, NULL, sizeof (prefs.hex_text_background)}, */
 
 	{ST_HEADER, N_("Timestamps")},
 	{ST_TOGGLE, N_("Enable timestamps"), P_OFFINTNL (hex_stamp_text)},
@@ -344,7 +344,7 @@ static const setting userlist_settings[] =
 	{ST_TOGGLE, N_("Color nicknames in userlist"), P_OFFINTNL (hex_gui_ulist_color)},
 	{ST_TOGGLE, N_("Show user count in channels"), P_OFFINTNL (hex_gui_ulist_count)},
 	{ST_MENU, N_("User list sorted by:"), P_OFFINTNL (hex_gui_ulist_sort), NULL, ulmenutext, 0},
-	{ST_MENU, N_("Show user list at:"), P_OFFINTNL (hex_gui_ulist_pos), NULL, ulpos, 1},
+	/* {ST_MENU, N_("Show user list at:"), P_OFFINTNL (hex_gui_ulist_pos), NULL, ulpos, 1}, */
 
 	{ST_HEADER, N_("Away Tracking")},
 	{ST_TOGGLE, N_("Track away status"), P_OFFINTNL (hex_away_track)},
@@ -354,9 +354,9 @@ static const setting userlist_settings[] =
 	{ST_ENTRY, N_("Execute command:"), P_OFFSETNL (hex_gui_ulist_doubleclick), NULL, NULL,
 		sizeof (prefs.hex_gui_ulist_doubleclick)},
 
-	{ST_HEADER, N_("Extra Gadgets")},
-	{ST_MENU, N_("Lag meter:"), P_OFFINTNL (hex_gui_lagometer), NULL, lagmenutext, 0},
-	{ST_MENU, N_("Throttle meter:"), P_OFFINTNL (hex_gui_throttlemeter), NULL, lagmenutext, 0},
+	/* {ST_HEADER, N_("Extra Gadgets")}, */
+	/* {ST_MENU, N_("Lag meter:"), P_OFFINTNL (hex_gui_lagometer), NULL, lagmenutext, 0}, */
+	/* {ST_MENU, N_("Throttle meter:"), P_OFFINTNL (hex_gui_throttlemeter), NULL, lagmenutext, 0}, */
 	{ST_END}
 };
 
@@ -368,18 +368,18 @@ static const setting tabs_settings[] =
 	{ST_TOGGLE, N_("Sort tabs in alphabetical order"), P_OFFINTNL (hex_gui_tab_sort)},
 	{ST_TOGGLE, N_("Show icons in the channel tree"), P_OFFINTNL (hex_gui_tab_icons)},
 	{ST_TOGGLE, N_("Show dotted lines in the channel tree"), P_OFFINTNL (hex_gui_tab_dots)},
-	{ST_TOGGLE, N_("Scroll mouse-wheel to change tabs"), P_OFFINTNL (hex_gui_tab_scrollchans)},
-	{ST_TOGGLE, N_("Middle click to close tab"), P_OFFINTNL (hex_gui_tab_middleclose)},
-	{ST_TOGGLE, N_("Smaller text"), P_OFFINTNL (hex_gui_tab_small)},
+	/* {ST_TOGGLE, N_("Scroll mouse-wheel to change tabs"), P_OFFINTNL (hex_gui_tab_scrollchans)}, */
+	/* {ST_TOGGLE, N_("Middle click to close tab"), P_OFFINTNL (hex_gui_tab_middleclose)}, */
+	/* {ST_TOGGLE, N_("Smaller text"), P_OFFINTNL (hex_gui_tab_small)}, */
 	{ST_MENU, N_("Focus new tabs:"), P_OFFINTNL (hex_gui_tab_newtofront), NULL, focusnewtabsmenu, 0},
 	{ST_MENU, N_("Placement of notices:"), P_OFFINTNL (hex_irc_notice_pos), NULL, noticeposmenu, 0},
-	{ST_MENU, N_("Show channel switcher at:"), P_OFFINTNL (hex_gui_tab_pos), NULL, cspos, 1},
+	/* {ST_MENU, N_("Show channel switcher at:"), P_OFFINTNL (hex_gui_tab_pos), NULL, cspos, 1}, */
 	{ST_NUMBER, N_("Shorten tab labels to:"), P_OFFINTNL (hex_gui_tab_trunc), NULL, NULL, 99},
 
-	{ST_HEADER, N_("Tabs or Windows")},
-	{ST_MENU, N_("Open channels in:"), P_OFFINTNL (hex_gui_tab_chans), NULL, tabwin, 0},
-	{ST_MENU, N_("Open dialogs in:"), P_OFFINTNL (hex_gui_tab_dialogs), NULL, tabwin, 0},
-	{ST_MENU, N_("Open utilities in:"), P_OFFINTNL (hex_gui_tab_utils), NULL, tabwin, 0},
+	/* {ST_HEADER, N_("Tabs or Windows")}, */
+	/* {ST_MENU, N_("Open channels in:"), P_OFFINTNL (hex_gui_tab_chans), NULL, tabwin, 0}, */
+	/* {ST_MENU, N_("Open dialogs in:"), P_OFFINTNL (hex_gui_tab_dialogs), NULL, tabwin, 0}, */
+	/* {ST_MENU, N_("Open utilities in:"), P_OFFINTNL (hex_gui_tab_utils), NULL, tabwin, 0}, */
 	{ST_END}
 };
 
@@ -408,16 +408,16 @@ static const setting alerts_settings[] =
 	{ST_TOGGLE, N_("Notify on channel messages"), P_OFFINTNL (hex_input_balloon_chans)},
 	{ST_TOGGLE, N_("Notify on private messages"), P_OFFINTNL (hex_input_balloon_priv)},
 	{ST_TOGGLE, N_("Notify on highlighted messages"), P_OFFINTNL (hex_input_balloon_hilight)},
-	{ST_TOGGLE, N_("Blink tray icon on channel messages"), P_OFFINTNL (hex_input_tray_chans)},
-	{ST_TOGGLE, N_("Blink tray icon on private messages"), P_OFFINTNL (hex_input_tray_priv)},
-	{ST_TOGGLE, N_("Blink tray icon on highlighted messages"), P_OFFINTNL (hex_input_tray_hilight)},
+	/* {ST_TOGGLE, N_("Blink tray icon on channel messages"), P_OFFINTNL (hex_input_tray_chans)}, */
+	/* {ST_TOGGLE, N_("Blink tray icon on private messages"), P_OFFINTNL (hex_input_tray_priv)}, */
+	/* {ST_TOGGLE, N_("Blink tray icon on highlighted messages"), P_OFFINTNL (hex_input_tray_hilight)}, */
 	{ST_TOGGLE, N_("Omit alerts while away"), P_OFFINTNL (hex_away_omit_alerts)},
 	{ST_TOGGLE, N_("Omit alerts while focused"), P_OFFINTNL (hex_gui_focus_omitalerts)},
 
-	{ST_HEADER, N_("Tray Behavior")},
-	{ST_TOGGLE, N_("Enable system tray icon"), P_OFFINTNL (hex_gui_tray)},
-	{ST_TOGGLE, N_("Minimize to tray"), P_OFFINTNL (hex_gui_tray_minimize)},
-	{ST_TOGGLE, N_("Close to tray"), P_OFFINTNL (hex_gui_tray_close)},
+	/* {ST_HEADER, N_("Tray Behavior")}, */
+	/* {ST_TOGGLE, N_("Enable system tray icon"), P_OFFINTNL (hex_gui_tray)}, */
+	/* {ST_TOGGLE, N_("Minimize to tray"), P_OFFINTNL (hex_gui_tray_minimize)}, */
+	/* {ST_TOGGLE, N_("Close to tray"), P_OFFINTNL (hex_gui_tray_close)}, */
 	{ST_TOGGLE, N_("Automatically mark away/back"), P_OFFINTNL (hex_gui_tray_away)},
 	{ST_TOGGLE, N_("Only show notifications when hidden"), P_OFFINTNL (hex_gui_tray_quiet)},
 
@@ -456,10 +456,10 @@ static const setting logging_settings[] =
 
 static const setting advanced_settings[] =
 {
-	{ST_HEADER, N_("Auto Copy Behavior")},
-	{ST_TOGGLE, N_("Automatically copy selected text"), P_OFFINTNL (hex_text_autocopy_text)},
-	{ST_TOGGLE, N_("Automatically include timestamps"), P_OFFINTNL (hex_text_autocopy_stamp)},
-	{ST_TOGGLE, N_("Automatically include color information"), P_OFFINTNL (hex_text_autocopy_color)},
+	/* {ST_HEADER, N_("Auto Copy Behavior")}, */
+	/* {ST_TOGGLE, N_("Automatically copy selected text"), P_OFFINTNL (hex_text_autocopy_text)}, */
+	/* {ST_TOGGLE, N_("Automatically include timestamps"), P_OFFINTNL (hex_text_autocopy_stamp)}, */
+	/* {ST_TOGGLE, N_("Automatically include color information"), P_OFFINTNL (hex_text_autocopy_color)}, */
 
 	{ST_HEADER, N_("Miscellaneous")},
 	{ST_ENTRY, N_("Real name:"), P_OFFSETNL (hex_irc_real_name), NULL, NULL, sizeof (prefs.hex_irc_real_name)},
