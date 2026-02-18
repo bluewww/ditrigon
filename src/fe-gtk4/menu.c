@@ -2115,7 +2115,7 @@ fe_gtk4_rebuild_menu_bar (void)
 	g_object_unref (section);
 
 	section = g_menu_new ();
-	g_menu_append (section, _("Sidebar"), "win.toggle-sidebar");
+	g_menu_append (section, _("Channel List"), "win.toggle-sidebar");
 	g_menu_append (section, _("User List"), "win.toggle-userlist");
 	g_menu_append (section, _("Topic Bar"), "win.toggle-topicbar");
 	g_menu_append (section, _("Fullscreen"), "win.toggle-fullscreen");
