@@ -108,6 +108,7 @@ void fe_gtk4_rebuild_menu_bar (void);
 void fe_gtk4_menu_sync_actions (void);
 void fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess, const char *nick);
 void fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess, const char *url);
+void fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess, const char *channel);
 
 void fe_gtk4_maingui_set_menubar_visible (gboolean visible);
 gboolean fe_gtk4_maingui_get_menubar_visible (void);

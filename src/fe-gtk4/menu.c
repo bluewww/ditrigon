@@ -945,6 +945,120 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	g_object_unref (group);
 }
 
+/* ---- Channel context menu ---- */
+
+static GtkWidget *active_chan_popover;
+static session *chan_ctx_sess;
+static char *chan_ctx_channel;
+
+static void
+chan_menu_close_active (void)
+{
+	if (active_chan_popover)
+	{
+		gtk_widget_unparent (active_chan_popover);
+		active_chan_popover = NULL;
+	}
+}
+
+static void
+chan_ctx_join_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	char *cmd;
+
+	(void) action;
+	(void) param;
+	(void) userdata;
+
+	if (!chan_ctx_channel || !chan_ctx_channel[0] || !chan_ctx_sess || !is_session (chan_ctx_sess))
+		return;
+
+	cmd = g_strdup_printf ("join %s", chan_ctx_channel);
+	handle_command (chan_ctx_sess, cmd, TRUE);
+	g_free (cmd);
+}
+
+static void
+chan_ctx_copy_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
+{
+	GdkDisplay *display;
+	GdkClipboard *clipboard;
+
+	(void) action;
+	(void) param;
+	(void) userdata;
+
+	if (!chan_ctx_channel || !chan_ctx_channel[0])
+		return;
+
+	display = gdk_display_get_default ();
+	if (!display)
+		return;
+
+	clipboard = gdk_display_get_clipboard (display);
+	gdk_clipboard_set_text (clipboard, chan_ctx_channel);
+}
+
+void
+fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess, const char *channel)
+{
+	GSimpleActionGroup *group;
+	GSimpleAction *action;
+	GMenu *menu;
+	GMenu *section;
+	GdkRectangle rect;
+
+	if (!parent || !channel || !channel[0])
+		return;
+
+	chan_menu_close_active ();
+
+	g_free (chan_ctx_channel);
+	chan_ctx_channel = g_strdup (channel);
+	chan_ctx_sess = sess;
+
+	group = g_simple_action_group_new ();
+
+	action = g_simple_action_new ("join", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (chan_ctx_join_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
+
+	action = g_simple_action_new ("copy", NULL);
+	g_signal_connect (action, "activate", G_CALLBACK (chan_ctx_copy_cb), NULL);
+	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
+	g_object_unref (action);
+
+	menu = g_menu_new ();
+	section = g_menu_new ();
+	g_menu_append (section, _("Join Channel"), "chan.join");
+	g_menu_append (section, _("Copy Channel Name"), "chan.copy");
+	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
+	g_object_unref (section);
+
+	gtk_widget_insert_action_group (parent, "chan", G_ACTION_GROUP (group));
+	active_chan_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	g_object_add_weak_pointer (G_OBJECT (active_chan_popover),
+		(gpointer *) &active_chan_popover);
+	gtk_widget_set_parent (active_chan_popover, parent);
+	g_object_set_data_full (G_OBJECT (active_chan_popover), "chan-actions",
+		g_object_ref (group), g_object_unref);
+
+	rect.x = (int) x;
+	rect.y = (int) y;
+	rect.width = 1;
+	rect.height = 1;
+	gtk_popover_set_pointing_to (GTK_POPOVER (active_chan_popover), &rect);
+	gtk_popover_set_has_arrow (GTK_POPOVER (active_chan_popover), FALSE);
+	gtk_popover_set_position (GTK_POPOVER (active_chan_popover), GTK_POS_BOTTOM);
+	gtk_widget_set_halign (GTK_WIDGET (active_chan_popover), GTK_ALIGN_START);
+
+	gtk_popover_popup (GTK_POPOVER (active_chan_popover));
+
+	g_object_unref (menu);
+	g_object_unref (group);
+}
+
 static void
 dynamic_menu_set_state (HcDynamicMenuItem *item, gboolean state)
 {
