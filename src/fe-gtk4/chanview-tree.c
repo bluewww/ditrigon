@@ -437,13 +437,6 @@ tree_ctx_close_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 	(void) param;
 	(void) userdata;
 
-	printf("tree_ctx_close_cb()\n");
-	if (tree_ctx_sess)
-	    printf("\ttree_ctx_sess=%p, is_session=%d\n", tree_ctx_sess, is_session (tree_ctx_sess));
-	else
-	    printf("\ttree_ctx_sess=NULL");
-
-
 	if (tree_ctx_sess && is_session (tree_ctx_sess))
 		fe_close_window (tree_ctx_sess);
 	if (tree_ctx_popover)
