@@ -3,6 +3,7 @@
 
 #include "fe-gtk4.h"
 
+#include <adwaita.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,18 +35,22 @@ typedef struct
 {
 	GtkWidget *window;
 	GtkWidget *list;
-	GtkWidget *label;
-	GtkWidget *wild;
+	GtkWidget *title_widget;
+	GtkWidget *search_bar;
+	GtkWidget *search_entry;
+	GtkWidget *search_toggle;
 	GtkWidget *min_spin;
 	GtkWidget *max_spin;
 	GtkWidget *refresh;
 	GtkWidget *join;
-	GtkWidget *savelist;
-	GtkWidget *search;
 	GtkWidget *match_channel;
 	GtkWidget *match_topic;
 	GtkWidget *search_type;
-	GtkWidget *sort_button[N_COLUMNS];
+	GtkWidget *apply_filter;
+	GtkWidget *filter_button;
+	GtkWidget *menu_button;
+	GSimpleActionGroup *actions;
+	GSimpleAction *save_action;
 	server *serv;
 	GSList *data_stored_rows;
 	GSList *pending_rows;
@@ -101,8 +106,8 @@ chanlist_match (server *serv, const char *str)
 
 	(void) serv;
 
-	pattern = chanlist.wild ?
-		gtk_editable_get_text (GTK_EDITABLE (chanlist.wild)) : "";
+	pattern = chanlist.search_entry ?
+		gtk_editable_get_text (GTK_EDITABLE (chanlist.search_entry)) : "";
 	if (!pattern)
 		pattern = "";
 
@@ -134,8 +139,8 @@ chanlist_row_passes (server *serv, chanlistrow *row)
 	if (chanlist.maxusers > 0 && row->users > chanlist.maxusers)
 		return FALSE;
 
-	pattern = chanlist.wild ?
-		gtk_editable_get_text (GTK_EDITABLE (chanlist.wild)) : "";
+	pattern = chanlist.search_entry ?
+		gtk_editable_get_text (GTK_EDITABLE (chanlist.search_entry)) : "";
 	if (!pattern || !pattern[0])
 		return TRUE;
 
@@ -164,17 +169,17 @@ chanlist_update_caption (server *serv)
 	char tbuf[256];
 
 	(void) serv;
-	if (!chanlist.label)
+	if (!chanlist.title_widget)
 		return;
 
 	g_snprintf (tbuf, sizeof (tbuf),
-		_("Displaying %d/%d users on %d/%d channels."),
+		_("Displaying %d/%d users on %d/%d channels"),
 		chanlist.users_shown_count,
 		chanlist.users_found_count,
 		chanlist.channels_shown_count,
 		chanlist.channels_found_count);
 
-	gtk_label_set_text (GTK_LABEL (chanlist.label), tbuf);
+	adw_window_title_set_subtitle (ADW_WINDOW_TITLE (chanlist.title_widget), tbuf);
 	chanlist.caption_is_stale = FALSE;
 }
 
@@ -183,18 +188,20 @@ chanlist_update_buttons (server *serv)
 {
 	(void) serv;
 
-	if (!chanlist.join || !chanlist.savelist)
+	if (!chanlist.join)
 		return;
 
 	if (chanlist.channels_shown_count)
 	{
 		gtk_widget_set_sensitive (chanlist.join, TRUE);
-		gtk_widget_set_sensitive (chanlist.savelist, TRUE);
+		if (chanlist.save_action)
+			g_simple_action_set_enabled (chanlist.save_action, TRUE);
 	}
 	else
 	{
 		gtk_widget_set_sensitive (chanlist.join, FALSE);
-		gtk_widget_set_sensitive (chanlist.savelist, FALSE);
+		if (chanlist.save_action)
+			g_simple_action_set_enabled (chanlist.save_action, FALSE);
 	}
 }
 
@@ -243,39 +250,54 @@ static GtkWidget *
 chanlist_create_row_widget (chanlistrow *rowdata)
 {
 	GtkWidget *row;
-	GtkWidget *grid;
+	GtkWidget *hbox;
+	GtkWidget *vbox;
 	GtkWidget *chan_label;
-	GtkWidget *users_label;
 	GtkWidget *topic_label;
+	GtkWidget *users_label;
 	char users_buf[32];
 
 	row = gtk_list_box_row_new ();
-	grid = gtk_grid_new ();
-	gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
-	gtk_widget_set_margin_start (grid, 8);
-	gtk_widget_set_margin_end (grid, 8);
-	gtk_widget_set_margin_top (grid, 2);
-	gtk_widget_set_margin_bottom (grid, 2);
+
+	hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+	gtk_widget_set_margin_start (hbox, 12);
+	gtk_widget_set_margin_end (hbox, 12);
+	gtk_widget_set_margin_top (hbox, 8);
+	gtk_widget_set_margin_bottom (hbox, 8);
+
+	/* Left: channel name (title) + topic (subtitle) */
+	vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+	gtk_widget_set_hexpand (vbox, TRUE);
 
 	chan_label = gtk_label_new (rowdata->channel ? rowdata->channel : "");
 	gtk_label_set_xalign (GTK_LABEL (chan_label), 0.0f);
-	gtk_widget_set_hexpand (chan_label, FALSE);
-	gtk_grid_attach (GTK_GRID (grid), chan_label, 0, 0, 1, 1);
+	gtk_label_set_ellipsize (GTK_LABEL (chan_label), PANGO_ELLIPSIZE_END);
+	gtk_widget_add_css_class (chan_label, "heading");
+	gtk_box_append (GTK_BOX (vbox), chan_label);
 
+	if (rowdata->topic && rowdata->topic[0])
+	{
+		topic_label = gtk_label_new (rowdata->topic);
+		gtk_label_set_xalign (GTK_LABEL (topic_label), 0.0f);
+		gtk_label_set_wrap (GTK_LABEL (topic_label), FALSE);
+		gtk_label_set_ellipsize (GTK_LABEL (topic_label), PANGO_ELLIPSIZE_END);
+		gtk_label_set_max_width_chars (GTK_LABEL (topic_label), 80);
+		gtk_widget_add_css_class (topic_label, "dim-label");
+		gtk_widget_add_css_class (topic_label, "caption");
+		gtk_box_append (GTK_BOX (vbox), topic_label);
+	}
+
+	gtk_box_append (GTK_BOX (hbox), vbox);
+
+	/* Right: user count */
 	g_snprintf (users_buf, sizeof (users_buf), "%u", (unsigned int) rowdata->users);
 	users_label = gtk_label_new (users_buf);
-	gtk_label_set_xalign (GTK_LABEL (users_label), 1.0f);
-	gtk_widget_set_hexpand (users_label, FALSE);
-	gtk_grid_attach (GTK_GRID (grid), users_label, 1, 0, 1, 1);
+	gtk_widget_set_valign (users_label, GTK_ALIGN_CENTER);
+	gtk_widget_add_css_class (users_label, "dim-label");
+	gtk_widget_add_css_class (users_label, "numeric");
+	gtk_box_append (GTK_BOX (hbox), users_label);
 
-	topic_label = gtk_label_new (rowdata->topic ? rowdata->topic : "");
-	gtk_label_set_xalign (GTK_LABEL (topic_label), 0.0f);
-	gtk_label_set_wrap (GTK_LABEL (topic_label), FALSE);
-	gtk_label_set_ellipsize (GTK_LABEL (topic_label), PANGO_ELLIPSIZE_END);
-	gtk_widget_set_hexpand (topic_label, TRUE);
-	gtk_grid_attach (GTK_GRID (grid), topic_label, 2, 0, 1, 1);
-
-	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), grid);
+	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), hbox);
 	g_object_set_data (G_OBJECT (row), "hc-rowdata", rowdata);
 
 	return row;
@@ -477,7 +499,8 @@ chanlist_refresh (GtkWidget *wid, server *serv)
 
 	(void) wid;
 	(void) serv;
-	text = chanlist.wild ? gtk_editable_get_text (GTK_EDITABLE (chanlist.wild)) : "";
+	text = chanlist.search_entry ?
+		gtk_editable_get_text (GTK_EDITABLE (chanlist.search_entry)) : "";
 	g_strlcpy (chanlist.request_filter, text ? text : "", sizeof (chanlist.request_filter));
 	chanlist_do_refresh (chanlist.serv);
 }
@@ -551,16 +574,19 @@ chanlist_search_pressed (GtkWidget *button, server *serv)
 	(void) button;
 	(void) serv;
 	chanlist_build_gui_list (chanlist.serv);
+
+	/* Close the filter popover if it's open */
+	if (chanlist.filter_button)
+		gtk_menu_button_popdown (GTK_MENU_BUTTON (chanlist.filter_button));
 }
 
 static void
-chanlist_find_cb (GtkWidget *wid, server *serv)
+chanlist_find_cb (GtkSearchEntry *entry, gpointer userdata)
 {
 	const char *pattern;
-	GError *error;
 
-	(void) serv;
-	pattern = gtk_editable_get_text (GTK_EDITABLE (wid));
+	(void) userdata;
+	pattern = gtk_editable_get_text (GTK_EDITABLE (entry));
 
 	if (chanlist.have_regex)
 	{
@@ -569,7 +595,7 @@ chanlist_find_cb (GtkWidget *wid, server *serv)
 		chanlist.match_regex = NULL;
 	}
 
-	error = NULL;
+	GError *error = NULL;
 	chanlist.match_regex = g_regex_new (pattern ? pattern : "",
 		G_REGEX_CASELESS | G_REGEX_EXTENDED,
 		G_REGEX_MATCH_NOTBOL,
@@ -578,6 +604,10 @@ chanlist_find_cb (GtkWidget *wid, server *serv)
 		chanlist.have_regex = TRUE;
 	if (error)
 		g_error_free (error);
+
+	/* Live-filter: rebuild the visible list as the user types */
+	if (chanlist.serv && chanlist.data_stored_rows)
+		chanlist_build_gui_list (chanlist.serv);
 }
 
 static void
@@ -631,7 +661,19 @@ chanlist_join (GtkWidget *wid, server *serv)
 	{
 		g_snprintf (tbuf, sizeof (tbuf), "join %s", row->channel);
 		handle_command (serv->server_session, tbuf, FALSE);
+
+		if (chanlist.window)
+			gtk_window_close (GTK_WINDOW (chanlist.window));
 	}
+}
+
+static void
+chanlist_row_activated_cb (GtkListBox *list, GtkListBoxRow *row, gpointer data)
+{
+	(void) list;
+	(void) row;
+	(void) data;
+	chanlist_join (NULL, chanlist.serv);
 }
 
 static void
@@ -717,16 +759,6 @@ chanlist_maxusers (GtkSpinButton *wid, server *serv)
 }
 
 static void
-chanlist_row_activated_cb (GtkListBox *view, GtkListBoxRow *row,
-	gpointer data)
-{
-	(void) view;
-	(void) row;
-	(void) data;
-	chanlist_join (NULL, chanlist.serv);
-}
-
-static void
 chanlist_combo_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
 {
 	GtkDropDown *dd;
@@ -740,55 +772,67 @@ chanlist_combo_cb (GObject *object, GParamSpec *pspec, gpointer userdata)
 		return;
 
 	chanlist.search_type_index = (int) index;
-	chanlist_find_cb (chanlist.wild, chanlist.serv);
+	if (chanlist.search_entry)
+		chanlist_find_cb (GTK_SEARCH_ENTRY (chanlist.search_entry), NULL);
 }
 
-static void
-chanlist_sort_label_update (int column)
-{
-	const char *base[N_COLUMNS] =
-	{
-		N_("Channel"),
-		N_("Users"),
-		N_("Topic")
-	};
-	char *label;
-	int i;
-
-	for (i = 0; i < N_COLUMNS; i++)
-	{
-		if (!chanlist.sort_button[i])
-			continue;
-
-		if (i == column)
-			label = g_strdup_printf ("%s %s", _(base[i]), chanlist.sort_desc ? "\xE2\x96\xBE" : "\xE2\x96\xB4");
-		else
-			label = g_strdup (_(base[i]));
-
-		gtk_button_set_label (GTK_BUTTON (chanlist.sort_button[i]), label);
-		g_free (label);
-	}
-}
+/* GAction handlers for sort and save */
 
 static void
-chanlist_sort_cb (GtkWidget *button, gpointer userdata)
+chanlist_sort_column_activated (GSimpleAction *action, GVariant *parameter,
+	gpointer userdata)
 {
-	int column;
+	const char *col_str;
+	int new_col;
 
-	(void) button;
-	column = GPOINTER_TO_INT (userdata);
+	(void) userdata;
+	col_str = g_variant_get_string (parameter, NULL);
 
-	if (chanlist.sort_column == column)
-		chanlist.sort_desc = !chanlist.sort_desc;
+	if (g_strcmp0 (col_str, "users") == 0)
+		new_col = COL_USERS;
+	else if (g_strcmp0 (col_str, "topic") == 0)
+		new_col = COL_TOPIC;
 	else
-	{
-		chanlist.sort_column = column;
-		chanlist.sort_desc = FALSE;
-	}
+		new_col = COL_CHANNEL;
 
-	chanlist_sort_label_update (chanlist.sort_column);
+	chanlist.sort_column = new_col;
+	g_simple_action_set_state (action, parameter);
+
 	if (chanlist.list)
 		gtk_list_box_invalidate_sort (GTK_LIST_BOX (chanlist.list));
+}
+
+static void
+chanlist_sort_desc_activated (GSimpleAction *action, GVariant *parameter,
+	gpointer userdata)
+{
+	GVariant *state;
+	gboolean current;
+
+	(void) parameter;
+	(void) userdata;
+
+	/* GtkPopoverMenu fires activate on boolean stateful actions,
+	 * not change-state. Read current state, invert, and set. */
+	state = g_action_get_state (G_ACTION (action));
+	current = g_variant_get_boolean (state);
+	g_variant_unref (state);
+
+	chanlist.sort_desc = !current;
+	g_simple_action_set_state (action, g_variant_new_boolean (!current));
+
+	if (chanlist.list)
+		gtk_list_box_invalidate_sort (GTK_LIST_BOX (chanlist.list));
+}
+
+static void
+chanlist_save_activated (GSimpleAction *action, GVariant *parameter,
+	gpointer userdata)
+{
+	(void) action;
+	(void) parameter;
+	(void) userdata;
+	chanlist_save (NULL, NULL);
 }
 
 static void
@@ -811,6 +855,9 @@ chanlist_destroy_widget (GtkWidget *wid, server *serv)
 		chanlist.match_regex = NULL;
 		chanlist.have_regex = FALSE;
 	}
+
+	g_clear_object (&chanlist.actions);
+	chanlist.save_action = NULL;
 
 	chanlist_data_free (chanlist.serv);
 }
@@ -882,24 +929,29 @@ chanlist_open (server *serv, const char *filter, int do_refresh)
 
 	if (!chanlist.window)
 	{
+		GSimpleAction *sort_col_action;
+		GSimpleAction *sort_desc_action;
+		GSimpleAction *save_action;
+		GtkWidget *placeholder;
+
 		builder = fe_gtk4_builder_new_from_resource (CHANLIST_UI_PATH);
 
-		chanlist.window = fe_gtk4_builder_get_widget (builder, "chanlist_window", GTK_TYPE_WINDOW);
-		chanlist.label = fe_gtk4_builder_get_widget (builder, "chanlist_label", GTK_TYPE_LABEL);
+		chanlist.window = fe_gtk4_builder_get_widget (builder, "chanlist_window", ADW_TYPE_WINDOW);
+		chanlist.title_widget = fe_gtk4_builder_get_widget (builder, "chanlist_title", ADW_TYPE_WINDOW_TITLE);
 		chanlist.list = fe_gtk4_builder_get_widget (builder, "chanlist_list", GTK_TYPE_LIST_BOX);
-		chanlist.sort_button[COL_CHANNEL] = fe_gtk4_builder_get_widget (builder, "chanlist_sort_channel_button", GTK_TYPE_BUTTON);
-		chanlist.sort_button[COL_USERS] = fe_gtk4_builder_get_widget (builder, "chanlist_sort_users_button", GTK_TYPE_BUTTON);
-		chanlist.sort_button[COL_TOPIC] = fe_gtk4_builder_get_widget (builder, "chanlist_sort_topic_button", GTK_TYPE_BUTTON);
-		chanlist.search = fe_gtk4_builder_get_widget (builder, "chanlist_search_button", GTK_TYPE_BUTTON);
+		chanlist.search_bar = fe_gtk4_builder_get_widget (builder, "chanlist_search_bar", GTK_TYPE_SEARCH_BAR);
+		chanlist.search_entry = fe_gtk4_builder_get_widget (builder, "chanlist_search_entry", GTK_TYPE_SEARCH_ENTRY);
+		chanlist.search_toggle = fe_gtk4_builder_get_widget (builder, "chanlist_search_toggle", GTK_TYPE_TOGGLE_BUTTON);
 		chanlist.refresh = fe_gtk4_builder_get_widget (builder, "chanlist_refresh_button", GTK_TYPE_BUTTON);
-		chanlist.savelist = fe_gtk4_builder_get_widget (builder, "chanlist_save_button", GTK_TYPE_BUTTON);
 		chanlist.join = fe_gtk4_builder_get_widget (builder, "chanlist_join_button", GTK_TYPE_BUTTON);
+		chanlist.filter_button = fe_gtk4_builder_get_widget (builder, "chanlist_filter_button", GTK_TYPE_MENU_BUTTON);
 		chanlist.min_spin = fe_gtk4_builder_get_widget (builder, "chanlist_min_spin", GTK_TYPE_SPIN_BUTTON);
 		chanlist.max_spin = fe_gtk4_builder_get_widget (builder, "chanlist_max_spin", GTK_TYPE_SPIN_BUTTON);
 		chanlist.match_channel = fe_gtk4_builder_get_widget (builder, "chanlist_match_channel", GTK_TYPE_CHECK_BUTTON);
 		chanlist.match_topic = fe_gtk4_builder_get_widget (builder, "chanlist_match_topic", GTK_TYPE_CHECK_BUTTON);
 		chanlist.search_type = fe_gtk4_builder_get_widget (builder, "chanlist_search_type", GTK_TYPE_DROP_DOWN);
-		chanlist.wild = fe_gtk4_builder_get_widget (builder, "chanlist_find_entry", GTK_TYPE_ENTRY);
+		chanlist.apply_filter = fe_gtk4_builder_get_widget (builder, "chanlist_apply_filter_button", GTK_TYPE_BUTTON);
+		chanlist.menu_button = fe_gtk4_builder_get_widget (builder, "chanlist_menu_button", GTK_TYPE_MENU_BUTTON);
 
 		g_object_ref_sink (chanlist.window);
 		g_object_unref (builder);
@@ -907,39 +959,92 @@ chanlist_open (server *serv, const char *filter, int do_refresh)
 		if (main_window)
 			gtk_window_set_transient_for (GTK_WINDOW (chanlist.window), GTK_WINDOW (main_window));
 
+		/* Search type dropdown model */
 		search_model = gtk_string_list_new (search_modes);
 		gtk_drop_down_set_model (GTK_DROP_DOWN (chanlist.search_type), G_LIST_MODEL (search_model));
 		g_object_unref (search_model);
 
+		/* Spin button initial values */
 		gtk_spin_button_set_value (GTK_SPIN_BUTTON (chanlist.min_spin), chanlist.minusers);
 		gtk_spin_button_set_value (GTK_SPIN_BUTTON (chanlist.max_spin), chanlist.maxusers);
 		gtk_drop_down_set_selected (GTK_DROP_DOWN (chanlist.search_type),
 			(guint) chanlist.search_type_index);
 
+		/* List sort function */
 		gtk_list_box_set_sort_func (GTK_LIST_BOX (chanlist.list), chanlist_list_sort_cb, NULL, NULL);
-		g_signal_connect (chanlist.list, "row-activated", G_CALLBACK (chanlist_row_activated_cb), NULL);
 
-		g_signal_connect (chanlist.sort_button[COL_CHANNEL], "clicked",
-			G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_CHANNEL));
-		g_signal_connect (chanlist.sort_button[COL_USERS], "clicked",
-			G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_USERS));
-		g_signal_connect (chanlist.sort_button[COL_TOPIC], "clicked",
-			G_CALLBACK (chanlist_sort_cb), GINT_TO_POINTER (COL_TOPIC));
+		/* Placeholder for empty list */
+		placeholder = gtk_label_new (_("No channels found"));
+		gtk_widget_add_css_class (placeholder, "dim-label");
+		gtk_widget_set_margin_top (placeholder, 24);
+		gtk_widget_set_margin_bottom (placeholder, 24);
+		gtk_list_box_set_placeholder (GTK_LIST_BOX (chanlist.list), placeholder);
 
-		g_signal_connect (chanlist.search, "clicked", G_CALLBACK (chanlist_search_pressed), NULL);
-		g_signal_connect (chanlist.refresh, "clicked", G_CALLBACK (chanlist_refresh), NULL);
-		g_signal_connect (chanlist.savelist, "clicked", G_CALLBACK (chanlist_save), NULL);
-		g_signal_connect (chanlist.join, "clicked", G_CALLBACK (chanlist_join), NULL);
-		g_signal_connect (chanlist.min_spin, "value-changed", G_CALLBACK (chanlist_minusers), NULL);
-		g_signal_connect (chanlist.max_spin, "value-changed", G_CALLBACK (chanlist_maxusers), NULL);
+		/* Search bar: bind toggle button <-> search bar mode */
+		g_object_bind_property (chanlist.search_toggle, "active",
+			chanlist.search_bar, "search-mode-enabled",
+			G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+
+		/* Key capture: typing anywhere opens search */
+		gtk_search_bar_set_key_capture_widget (
+			GTK_SEARCH_BAR (chanlist.search_bar), chanlist.window);
+
+		/* GAction group for sort + save */
+		sort_col_action = g_simple_action_new_stateful (
+			"sort-column",
+			G_VARIANT_TYPE_STRING,
+			g_variant_new_string ("channel"));
+		g_signal_connect (sort_col_action, "activate",
+			G_CALLBACK (chanlist_sort_column_activated), NULL);
+
+		sort_desc_action = g_simple_action_new_stateful (
+			"sort-descending",
+			NULL,
+			g_variant_new_boolean (FALSE));
+		g_signal_connect (sort_desc_action, "activate",
+			G_CALLBACK (chanlist_sort_desc_activated), NULL);
+
+		save_action = g_simple_action_new ("save-list", NULL);
+		g_signal_connect (save_action, "activate",
+			G_CALLBACK (chanlist_save_activated), NULL);
+		chanlist.save_action = save_action;
+
+		chanlist.actions = g_simple_action_group_new ();
+		g_action_map_add_action (G_ACTION_MAP (chanlist.actions), G_ACTION (sort_col_action));
+		g_action_map_add_action (G_ACTION_MAP (chanlist.actions), G_ACTION (sort_desc_action));
+		g_action_map_add_action (G_ACTION_MAP (chanlist.actions), G_ACTION (save_action));
+		g_object_unref (sort_col_action);
+		g_object_unref (sort_desc_action);
+		g_object_unref (save_action);
+
+		gtk_widget_insert_action_group (chanlist.window, "chanlist",
+			G_ACTION_GROUP (chanlist.actions));
+
+		/* Signal connections */
+		g_signal_connect (chanlist.search_entry, "search-changed",
+			G_CALLBACK (chanlist_find_cb), NULL);
+		g_signal_connect (chanlist.search_entry, "activate",
+			G_CALLBACK (chanlist_search_pressed), NULL);
+		g_signal_connect (chanlist.apply_filter, "clicked",
+			G_CALLBACK (chanlist_search_pressed), NULL);
+		g_signal_connect (chanlist.refresh, "clicked",
+			G_CALLBACK (chanlist_refresh), NULL);
+		g_signal_connect (chanlist.join, "clicked",
+			G_CALLBACK (chanlist_join), NULL);
+		g_signal_connect (chanlist.min_spin, "value-changed",
+			G_CALLBACK (chanlist_minusers), NULL);
+		g_signal_connect (chanlist.max_spin, "value-changed",
+			G_CALLBACK (chanlist_maxusers), NULL);
 		g_signal_connect (chanlist.match_channel, "toggled",
 			G_CALLBACK (chanlist_match_channel_button_toggled), NULL);
 		g_signal_connect (chanlist.match_topic, "toggled",
 			G_CALLBACK (chanlist_match_topic_button_toggled), NULL);
 		g_signal_connect (chanlist.search_type, "notify::selected",
 			G_CALLBACK (chanlist_combo_cb), NULL);
-		g_signal_connect (chanlist.wild, "changed", G_CALLBACK (chanlist_find_cb), NULL);
-		g_signal_connect (chanlist.wild, "activate", G_CALLBACK (chanlist_search_pressed), NULL);
+
+		/* Double-click joins (activate-on-single-click is FALSE in the UI) */
+		g_signal_connect (chanlist.list, "row-activated",
+			G_CALLBACK (chanlist_row_activated_cb), NULL);
 
 		g_signal_connect (chanlist.window, "close-request",
 			G_CALLBACK (chanlist_close_request_cb), NULL);
@@ -955,24 +1060,23 @@ chanlist_open (server *serv, const char *filter, int do_refresh)
 	chanlist.serv = serv;
 	g_strlcpy (chanlist.request_filter, (filter && filter[0]) ? filter : "",
 		sizeof (chanlist.request_filter));
-	if (chanlist.wild)
-		gtk_editable_set_text (GTK_EDITABLE (chanlist.wild), chanlist.request_filter);
+	if (chanlist.search_entry)
+		gtk_editable_set_text (GTK_EDITABLE (chanlist.search_entry), chanlist.request_filter);
 
 	chanlist.match_wants_channel = TRUE;
 	chanlist.match_wants_topic = TRUE;
 	chanlist.sort_column = COL_CHANNEL;
 	chanlist.sort_desc = FALSE;
-	chanlist_sort_label_update (chanlist.sort_column);
 
-	g_snprintf (tbuf, sizeof (tbuf), _("Channel List (%s) - %s"),
-		server_get_network (serv, TRUE), PACKAGE_NAME);
-	gtk_window_set_title (GTK_WINDOW (chanlist.window), tbuf);
+	g_snprintf (tbuf, sizeof (tbuf), _("Channel List (%s)"),
+		server_get_network (serv, TRUE));
+	adw_window_title_set_title (ADW_WINDOW_TITLE (chanlist.title_widget), tbuf);
 
 	if (chanlist.tag)
 		g_source_remove (chanlist.tag);
 	chanlist.tag = g_timeout_add (250, chanlist_timeout, serv);
 
-	chanlist_find_cb (chanlist.wild, chanlist.serv);
+	chanlist_find_cb (GTK_SEARCH_ENTRY (chanlist.search_entry), NULL);
 	chanlist_reset_counters (serv);
 	chanlist_update_buttons (serv);
 	gtk_window_present (GTK_WINDOW (chanlist.window));
