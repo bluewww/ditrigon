@@ -366,15 +366,15 @@ static const setting tabs_settings[] =
 	{ST_TOGGLE, N_("Open an extra tab for server messages"), P_OFFINTNL (hex_gui_tab_server)},
 	{ST_TOGGLE, N_("Open private messages in new tabs"), P_OFFINTNL (hex_gui_autoopen_dialog)},
 	{ST_TOGGLE, N_("Sort tabs in alphabetical order"), P_OFFINTNL (hex_gui_tab_sort)},
-	{ST_TOGGLE, N_("Show icons in the channel tree"), P_OFFINTNL (hex_gui_tab_icons)},
-	{ST_TOGGLE, N_("Show dotted lines in the channel tree"), P_OFFINTNL (hex_gui_tab_dots)},
+	/* {ST_TOGGLE, N_("Show icons in the channel tree"), P_OFFINTNL (hex_gui_tab_icons)}, */
+	/* {ST_TOGGLE, N_("Show dotted lines in the channel tree"), P_OFFINTNL (hex_gui_tab_dots)}, */
 	/* {ST_TOGGLE, N_("Scroll mouse-wheel to change tabs"), P_OFFINTNL (hex_gui_tab_scrollchans)}, */
 	/* {ST_TOGGLE, N_("Middle click to close tab"), P_OFFINTNL (hex_gui_tab_middleclose)}, */
 	/* {ST_TOGGLE, N_("Smaller text"), P_OFFINTNL (hex_gui_tab_small)}, */
-	{ST_MENU, N_("Focus new tabs:"), P_OFFINTNL (hex_gui_tab_newtofront), NULL, focusnewtabsmenu, 0},
-	{ST_MENU, N_("Placement of notices:"), P_OFFINTNL (hex_irc_notice_pos), NULL, noticeposmenu, 0},
+	{ST_MENU, N_("Focus new tabs"), P_OFFINTNL (hex_gui_tab_newtofront), NULL, focusnewtabsmenu, 0},
+	{ST_MENU, N_("Placement of notices"), P_OFFINTNL (hex_irc_notice_pos), NULL, noticeposmenu, 0},
 	/* {ST_MENU, N_("Show channel switcher at:"), P_OFFINTNL (hex_gui_tab_pos), NULL, cspos, 1}, */
-	{ST_NUMBER, N_("Shorten tab labels to:"), P_OFFINTNL (hex_gui_tab_trunc), NULL, NULL, 99},
+	/* {ST_NUMBER, N_("Shorten tab labels to"), P_OFFINTNL (hex_gui_tab_trunc), NULL, NULL, 99}, */
 
 	/* {ST_HEADER, N_("Tabs or Windows")}, */
 	/* {ST_MENU, N_("Open channels in:"), P_OFFINTNL (hex_gui_tab_chans), NULL, tabwin, 0}, */
