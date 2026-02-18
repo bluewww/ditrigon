@@ -1564,6 +1564,8 @@ fe_input_add (int sok, int flags, void *func, void *data)
 		type |= G_IO_PRI;
 
 	tag = g_io_add_watch (channel, type, (GIOFunc) func, data);
+	/* helps with debugging */
+	g_source_set_name_by_id (tag, "IRC server socket watch");
 	g_io_channel_unref (channel);
 	return tag;
 }
