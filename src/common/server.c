@@ -304,6 +304,33 @@ server_read (GIOChannel *source, GIOCondition condition, server *serv)
 	int error, i, len;
 	char lbuf[2050];
 
+	/* If poll reports an error/hup, handle it. Otherwise this can spin forever. */
+	if (condition & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
+		int so_error = 0;
+		socklen_t slen = sizeof so_error;
+
+		if (getsockopt (serv->sok, SOL_SOCKET, SO_ERROR, &so_error, &slen) != 0)
+			so_error = 0;
+
+		/* Follow the existing disconnect/reconnect logic */
+		if (!serv->end_of_motd) {
+			server_disconnect (serv->server_session, FALSE, so_error);
+			if (!servlist_cycle (serv)) {
+				if (prefs.hex_net_auto_reconnect)
+					auto_reconnect (serv, FALSE, so_error);
+			}
+		} else {
+			if (prefs.hex_net_auto_reconnect)
+				auto_reconnect (serv, FALSE, so_error);
+			else
+				server_disconnect (serv->server_session, FALSE, so_error);
+		}
+
+		/* Keep TRUE if server_disconnect() / cleanup already removes the iotag.
+		   (Returning FALSE would also remove the source, but double-removal is a bug.) */
+		return TRUE;
+	}
+
 	while (1)
 	{
 #ifdef USE_OPENSSL
