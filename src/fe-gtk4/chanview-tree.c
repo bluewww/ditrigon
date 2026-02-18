@@ -69,7 +69,8 @@ tree_load_css (void)
 		".hc-tree-label { padding: 1px 0; }"
 		".hc-tree-subtitle { padding: 0; font-size: 0.82em; }"
 		".hc-tree-icon { opacity: 0.72; }"
-		".hc-tree-section { border-radius: 0; min-height: 22px; padding: 10px 4px 2px 4px; }"
+		".hc-tree-section { border-radius: 0; min-height: 22px; padding: 10px 4px 2px 4px; border-top: 1px solid alpha(@theme_fg_color, 0.15); }"
+		".hc-tree-section-first { border-top: none; }"
 		".hc-tree-section-label { color: alpha(@theme_fg_color, 0.70); font-size: 0.83em; font-weight: 700; }"
 		".hc-tree-badge { min-width: 16px; padding: 0 6px; border-radius: 999px; margin: 0 4px 0 4px; font-size: 0.85em; font-weight: 700; }"
 		".hc-tree-server { color: alpha(@theme_fg_color, 0.90); font-weight: 600; }"
@@ -125,6 +126,7 @@ tree_clear_state_classes (GtkWidget *row_box, GtkWidget *label)
 	static const char *const classes[] =
 	{
 		"hc-tree-section",
+		"hc-tree-section-first",
 		"hc-tree-server",
 		"hc-tree-data",
 		"hc-tree-msg",
@@ -414,7 +416,11 @@ tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 	if (server_entry)
 	{
 		if (row_box)
+		{
 			gtk_widget_add_css_class (row_box, "hc-tree-section");
+			if (gtk_list_item_get_position (list_item) == 0)
+				gtk_widget_add_css_class (row_box, "hc-tree-section-first");
+		}
 		if (label)
 			gtk_widget_add_css_class (label, "hc-tree-section-label");
 	}
