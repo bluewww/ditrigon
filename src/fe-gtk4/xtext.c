@@ -697,7 +697,36 @@ xtext_link_hover_set (const GtkTextIter *start, const GtkTextIter *end)
 		return;
 
 	xtext_link_hover_clear ();
-	gtk_text_buffer_apply_tag (log_buffer, tag_link_hover, &start_iter, &end_iter);
+
+	/* Apply the tag in segments, skipping wrap-continuation sequences
+	 * ("\n\t\t") so the indent tabs don't get underlined. */
+	{
+		GtkTextIter seg_start = start_iter;
+		GtkTextIter cursor = start_iter;
+
+		while (gtk_text_iter_compare (&cursor, &end_iter) < 0)
+		{
+			GtkTextIter probe = cursor;
+			if (xtext_skip_wrap_forward (&probe))
+			{
+				/* cursor is at '\n'; apply tag for text before it */
+				if (gtk_text_iter_compare (&seg_start, &cursor) < 0)
+					gtk_text_buffer_apply_tag (log_buffer, tag_link_hover,
+						&seg_start, &cursor);
+				/* Skip past "\n\t\t" */
+				cursor = probe;
+				seg_start = cursor;
+			}
+			else
+			{
+				gtk_text_iter_forward_char (&cursor);
+			}
+		}
+		/* Apply tag for the remaining segment */
+		if (gtk_text_iter_compare (&seg_start, &end_iter) < 0)
+			gtk_text_buffer_apply_tag (log_buffer, tag_link_hover, &seg_start, &end_iter);
+	}
+
 	xtext_hover_start_mark = gtk_text_buffer_create_mark (log_buffer, NULL, &start_iter, TRUE);
 	xtext_hover_end_mark = gtk_text_buffer_create_mark (log_buffer, NULL, &end_iter, FALSE);
 }
