@@ -3,7 +3,6 @@ hexchat_gtk4_sources = [
   'ascii.c',
   'banlist.c',
   'chanlist.c',
-  'chanview-tabs.c',
   'chanview-tree.c',
   'chanview.c',
   'custom-list.c',
