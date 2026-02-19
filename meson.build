@@ -82,6 +82,11 @@ if host_machine.system() == 'windows'
      language: 'c')
 endif
 
+if get_option('optimization') != '0'
+  if cc.has_argument('-D_FORTIFY_SOURCE=2')
+    add_project_arguments('-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2', language: 'c')
+  endif
+endif
 
 global_cflags = []
 test_cflags = [
