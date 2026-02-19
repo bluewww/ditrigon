@@ -9,7 +9,7 @@ typedef struct session hexchat_context;
 
 #include "fe-gtk4.h"
 
-#define PLUGIN_UI_PATH "/org/hexchat/ui/gtk4/dialogs/plugin-window.ui"
+#define PLUGIN_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/plugin-window.ui"
 
 #ifdef USE_PLUGIN
 extern GSList *plugin_list;

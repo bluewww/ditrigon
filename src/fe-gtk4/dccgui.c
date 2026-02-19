@@ -6,8 +6,8 @@
 #include "../common/dcc.h"
 #include "../common/network.h"
 
-#define DCC_FILE_UI_PATH "/org/hexchat/ui/gtk4/dialogs/dcc-file-window.ui"
-#define DCC_CHAT_UI_PATH "/org/hexchat/ui/gtk4/dialogs/dcc-chat-window.ui"
+#define DCC_FILE_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/dcc-file-window.ui"
+#define DCC_CHAT_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/dcc-chat-window.ui"
 
 typedef struct
 {

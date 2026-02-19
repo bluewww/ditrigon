@@ -9,8 +9,8 @@
 
 #include <time.h>
 
-#define NOTIFY_UI_PATH "/org/hexchat/ui/gtk4/dialogs/notify-window.ui"
-#define NOTIFY_ADD_UI_PATH "/org/hexchat/ui/gtk4/dialogs/notify-add-dialog.ui"
+#define NOTIFY_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/notify-window.ui"
+#define NOTIFY_ADD_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/notify-add-dialog.ui"
 
 typedef struct
 {

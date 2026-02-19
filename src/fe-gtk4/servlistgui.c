@@ -12,8 +12,8 @@
 #define DEFAULT_SERVER "newserver/6667"
 #endif
 
-#define SERVLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/servlist-window.ui"
-#define SERVLIST_EDIT_UI_PATH "/org/hexchat/ui/gtk4/dialogs/servlist-edit-window.ui"
+#define SERVLIST_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/servlist-window.ui"
+#define SERVLIST_EDIT_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/servlist-edit-window.ui"
 
 enum
 {

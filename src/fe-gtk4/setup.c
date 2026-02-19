@@ -48,7 +48,7 @@ typedef struct
 
 static GtkWidget *prefs_window;
 
-#define SETUP_UI_BASE "/org/hexchat/ui/gtk4/setup"
+#define SETUP_UI_BASE "/org/ditrigon/ui/gtk4/setup"
 
 static GtkWidget *
 setup_ui_widget_new (const char *resource_path, const char *object_id)

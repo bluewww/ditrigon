@@ -6,7 +6,7 @@
 #include "../common/url.h"
 #include "../common/tree.h"
 
-#define URLGRAB_UI_PATH "/org/hexchat/ui/gtk4/dialogs/urlgrab-window.ui"
+#define URLGRAB_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/urlgrab-window.ui"
 
 typedef struct
 {

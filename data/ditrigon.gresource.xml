@@ -21,7 +21,7 @@
 		<file alias="tree_server.png" preprocess="to-pixdata">icons/tree_server.png</file>
 		<file alias="tree_util.png" preprocess="to-pixdata">icons/tree_util.png</file>
 	</gresource>
-	<gresource prefix="/org/hexchat">
+	<gresource prefix="/org/ditrigon">
 		<file>ui/gtk4/dialogs/ascii-window.ui</file>
 		<file>ui/gtk4/dialogs/banlist-window.ui</file>
 		<file>ui/gtk4/dialogs/ignore-window.ui</file>

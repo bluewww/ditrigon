@@ -49,7 +49,7 @@ static GHashTable *disconnect_preserve_servers;
 #define GUI_PANE_CENTER_MIN GUI_PANE_LEFT_DEFAULT
 #define NAV_SPLIT_COLLAPSE_CONDITION "max-width: 560sp"
 #define NAV_SPLIT_COLLAPSE_WIDTH_HINT 560
-#define MAINGUI_UI_BASE "/org/hexchat/ui/gtk4/maingui"
+#define MAINGUI_UI_BASE "/org/ditrigon/ui/gtk4/maingui"
 
 static int done_intro;
 

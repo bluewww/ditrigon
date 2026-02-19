@@ -6,7 +6,7 @@
 #include "../common/server.h"
 #include "../common/servlist.h"
 
-#define JOIND_UI_PATH "/org/hexchat/ui/gtk4/dialogs/joind-window.ui"
+#define JOIND_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/joind-window.ui"
 
 typedef struct
 {

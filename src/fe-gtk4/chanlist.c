@@ -13,7 +13,7 @@
 
 #include "../common/text.h"
 
-#define CHANLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/chanlist-window.ui"
+#define CHANLIST_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/chanlist-window.ui"
 
 enum
 {
