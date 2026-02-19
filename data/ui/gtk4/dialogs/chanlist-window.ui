@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="Adw" version="1.0"/>
+  <requires lib="gio" version="2.0"/>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.7"/>
+
+  <menu id="chanlist_overflow_menu">
+    <section>
+      <attribute name="label" translatable="yes">Sort By</attribute>
+      <item>
+        <attribute name="label" translatable="yes">Channel Name</attribute>
+        <attribute name="action">chanlist.sort-column</attribute>
+        <attribute name="target">channel</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">User Count</attribute>
+        <attribute name="action">chanlist.sort-column</attribute>
+        <attribute name="target">users</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Topic</attribute>
+        <attribute name="action">chanlist.sort-column</attribute>
+        <attribute name="target">topic</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Descending Order</attribute>
+        <attribute name="action">chanlist.sort-descending</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Save List…</attribute>
+        <attribute name="action">chanlist.save-list</attribute>
+      </item>
+    </section>
+  </menu>
+
+  <object class="AdwWindow" id="chanlist_window">
+    <property name="default-width">800</property>
+    <property name="default-height">560</property>
+    <child>
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="title-widget">
+              <object class="AdwWindowTitle" id="chanlist_title">
+                <property name="title" translatable="yes">Channel List</property>
+              </object>
+            </property>
+
+            <child type="start">
+              <object class="GtkButton" id="chanlist_refresh_button">
+                <property name="icon-name">view-refresh-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Download Channel List</property>
+              </object>
+            </child>
+
+            <child type="end">
+              <object class="GtkButton" id="chanlist_join_button">
+                <property name="label" translatable="yes">_Join</property>
+                <property name="use-underline">True</property>
+                <property name="tooltip-text" translatable="yes">Join Selected Channel</property>
+                <style>
+                  <class name="suggested-action"/>
+                </style>
+              </object>
+            </child>
+
+            <child type="end">
+              <object class="GtkMenuButton" id="chanlist_filter_button">
+                <property name="icon-name">preferences-other-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Filters</property>
+                <property name="popover">
+                  <object class="GtkPopover" id="chanlist_filter_popover">
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">12</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="margin-top">12</property>
+                        <property name="margin-bottom">12</property>
+
+                        <!-- Search type -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">Search Type</property>
+                                <property name="xalign">0</property>
+                                <style><class name="heading"/></style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkDropDown" id="chanlist_search_type">
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Look in -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">Look In</property>
+                                <property name="xalign">0</property>
+                                <style><class name="heading"/></style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkCheckButton" id="chanlist_match_channel">
+                                <property name="label" translatable="yes">Channel name</property>
+                                <property name="active">True</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkCheckButton" id="chanlist_match_topic">
+                                <property name="label" translatable="yes">Topic</property>
+                                <property name="active">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- User count range -->
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">User Count</property>
+                                <property name="xalign">0</property>
+                                <style><class name="heading"/></style>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <property name="spacing">8</property>
+                                <child>
+                                  <object class="GtkSpinButton" id="chanlist_min_spin">
+                                    <property name="adjustment">
+                                      <object class="GtkAdjustment">
+                                        <property name="lower">1</property>
+                                        <property name="upper">999999</property>
+                                        <property name="step-increment">1</property>
+                                        <property name="page-increment">10</property>
+                                        <property name="value">5</property>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="yes">to</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkSpinButton" id="chanlist_max_spin">
+                                    <property name="adjustment">
+                                      <object class="GtkAdjustment">
+                                        <property name="lower">1</property>
+                                        <property name="upper">999999</property>
+                                        <property name="step-increment">1</property>
+                                        <property name="page-increment">10</property>
+                                        <property name="value">9999</property>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Apply button -->
+                        <child>
+                          <object class="GtkButton" id="chanlist_apply_filter_button">
+                            <property name="label" translatable="yes">Apply</property>
+                            <style>
+                              <class name="suggested-action"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </property>
+              </object>
+            </child>
+
+            <child type="end">
+              <object class="GtkToggleButton" id="chanlist_search_toggle">
+                <property name="icon-name">system-search-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Search</property>
+              </object>
+            </child>
+
+            <child type="end">
+              <object class="GtkMenuButton" id="chanlist_menu_button">
+                <property name="icon-name">view-more-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Options</property>
+                <property name="menu-model">chanlist_overflow_menu</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <property name="content">
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+
+            <child>
+              <object class="GtkSearchBar" id="chanlist_search_bar">
+                <style><class name="inline"/></style>
+                <property name="child">
+                  <object class="GtkSearchEntry" id="chanlist_search_entry">
+                    <property name="hexpand">True</property>
+                    <property name="placeholder-text" translatable="yes">Search channels…</property>
+                    <property name="max-width-chars">55</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkScrolledWindow">
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+                <property name="hscrollbar-policy">never</property>
+                <property name="child">
+                  <object class="GtkListBox" id="chanlist_list">
+                    <property name="selection-mode">single</property>
+                    <property name="activate-on-single-click">False</property>
+                  </object>
+                </property>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </child>
+  </object>
+</interface>

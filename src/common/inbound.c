@@ -87,7 +87,8 @@ set_topic (session *sess, char *topic, char *stripped_topic)
 	{
 		char tbuf[1024];
 		g_snprintf (tbuf, sizeof (tbuf), "[%s has address %s]\n", sess->channel, stripped_topic);
-		write (sess->logfd, tbuf, strlen (tbuf));
+		if (write (sess->logfd, tbuf, strlen (tbuf)) < 0)
+			g_warning ("Failed to write to log");
 	}
 
 	g_free (sess->topic);

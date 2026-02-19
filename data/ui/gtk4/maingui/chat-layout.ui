@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+
+  <object class="GtkBox" id="main_right_box">
+    <property name="orientation">vertical</property>
+    <property name="spacing">3</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <child>
+      <object class="GtkPaned" id="main_right_paned">
+        <property name="orientation">horizontal</property>
+        <property name="hexpand">True</property>
+        <property name="vexpand">True</property>
+        <property name="resize-start-child">True</property>
+        <property name="shrink-start-child">True</property>
+        <property name="resize-end-child">False</property>
+        <property name="shrink-end-child">True</property>
+        <style>
+          <class name="hc-soft-paned"/>
+        </style>
+        <property name="start-child">
+          <object class="GtkBox" id="main_center_box">
+            <property name="orientation">vertical</property>
+            <property name="spacing">3</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <child>
+              <object class="GtkBox" id="chat_scroll_slot">
+                <property name="orientation">vertical</property>
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+              </object>
+            </child>
+          </object>
+        </property>
+        <property name="end-child">
+          <object class="GtkBox" id="userlist_slot">
+            <property name="orientation">vertical</property>
+            <property name="hexpand">False</property>
+            <property name="vexpand">True</property>
+          </object>
+        </property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkBox" id="entry_row">
+        <property name="orientation">horizontal</property>
+        <property name="spacing">6</property>
+        <style>
+          <class name="hc-input-row"/>
+        </style>
+        <child>
+          <object class="GtkBox" id="input_nick_box">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">0</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox" id="input_composer_box">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">6</property>
+            <property name="hexpand">True</property>
+            <style>
+              <class name="hc-input-composer"/>
+            </style>
+            <child>
+              <object class="GtkBox" id="command_entry_slot">
+                <property name="orientation">horizontal</property>
+                <property name="spacing">0</property>
+                <property name="hexpand">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="input_send_button">
+                <property name="icon-name">mail-send-symbolic</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

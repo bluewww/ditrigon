@@ -277,6 +277,7 @@ struct hexchatprefs
 	int hex_net_reconnect_delay;
 	int hex_notify_timeout;
 	int hex_text_max_indent;
+	int hex_text_stamp_width;
 	int hex_text_max_lines;
 	int hex_url_grabber_limit;
 

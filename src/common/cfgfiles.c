@@ -134,7 +134,15 @@ list_loadconf (char *file, GSList ** list, char *defaultconf)
 	}
 
 	ibuf = g_malloc (st.st_size);
-	read (fd, ibuf, st.st_size);
+	if (read (fd, ibuf, st.st_size) < 0)
+	{
+		g_warning ("Failed to read config file");
+		g_free (ibuf);
+		close (fd);
+		if (defaultconf)
+			list_load_from_data (list, defaultconf, strlen (defaultconf));
+		return;
+	}
 	close (fd);
 
 	list_load_from_data (list, ibuf, st.st_size);
@@ -564,6 +572,7 @@ const struct prefs vars[] =
 	{"text_font_alternative", P_OFFSET (hex_text_font_alternative), TYPE_STR},
 	{"text_indent", P_OFFINT (hex_text_indent), TYPE_BOOL},
 	{"text_max_indent", P_OFFINT (hex_text_max_indent), TYPE_INT},
+	{"text_stamp_width", P_OFFINT (hex_text_stamp_width), TYPE_INT},
 	{"text_max_lines", P_OFFINT (hex_text_max_lines), TYPE_INT},
 	{"text_replay", P_OFFINT (hex_text_replay), TYPE_BOOL},
 	{"text_search_case_match", P_OFFINT (hex_text_search_case_match), TYPE_BOOL},
@@ -822,22 +831,23 @@ load_default_config(void)
 	prefs.hex_gui_lagometer = 1;
 	prefs.hex_gui_lang = get_default_language();
 	prefs.hex_gui_pane_left_size = 128;		/* with treeview icons we need a bit bigger space */
-	prefs.hex_gui_pane_right_size = 100;
-	prefs.hex_gui_pane_right_size_min = 80;
+	prefs.hex_gui_pane_right_size = 200;
+	prefs.hex_gui_pane_right_size_min = 220;
 	prefs.hex_gui_tab_layout = 2;			/* 0=Tabs 1=Reserved 2=Tree */
 	prefs.hex_gui_tab_newtofront = 2;
 	prefs.hex_gui_tab_pos = 1;
 	prefs.hex_gui_tab_trunc = 20;
 	prefs.hex_gui_throttlemeter = 1;
 	prefs.hex_gui_ulist_pos = 3;
-	prefs.hex_gui_win_height = 400;
-	prefs.hex_gui_win_width = 640;
+	prefs.hex_gui_win_height = 800;
+	prefs.hex_gui_win_width = 1280;
 	prefs.hex_irc_ban_type = 1;
 	prefs.hex_irc_join_delay = 5;
 	prefs.hex_net_ping_timeout = 60;
 	prefs.hex_net_reconnect_delay = 10;
 	prefs.hex_notify_timeout = 15;
 	prefs.hex_text_max_indent = 256;
+	prefs.hex_text_stamp_width = 0;
 	prefs.hex_text_max_lines = 5000;
 	prefs.hex_url_grabber_limit = 100; 		/* 0 means unlimited */
 
@@ -994,6 +1004,14 @@ load_config (void)
 		prefs.hex_gui_win_height = 138;
 	if (prefs.hex_gui_win_width < 106)
 		prefs.hex_gui_win_width = 106;
+	if (prefs.hex_gui_pane_right_size_min < 220)
+		prefs.hex_gui_pane_right_size_min = 220;
+	if (prefs.hex_gui_pane_right_size_min > 300)
+		prefs.hex_gui_pane_right_size_min = 300;
+	if (prefs.hex_gui_pane_right_size > 300)
+		prefs.hex_gui_pane_right_size = 300;
+	if (prefs.hex_gui_pane_right_size < prefs.hex_gui_pane_right_size_min)
+		prefs.hex_gui_pane_right_size = prefs.hex_gui_pane_right_size_min;
 
 	sp = strchr (prefs.hex_irc_user_name, ' ');
 	if (sp)

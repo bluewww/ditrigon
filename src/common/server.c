@@ -304,6 +304,33 @@ server_read (GIOChannel *source, GIOCondition condition, server *serv)
 	int error, i, len;
 	char lbuf[2050];
 
+	/* If poll reports an error/hup, handle it. Otherwise this can spin forever. */
+	if (condition & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
+		int so_error = 0;
+		socklen_t slen = sizeof so_error;
+
+		if (getsockopt (serv->sok, SOL_SOCKET, SO_ERROR, &so_error, &slen) != 0)
+			so_error = 0;
+
+		/* Follow the existing disconnect/reconnect logic */
+		if (!serv->end_of_motd) {
+			server_disconnect (serv->server_session, FALSE, so_error);
+			if (!servlist_cycle (serv)) {
+				if (prefs.hex_net_auto_reconnect)
+					auto_reconnect (serv, FALSE, so_error);
+			}
+		} else {
+			if (prefs.hex_net_auto_reconnect)
+				auto_reconnect (serv, FALSE, so_error);
+			else
+				server_disconnect (serv->server_session, FALSE, so_error);
+		}
+
+		/* Keep TRUE if server_disconnect() / cleanup already removes the iotag.
+		   (Returning FALSE would also remove the source, but double-removal is a bug.) */
+		return TRUE;
+	}
+
 	while (1)
 	{
 #ifdef USE_OPENSSL
@@ -669,7 +696,7 @@ conn_fail:
 	} else
 	{
 		SSL_SESSION *session = SSL_get_session (serv->ssl);
-		if (session && SSL_SESSION_get_time (session) + SSLTMOUT < time (NULL))
+		if (session && SSL_SESSION_get_time_ex (session) + SSLTMOUT < time (NULL))
 		{
 			g_snprintf (buf, sizeof (buf), "SSL handshake timed out");
 			EMIT_SIGNAL (XP_TE_CONNFAIL, serv->server_session, buf, NULL,
@@ -1039,8 +1066,9 @@ server_disconnect (session * sess, int sendquit, int err)
 static void
 proxy_error (int fd, char *msg)
 {
-	write (fd, "0\n", 2);
-	write (fd, msg, strlen (msg));
+	if (write (fd, "0\n", 2) < 0 ||
+	    write (fd, msg, strlen (msg)) < 0)
+		g_warning ("Failed to write proxy error");
 }
 
 struct sock_connect
@@ -1279,16 +1307,19 @@ http_read_line (int print_fd, int sok, char *buf, int len)
 	if (len >= 1)
 	{
 		/* print the message out (send it to the parent process) */
-		write (print_fd, "0\n", 2);
+		if (write (print_fd, "0\n", 2) < 0)
+			g_warning ("Failed to write to child pipe");
 
 		if (buf[len-1] == '\r')
 		{
 			buf[len-1] = '\n';
-			write (print_fd, buf, len);
+			if (write (print_fd, buf, len) < 0)
+				g_warning ("Failed to write to child pipe");
 		} else
 		{
-			write (print_fd, buf, len);
-			write (print_fd, "\n", 1);
+			if (write (print_fd, buf, len) < 0 ||
+			    write (print_fd, "\n", 1) < 0)
+				g_warning ("Failed to write to child pipe");
 		}
 	}
 
@@ -1382,12 +1413,14 @@ server_child (server * serv)
 		if (local_ip != NULL)
 		{
 			g_snprintf (buf, sizeof (buf), "5\n%s\n", local_ip);
-			write (serv->childwrite, buf, strlen (buf));
+			if (write (serv->childwrite, buf, strlen (buf)) < 0)
+				g_warning ("Failed to write to child pipe");
 			net_bind (ns_local, serv->sok4, serv->sok6);
 			bound = 1;
 		} else
 		{
-			write (serv->childwrite, "7\n", 2);
+			if (write (serv->childwrite, "7\n", 2) < 0)
+				g_warning ("Failed to write to child pipe");
 		}
 		net_store_destroy (ns_local);
 	}
@@ -1449,12 +1482,14 @@ server_child (server * serv)
 	if (proxy_type > 0)
 	{
 		g_snprintf (buf, sizeof (buf), "9\n%s\n", proxy_host);
-		write (serv->childwrite, buf, strlen (buf));
+		if (write (serv->childwrite, buf, strlen (buf)) < 0)
+			g_warning ("Failed to write to child pipe");
 		ip = net_resolve (ns_server, proxy_host, proxy_port, &real_hostname);
 		g_free (proxy_host);
 		if (!ip)
 		{
-			write (serv->childwrite, "1\n", 2);
+			if (write (serv->childwrite, "1\n", 2) < 0)
+				g_warning ("Failed to write to child pipe");
 			goto xit;
 		}
 		connect_port = proxy_port;
@@ -1466,7 +1501,8 @@ server_child (server * serv)
 			proxy_ip = net_resolve (ns_proxy, hostname, port, &real_hostname);
 			if (!proxy_ip)
 			{
-				write (serv->childwrite, "1\n", 2);
+				if (write (serv->childwrite, "1\n", 2) < 0)
+					g_warning ("Failed to write to child pipe");
 				goto xit;
 			}
 		} else						  /* otherwise we can just use the hostname */
@@ -1476,7 +1512,8 @@ server_child (server * serv)
 		ip = net_resolve (ns_server, hostname, port, &real_hostname);
 		if (!ip)
 		{
-			write (serv->childwrite, "1\n", 2);
+			if (write (serv->childwrite, "1\n", 2) < 0)
+				g_warning ("Failed to write to child pipe");
 			goto xit;
 		}
 		connect_port = port;
@@ -1484,7 +1521,8 @@ server_child (server * serv)
 
 	g_snprintf (buf, sizeof (buf), "3\n%s\n%s\n%d\n",
 				 real_hostname, ip, connect_port);
-	write (serv->childwrite, buf, strlen (buf));
+	if (write (serv->childwrite, buf, strlen (buf)) < 0)
+		g_warning ("Failed to write to child pipe");
 
 	if (!serv->dont_use_proxy && (proxy_type == 5))
 		error = net_connect (ns_server, serv->proxy_sok4, serv->proxy_sok6, &psok);
@@ -1497,7 +1535,8 @@ server_child (server * serv)
 	if (error != 0)
 	{
 		g_snprintf (buf, sizeof (buf), "2\n%d\n", sock_error ());
-		write (serv->childwrite, buf, strlen (buf));
+		if (write (serv->childwrite, buf, strlen (buf)) < 0)
+			g_warning ("Failed to write to child pipe");
 	} else
 	{
 		/* connect succeeded */
@@ -1507,16 +1546,19 @@ server_child (server * serv)
 			{
 			case 0:	/* success */
 				g_snprintf (buf, sizeof (buf), "4\n%d\n", sok);	/* success */
-				write (serv->childwrite, buf, strlen (buf));
+				if (write (serv->childwrite, buf, strlen (buf)) < 0)
+					g_warning ("Failed to write to child pipe");
 				break;
 			case 1:	/* socks traversal failed */
-				write (serv->childwrite, "8\n", 2);
+				if (write (serv->childwrite, "8\n", 2) < 0)
+					g_warning ("Failed to write to child pipe");
 				break;
 			}
 		} else
 		{
 			g_snprintf (buf, sizeof (buf), "4\n%d\n", sok);	/* success */
-			write (serv->childwrite, buf, strlen (buf));
+			if (write (serv->childwrite, buf, strlen (buf)) < 0)
+				g_warning ("Failed to write to child pipe");
 		}
 	}
 
@@ -1656,7 +1698,8 @@ server_connect (server *serv, char *hostname, int port, int no_login)
 
 	case 0:
 		/* this is the child */
-		setuid (getuid ());
+		if (setuid (getuid ()) < 0)
+			g_warning ("Failed to drop privileges");
 		server_child (serv);
 		_exit (0);
 	}

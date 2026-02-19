@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+
+  <object class="AdwPreferencesDialog" id="setup_prefs_window">
+    <property name="title" translatable="yes">Preferences</property>
+    <property name="content-width">920</property>
+    <property name="content-height">680</property>
+    <property name="search-enabled">True</property>
+  </object>
+</interface>

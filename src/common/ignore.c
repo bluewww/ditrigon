@@ -287,7 +287,13 @@ ignore_load ()
 		if (st.st_size)
 		{
 			cfg = g_malloc0 (st.st_size + 1);
-			read (fh, cfg, st.st_size);
+			if (read (fh, cfg, st.st_size) < 0)
+			{
+				g_warning ("Failed to read ignore.conf");
+				g_free (cfg);
+				close (fh);
+				return;
+			}
 			my_cfg = cfg;
 			while (my_cfg)
 			{
@@ -321,7 +327,8 @@ ignore_save ()
 			{
 				g_snprintf (buf, sizeof (buf), "mask = %s\ntype = %u\n\n",
 							 ig->mask, ig->type);
-				write (fh, buf, strlen (buf));
+				if (write (fh, buf, strlen (buf)) < 0)
+					g_warning ("Failed to write ignore.conf");
 			}
 			temp = temp->next;
 		}

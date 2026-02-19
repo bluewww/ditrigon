@@ -1,0 +1,220 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
+<interface>
+  <!-- interface-name servlist-edit-window.ui -->
+  <requires lib="Adw" version="1.0"/>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <object class="AdwPreferencesDialog" id="servlist_edit_window">
+    <property name="content-height">600</property>
+    <property name="content-width">680</property>
+    <property name="search-enabled">True</property>
+    <child>
+      <object class="AdwPreferencesPage" id="page_general">
+        <property name="icon-name">preferences-system-symbolic</property>
+        <property name="title" translatable="yes">General</property>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_identity">
+            <property name="title" translatable="yes">Network Identity</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_connection">
+            <property name="title" translatable="yes">Connection Options</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_security">
+            <property name="title" translatable="yes">Security</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_auth">
+            <property name="title" translatable="yes">Authentication</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_user_info">
+            <property name="title" translatable="yes">User Information</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_advanced">
+            <property name="title" translatable="yes">Advanced</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesPage" id="page_servers">
+        <property name="icon-name">network-server-symbolic</property>
+        <property name="title" translatable="yes">Servers</property>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_servers">
+            <child>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkScrolledWindow" id="servers_scroll">
+                    <property name="child">
+                      <object class="GtkListBox" id="servers_list">
+                        <property name="selection-mode">single</property>
+                        <style>
+                          <class name="boxed-list"/>
+                        </style>
+                      </object>
+                    </property>
+                    <property name="height-request">300</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vexpand">True</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkButton" id="servers_add_button">
+                        <property name="icon-name">list-add-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Add Server</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="servers_remove_button">
+                        <property name="icon-name">list-remove-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Remove Server</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="servers_edit_button">
+                        <property name="icon-name">document-edit-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Edit Server</property>
+                      </object>
+                    </child>
+                    <style>
+                      <class name="toolbar"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesPage" id="page_channels">
+        <property name="icon-name">view-list-symbolic</property>
+        <property name="title" translatable="yes">Autojoin Channels</property>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_channels">
+            <child>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkScrolledWindow" id="channels_scroll">
+                    <property name="child">
+                      <object class="GtkListBox" id="channels_list">
+                        <property name="selection-mode">single</property>
+                        <style>
+                          <class name="boxed-list"/>
+                        </style>
+                      </object>
+                    </property>
+                    <property name="height-request">300</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vexpand">True</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkButton" id="channels_add_button">
+                        <property name="icon-name">list-add-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Add Channel</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="channels_remove_button">
+                        <property name="icon-name">list-remove-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Remove Channel</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="channels_edit_button">
+                        <property name="icon-name">document-edit-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Edit Channel</property>
+                      </object>
+                    </child>
+                    <style>
+                      <class name="toolbar"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesPage" id="page_commands">
+        <property name="icon-name">applications-engineering-symbolic</property>
+        <property name="title" translatable="yes">Connect Commands</property>
+        <child>
+          <object class="AdwPreferencesGroup" id="group_commands">
+            <child>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkScrolledWindow" id="commands_scroll">
+                    <property name="child">
+                      <object class="GtkListBox" id="commands_list">
+                        <property name="selection-mode">single</property>
+                        <style>
+                          <class name="boxed-list"/>
+                        </style>
+                      </object>
+                    </property>
+                    <property name="height-request">300</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vexpand">True</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">6</property>
+                    <child>
+                      <object class="GtkButton" id="commands_add_button">
+                        <property name="icon-name">list-add-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Add Command</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="commands_remove_button">
+                        <property name="icon-name">list-remove-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Remove Command</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="commands_edit_button">
+                        <property name="icon-name">document-edit-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Edit Command</property>
+                      </object>
+                    </child>
+                    <style>
+                      <class name="toolbar"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

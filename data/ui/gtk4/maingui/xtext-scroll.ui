@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+
+  <object class="GtkScrolledWindow" id="xtext_scroll">
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <property name="child">
+      <object class="GtkTextView" id="xtext_log_view">
+        <property name="editable">False</property>
+        <property name="cursor-visible">False</property>
+        <property name="monospace">True</property>
+        <property name="wrap-mode">word-char</property>
+      </object>
+    </property>
+  </object>
+</interface>

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+
+  <object class="GtkWindow" id="joind_window">
+    <property name="default-width">560</property>
+    <property name="default-height">280</property>
+    <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="child">
+      <object class="GtkBox" id="joind_root">
+        <property name="orientation">vertical</property>
+        <property name="spacing">10</property>
+        <property name="margin-start">14</property>
+        <property name="margin-end">14</property>
+        <property name="margin-top">14</property>
+        <property name="margin-bottom">14</property>
+        <child>
+          <object class="GtkLabel" id="joind_title">
+            <property name="xalign">0</property>
+            <property name="use-markup">True</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkLabel" id="joind_desc">
+            <property name="xalign">0</property>
+            <property name="wrap">True</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="joind_radio_nothing"/>
+        </child>
+        <child>
+          <object class="GtkBox" id="joind_join_row">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">8</property>
+            <child>
+              <object class="GtkCheckButton" id="joind_radio_join"/>
+            </child>
+            <child>
+              <object class="GtkEntry" id="joind_entry">
+                <property name="hexpand">True</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="joind_radio_list"/>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="joind_check"/>
+        </child>
+        <child>
+          <object class="GtkBox" id="joind_buttons">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">6</property>
+            <property name="halign">end</property>
+            <child>
+              <object class="GtkButton" id="joind_cancel_button"/>
+            </child>
+            <child>
+              <object class="GtkButton" id="joind_ok_button"/>
+            </child>
+          </object>
+        </child>
+      </object>
+    </property>
+  </object>
+</interface>

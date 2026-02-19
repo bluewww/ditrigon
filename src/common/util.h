@@ -80,4 +80,5 @@ char *encode_sasl_pass_plain (char *user, char *pass);
 char *challengeauth_response (const char *username, const char *password, const char *challenge);
 size_t strftime_validated (char *dest, size_t destsize, const char *format, const struct tm *time);
 gsize strftime_utf8 (char *dest, gsize destsize, const char *format, time_t time);
+
 #endif

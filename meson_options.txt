@@ -1,5 +1,8 @@
 # Applications
-option('gtk-frontend', type: 'boolean',
+option('gtk-frontend', type: 'boolean', value: false,
+  description: 'Legacy GTK2 frontend'
+)
+option('gtk4-frontend', type: 'boolean',
   description: 'Main graphical interface'
 )
 option('text-frontend', type: 'boolean', value: false,
@@ -22,7 +25,6 @@ option('dbus', type: 'feature', value: 'auto',
 option('libcanberra', type: 'feature', value: 'auto',
   description: 'Support for sound alerts, Unix only'
 )
-
 # Install options
 option('dbus-service-use-appid', type: 'boolean', value: false,
   description: 'Rename dbus service to match app-id, required for Flatpak'

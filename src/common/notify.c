@@ -135,13 +135,16 @@ notify_save (void)
 		while (list)
 		{
 			notify = (struct notify *) list->data;
-			write (fh, notify->name, strlen (notify->name));
+			if (write (fh, notify->name, strlen (notify->name)) < 0)
+				g_warning ("Failed to write notify.conf");
 			if (notify->networks)
 			{
-				write (fh, " ", 1);
-				write (fh, notify->networks, strlen (notify->networks));
+				if (write (fh, " ", 1) < 0 ||
+				    write (fh, notify->networks, strlen (notify->networks)) < 0)
+					g_warning ("Failed to write notify.conf");
 			}
-			write (fh, "\n", 1);
+			if (write (fh, "\n", 1) < 0)
+				g_warning ("Failed to write notify.conf");
 			list = list->next;
 		}
 		close (fh);

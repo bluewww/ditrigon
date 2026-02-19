@@ -1,8 +1,8 @@
 project('hexchat', 'c',
-  version: '2.16.2',
-  meson_version: '>= 0.47.0',
+  version: '2.17.0',
+  meson_version: '>= 0.50.0',
   default_options: [
-    'c_std=gnu89',
+    'c_std=gnu99',
     'buildtype=debugoptimized',
     'warning_level=1',
   ]
@@ -12,8 +12,8 @@ i18n = import('i18n')
 gnome = import('gnome')
 cc = meson.get_compiler('c')
 
-
-libgio_dep = dependency('gio-2.0', version: '>= 2.36.0')
+glib_dep = dependency('glib-2.0', version: '>= 2.44')
+libgio_dep = dependency('gio-2.0', version: '>= 2.44.0')
 libgmodule_dep = dependency('gmodule-2.0')
 
 libcanberra_dep = dependency('libcanberra', version: '>= 0.22',
@@ -47,8 +47,6 @@ config_h.set('G_DISABLE_SINGLE_INCLUDES', true)
 config_h.set('GTK_DISABLE_DEPRECATED', true)
 config_h.set('GTK_DISABLE_SINGLE_INCLUDES', true)
 config_h.set('GDK_PIXBUF_DISABLE_SINGLE_INCLUDES', true)
-config_h.set('GLIB_VERSION_MAX_ALLOWED', 'GLIB_VERSION_2_36')
-config_h.set('GLIB_VERSION_MIN_REQUIRED', 'GLIB_VERSION_2_36')
 
 # Detected features
 config_h.set('HAVE_MEMRCHR', cc.has_function('memrchr'))
@@ -64,15 +62,6 @@ if libssl_dep.found()
   )
   config_h.set('HAVE_SSL_CTX_GET_SSL_METHOD',
     cc.has_function('SSL_CTX_get_ssl_method', dependencies: libssl_dep)
-  )
-  config_h.set('HAVE_DH_SET0_PQG',
-    cc.has_function('DH_set0_pqg', dependencies: libssl_dep)
-  )
-  config_h.set('HAVE_DH_GET0_KEY',
-    cc.has_function('DH_get0_key', dependencies: libssl_dep)
-  )
-  config_h.set('HAVE_DH_SET0_KEY',
-    cc.has_function('DH_set0_key', dependencies: libssl_dep)
   )
   config_h.set('HAVE_ERR_REMOVE_THREAD_STATE',
     cc.has_function('ERR_remove_thread_state', dependencies: libssl_dep)
@@ -93,6 +82,11 @@ if host_machine.system() == 'windows'
      language: 'c')
 endif
 
+if get_option('optimization') != '0'
+  if cc.has_argument('-D_FORTIFY_SOURCE=2')
+    add_project_arguments('-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2', language: 'c')
+  endif
+endif
 
 global_cflags = []
 test_cflags = [
@@ -102,7 +96,6 @@ test_cflags = [
   '-Wno-padded',
   '-Wno-unused-parameter',
   '-Wno-missing-prototypes',
-  '-Winline',
   '-Wstrict-prototypes',
   '-Werror=implicit-function-declaration',
   '-Werror=pointer-arith',

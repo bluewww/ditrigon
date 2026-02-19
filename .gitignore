@@ -27,3 +27,7 @@ osx/.HexChat.app
 *.dmg
 *.VC.db
 *.VC.opendb
+TAGS
+*.syscap
+*.gdb_history
+*.vscode

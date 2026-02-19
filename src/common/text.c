@@ -361,9 +361,10 @@ log_close (session *sess)
 	if (sess->logfd != -1)
 	{
 		currenttime = time (NULL);
-		write (sess->logfd, obuf,
+		if (write (sess->logfd, obuf,
 			 g_snprintf (obuf, sizeof (obuf) - 1, _("**** ENDING LOGGING AT %s\n"),
-						  ctime (&currenttime)));
+						  ctime (&currenttime))) < 0)
+			g_warning ("Failed to write log close marker");
 		close (sess->logfd);
 		sess->logfd = -1;
 	}
@@ -573,9 +574,10 @@ log_open_file (char *servname, char *channame, char *netname)
 	if (fd == -1)
 		return -1;
 	currenttime = time (NULL);
-	write (fd, buf,
+	if (write (fd, buf,
 			 g_snprintf (buf, sizeof (buf), _("**** BEGIN LOGGING AT %s\n"),
-						  ctime (&currenttime)));
+						  ctime (&currenttime))) < 0)
+		g_warning ("Failed to write log open marker");
 
 	return fd;
 }
@@ -703,17 +705,20 @@ log_write (session *sess, char *text, time_t ts)
 		len = get_stamp_str (prefs.hex_stamp_log_format, ts, &stamp);
 		if (len)
 		{
-			write (sess->logfd, stamp, len);
+			if (write (sess->logfd, stamp, len) < 0)
+				g_warning ("Failed to write to log");
 			g_free (stamp);
 		}
 	}
 
 	temp = strip_color (text, -1, STRIP_ALL);
 	len = strlen (temp);
-	write (sess->logfd, temp, len);
+	if (write (sess->logfd, temp, len) < 0)
+		g_warning ("Failed to write to log");
 	/* lots of scripts/plugins print without a \n at the end */
 	if (temp[len - 1] != '\n')
-		write (sess->logfd, "\n", 1);	/* emulate what xtext would display */
+		if (write (sess->logfd, "\n", 1) < 0)
+			g_warning ("Failed to write to log");
 	g_free (temp);
 }
 
@@ -1658,7 +1663,13 @@ pevent_load (char *filename)
 		return 1;
 	}
 	ibuf = g_malloc (st.st_size);
-	read (fd, ibuf, st.st_size);
+	if (read (fd, ibuf, st.st_size) < 0)
+	{
+		g_warning ("Failed to read pevents.conf");
+		g_free (ibuf);
+		close (fd);
+		return 1;
+	}
 	close (fd);
 
 	while (buf_get_line (ibuf, &buf, &pnt, st.st_size))
@@ -2186,10 +2197,11 @@ pevent_save (char *fn)
 
 	for (i = 0; i < NUM_XP; i++)
 	{
-		write (fd, buf, g_snprintf (buf, sizeof (buf),
-										  "event_name=%s\n", te[i].name));
-		write (fd, buf, g_snprintf (buf, sizeof (buf),
-										  "event_text=%s\n\n", pntevts_text[i]));
+		if (write (fd, buf, g_snprintf (buf, sizeof (buf),
+										  "event_name=%s\n", te[i].name)) < 0 ||
+		    write (fd, buf, g_snprintf (buf, sizeof (buf),
+										  "event_text=%s\n\n", pntevts_text[i])) < 0)
+			g_warning ("Failed to write pevents.conf");
 	}
 
 	close (fd);
@@ -2359,10 +2371,11 @@ sound_save ()
 	{
 		if (sound_files[i] && sound_files[i][0])
 		{
-			write (fd, buf, g_snprintf (buf, sizeof (buf),
-											  "event=%s\n", te[i].name));
-			write (fd, buf, g_snprintf (buf, sizeof (buf),
-											  "sound=%s\n\n", sound_files[i]));
+			if (write (fd, buf, g_snprintf (buf, sizeof (buf),
+											  "event=%s\n", te[i].name)) < 0 ||
+			    write (fd, buf, g_snprintf (buf, sizeof (buf),
+											  "sound=%s\n\n", sound_files[i])) < 0)
+				g_warning ("Failed to write sound config");
 		}
 	}
 
