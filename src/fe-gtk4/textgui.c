@@ -220,8 +220,8 @@ pevent_dialog_save_cb (GtkButton *button, gpointer userdata)
 	if (fd != -1)
 	{
 		len = strlen (contents);
-		if (len > 0)
-			write (fd, contents, len);
+		if (len > 0 && write (fd, contents, len) < 0)
+			g_warning ("Failed to write pevents.conf");
 		close (fd);
 		pevent_load (NULL);
 		pevent_make_pntevts ();

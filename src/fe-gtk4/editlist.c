@@ -282,7 +282,11 @@ editlist_save_to_file (const char *file)
 		buf = g_strdup_printf ("NAME %s\nCMD %s\n\n",
 			name ? name : "",
 			cmd ? cmd : "");
-		write (fh, buf, strlen (buf));
+		if (write (fh, buf, strlen (buf)) < 0)
+		{
+			g_warning ("Failed to write editlist");
+			break;
+		}
 		g_free (buf);
 	}
 

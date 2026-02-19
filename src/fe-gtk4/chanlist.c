@@ -698,7 +698,12 @@ chanlist_filereq_done (void *userdata, char *file)
 	g_snprintf (buf, sizeof (buf), "HexChat Channel List: %s - %s\n",
 		serv->servername,
 		ctime (&t));
-	write (fh, buf, strlen (buf));
+	if (write (fh, buf, strlen (buf)) < 0)
+	{
+		g_warning ("Failed to write Channel List information");
+		close (fh);
+		return;
+	}
 
 	for (node = gtk_widget_get_first_child (chanlist.list); node; node = gtk_widget_get_next_sibling (node))
 	{
@@ -712,7 +717,11 @@ chanlist_filereq_done (void *userdata, char *file)
 			rowdata->channel ? rowdata->channel : "",
 			(unsigned int) rowdata->users,
 			rowdata->topic ? rowdata->topic : "");
-		write (fh, buf, strlen (buf));
+		if (write (fh, buf, strlen (buf)) < 0)
+		{
+			g_warning ("Failed to write rowdata");
+			break;
+		}
 	}
 
 	close (fh);

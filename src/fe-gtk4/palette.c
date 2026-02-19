@@ -91,7 +91,13 @@ palette_load (void)
 
 	fstat (fh, &st);
 	cfg = g_malloc0 (st.st_size + 1);
-	read (fh, cfg, st.st_size);
+	if (read (fh, cfg, st.st_size) < 0)
+	{
+		g_warning ("Failed to read colors.conf");
+		g_free (cfg);
+		close (fh);
+		return;
+	}
 
 	/* mIRC colors 0-31 */
 	for (i = 0; i < 32; i++)

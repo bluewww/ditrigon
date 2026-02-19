@@ -48,8 +48,12 @@ key_editor_write_file (const char *text)
 		text = "";
 
 	len = strlen (text);
-	if (len > 0)
-		write (fd, text, len);
+	if (len > 0 && write (fd, text, len) < 0)
+	{
+		g_warning ("Failed to write keybindings.conf");
+		close (fd);
+		return FALSE;
+	}
 
 	close (fd);
 	return TRUE;
