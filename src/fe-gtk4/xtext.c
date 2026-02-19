@@ -5,7 +5,7 @@
 #include "../common/url.h"
 #include "../common/userlist.h"
 
-#define XTEXT_UI_PATH "/org/hexchat/ui/gtk4/maingui/xtext-scroll.ui"
+#define XTEXT_UI_PATH "/org/ditrigon/ui/gtk4/maingui/xtext-scroll.ui"
 
 typedef struct
 {

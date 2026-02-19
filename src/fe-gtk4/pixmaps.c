@@ -103,7 +103,7 @@ pixmap_load_from_file (char *filename)
 void
 pixmaps_init (void)
 {
-	hexchat_register_resource ();
+	ditrigon_register_resource ();
 
 	pix_ulist_voice = load_pixmap ("ulist_voice");
 	pix_ulist_halfop = load_pixmap ("ulist_halfop");

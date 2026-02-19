@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define EDITLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/editlist-window.ui"
+#define EDITLIST_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/editlist-window.ui"
 
 typedef struct
 {

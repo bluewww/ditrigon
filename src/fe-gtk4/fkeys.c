@@ -9,7 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TEXT_EDITOR_UI_PATH "/org/hexchat/ui/gtk4/dialogs/text-editor-window.ui"
+#define TEXT_EDITOR_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/text-editor-window.ui"
 
 static GtkWidget *key_dialog;
 static GtkWidget *key_textview;

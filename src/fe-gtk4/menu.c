@@ -1993,16 +1993,16 @@ win_action_about (GSimpleAction *action, GVariant *parameter, gpointer userdata)
 	dialog = adw_about_dialog_new ();
 	about = ADW_ABOUT_DIALOG (dialog);
 
-	adw_about_dialog_set_application_name (about, "HexChat");
-	adw_about_dialog_set_application_icon (about, "io.github.Hexchat");
+	adw_about_dialog_set_application_name (about, "Ditrigon");
+	adw_about_dialog_set_application_icon (about, "io.github.Ditrigon");
 	adw_about_dialog_set_version (about, PACKAGE_VERSION);
-	adw_about_dialog_set_developer_name (about, "HexChat");
+	adw_about_dialog_set_developer_name (about, "Ditrigon");
 	adw_about_dialog_set_developers (about, developers);
 	adw_about_dialog_set_comments (about, _("IRC Client"));
-	adw_about_dialog_set_website (about, "https://hexchat.github.io");
-	adw_about_dialog_set_support_url (about, "https://hexchat.readthedocs.io/en/latest/");
-	adw_about_dialog_set_issue_url (about, "https://github.com/hexchat/hexchat/issues");
-	adw_about_dialog_add_link (about, _("Donate"), "https://goo.gl/jESZvU");
+	adw_about_dialog_set_website (about, "https://ditrigon.github.io");
+	adw_about_dialog_set_support_url (about, "https://ditrigon.readthedocs.io/en/latest/");
+	adw_about_dialog_set_issue_url (about, "https://github.com/bluewww/ditrigon/issues");
+	/* adw_about_dialog_add_link (about, _("Donate"), "https://goo.gl/jESZvU"); */
 	adw_about_dialog_set_license_type (about, GTK_LICENSE_GPL_2_0);
 	adw_about_dialog_set_translator_credits (about, _("translator-credits"));
 	adw_about_dialog_set_copyright (about, "Copyright \302\251 1998 HexChat contributors");
@@ -2159,7 +2159,7 @@ fe_gtk4_rebuild_menu_bar (void)
 
 	section = g_menu_new ();
 	g_menu_append (section, _("Preferences"), "win.preferences");
-	g_menu_append (section, _("About HexChat"), "win.about");
+	g_menu_append (section, _("About Ditrigon"), "win.about");
 	g_menu_append (section, _("Quit"), "win.quit");
 	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
 	g_object_unref (section);

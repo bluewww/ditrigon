@@ -5,7 +5,7 @@
 
 #include "../common/cfgfiles.h"
 
-#define RAWLOG_UI_PATH "/org/hexchat/ui/gtk4/dialogs/rawlog-window.ui"
+#define RAWLOG_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/rawlog-window.ui"
 
 typedef struct
 {

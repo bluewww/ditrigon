@@ -1,5 +1,5 @@
-project('hexchat', 'c',
-  version: '2.17.0',
+project('ditrigon', 'c',
+  version: '1.0.0',
   meson_version: '>= 0.50.0',
   default_options: [
     'c_std=gnu99',
@@ -31,10 +31,10 @@ endif
 config_h = configuration_data()
 config_h.set_quoted('PACKAGE_VERSION', meson.project_version())
 config_h.set_quoted('PACKAGE_NAME', meson.project_name())
-config_h.set_quoted('GETTEXT_PACKAGE', 'hexchat')
+config_h.set_quoted('GETTEXT_PACKAGE', 'ditrigon')
 config_h.set_quoted('LOCALEDIR', join_paths(get_option('prefix'),
                                  get_option('datadir'), 'locale'))
-config_h.set_quoted('G_LOG_DOMAIN', 'hexchat')
+config_h.set_quoted('G_LOG_DOMAIN', 'ditrigon')
 config_h.set10('ENABLE_NLS', true)
 
 # Optional features

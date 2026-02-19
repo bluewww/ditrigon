@@ -14,7 +14,7 @@
 #define RPL_ENDOFQUIETLIST 729
 #endif
 
-#define BANLIST_UI_PATH "/org/hexchat/ui/gtk4/dialogs/banlist-window.ui"
+#define BANLIST_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/banlist-window.ui"
 
 typedef struct
 {

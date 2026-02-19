@@ -5,7 +5,7 @@
 
 #include "../common/ignore.h"
 
-#define IGNORE_UI_PATH "/org/hexchat/ui/gtk4/dialogs/ignore-window.ui"
+#define IGNORE_UI_PATH "/org/ditrigon/ui/gtk4/dialogs/ignore-window.ui"
 
 typedef struct
 {
