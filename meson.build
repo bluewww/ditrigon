@@ -74,14 +74,6 @@ endif
 configure_file(output: 'config.h', configuration: config_h)
 config_h_include = include_directories('.')
 
-if host_machine.system() == 'windows'
-  add_project_arguments(
-    '-DWIN32',
-    '-DNTDDI_VERSION=NTDDI_WIN7',
-    '-D_WIN32_WINNT=_WIN32_WINNT_WIN7',
-     language: 'c')
-endif
-
 if get_option('optimization') != '0'
   if cc.has_argument('-D_FORTIFY_SOURCE=2')
     add_project_arguments('-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2', language: 'c')
@@ -119,9 +111,6 @@ if get_option('buildtype') != 'plain'
      ''', args: '-fstack-protector-all')
     global_cflags += '-fstack-protector-strong'
 
-    if host_machine.system() == 'windows'
-      global_deps += cc.find_library('ssp')
-    endif
   endif
 endif
 add_project_arguments(global_cflags, language: 'c')
@@ -134,9 +123,9 @@ test_ldflags = [
   # mingw
   '-Wl,--nxcompat',
 ]
-if not (host_machine.system() == 'windows' and get_option('debug'))
- test_ldflags += '-Wl,--dynamicbase'
-endif
+
+test_ldflags += '-Wl,--dynamicbase'
+
 foreach ldflag : test_ldflags
   if meson.version().version_compare('>= 0.46.0')
     has_arg = cc.has_link_argument(ldflag)
