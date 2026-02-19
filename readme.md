@@ -1,4 +1,6 @@
 # Ditrigon
+[![GNU/Linux](https://github.com/bluewww/ditrigon/actions/workflows/ubuntu-build.yml/badge.svg)](https://github.com/bluewww/ditrigon/actions/workflows/ubuntu-build.yml)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 Ditrigon is an IRC client for GNU/Linux using GTK4 and libadwaita.
 See [IRCHelp.org](http://irchelp.org) for information about IRC in general.  
