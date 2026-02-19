@@ -3,9 +3,9 @@
 [![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 Ditrigon is an IRC client for GNU/Linux using GTK4 and libadwaita.
-See [IRCHelp.org](http://irchelp.org) for information about IRC in general.  
+See [IRCHelp.org](http://irchelp.org) for information about IRC in general.
 
-Ditrigon started is life as a fork of HexChat which has been archived.
+Ditrigon started its life as a fork of HexChat which has been archived.
 
 
 <img width="1721" height="1173" alt="ditrigon" src="https://github.com/user-attachments/assets/93ab11d7-71e1-486f-9b97-ce7732646003" />
