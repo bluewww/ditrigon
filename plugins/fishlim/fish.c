@@ -81,9 +81,9 @@ static const signed char fish_unbase64[256] = {
  * @param int   dest
  */
 #define GET_LONG(dest, source) do { \
-    dest = ((uint8_t)*((source)++) << 24); \
-    dest |= ((uint8_t)*((source)++) << 16); \
-    dest |= ((uint8_t)*((source)++) << 8); \
+    dest = ((unsigned int)(uint8_t)*((source)++) << 24); \
+    dest |= ((unsigned int)(uint8_t)*((source)++) << 16); \
+    dest |= ((unsigned int)(uint8_t)*((source)++) << 8); \
     dest |= (uint8_t)*((source)++); \
 } while (0);
 
@@ -216,8 +216,8 @@ char *fish_base64_decode(const char *message, size_t *final_len) {
     while (*msg) {
         right = 0;
         left = 0;
-        for (i = 0; i < 6; i++) right |= (uint8_t) fish_unbase64[(int)*msg++] << (i * 6u);
-        for (i = 0; i < 6; i++) left |= (uint8_t) fish_unbase64[(int)*msg++] << (i * 6u);
+        for (i = 0; i < 6; i++) right |= (unsigned int)(uint8_t) fish_unbase64[(int)*msg++] << (i * 6u);
+        for (i = 0; i < 6; i++) left |= (unsigned int)(uint8_t) fish_unbase64[(int)*msg++] << (i * 6u);
         GET_BYTES(byt, left);
         GET_BYTES(byt, right);
     }
