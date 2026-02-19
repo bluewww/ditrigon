@@ -380,10 +380,12 @@ chanopt_save_one_channel (chanopt_in_memory *co, int fh)
 	guint8 val;
 
 	g_snprintf (buf, sizeof (buf), "%s = %s\n", "network", co->network);
-	write (fh, buf, strlen (buf));
+	if (write (fh, buf, strlen (buf)) < 0)
+		g_warning ("Failed to write chanopt.conf");
 
 	g_snprintf (buf, sizeof (buf), "%s = %s\n", "channel", co->channel);
-	write (fh, buf, strlen (buf));
+	if (write (fh, buf, strlen (buf)) < 0)
+		g_warning ("Failed to write chanopt.conf");
 
 	i = 0;
 	while (i < sizeof (chanopt) / sizeof (channel_options))
@@ -392,7 +394,8 @@ chanopt_save_one_channel (chanopt_in_memory *co, int fh)
 		if (val != SET_DEFAULT)
 		{
 			g_snprintf (buf, sizeof (buf), "%s = %d\n", chanopt[i].name, val);
-			write (fh, buf, strlen (buf));
+			if (write (fh, buf, strlen (buf)) < 0)
+				g_warning ("Failed to write chanopt.conf");
 		}
 		i++;
 	}
@@ -431,7 +434,8 @@ chanopt_save_all (gboolean flush)
 			if (val != SET_DEFAULT)
 			{
 				if (num_saved != 0)
-					write (fh, "\n", 1);
+					if (write (fh, "\n", 1) < 0)
+						g_warning ("Failed to write chanopt.conf");
 
 				chanopt_save_one_channel (co, fh);
 				num_saved++;

@@ -106,7 +106,8 @@ random_line (char *file_name)
 	ran = RAND_INT (lines);
 	do
 	{
-		fgets (buf, sizeof (buf), fh);
+		if (!fgets (buf, sizeof (buf), fh))
+			break;
 		lines--;
 	}
 	while (lines > ran);
@@ -1599,7 +1600,8 @@ cmd_execw (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 			PrintText(sess, temp);
 		}
 	}
-	write(sess->running_exec->myfd, temp, len + 1);
+	if (write(sess->running_exec->myfd, temp, len + 1) < 0)
+		g_warning ("Failed to write to exec pipe");
 	g_free(temp);
 
 	return TRUE;

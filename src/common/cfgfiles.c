@@ -134,7 +134,15 @@ list_loadconf (char *file, GSList ** list, char *defaultconf)
 	}
 
 	ibuf = g_malloc (st.st_size);
-	read (fd, ibuf, st.st_size);
+	if (read (fd, ibuf, st.st_size) < 0)
+	{
+		g_warning ("Failed to read config file");
+		g_free (ibuf);
+		close (fd);
+		if (defaultconf)
+			list_load_from_data (list, defaultconf, strlen (defaultconf));
+		return;
+	}
 	close (fd);
 
 	list_load_from_data (list, ibuf, st.st_size);

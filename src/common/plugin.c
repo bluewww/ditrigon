@@ -1826,7 +1826,8 @@ hexchat_pluginpref_set_str_real (hexchat_plugin *pl, const char *var, const char
 			escaped_value = g_strescape (value, NULL);
 			buffer = g_strdup_printf ("%s = %s\n", var, escaped_value);
 			g_free (escaped_value);
-			write (fhOut, buffer, strlen (buffer));
+			if (write (fhOut, buffer, strlen (buffer)) < 0)
+				g_warning ("Failed to write plugin config");
 			g_free (buffer);
 			close (fhOut);
 
@@ -1889,7 +1890,8 @@ hexchat_pluginpref_set_str_real (hexchat_plugin *pl, const char *var, const char
 				buffer = g_strdup_printf ("%s\n", line_buffer);	/* preserve the existing different settings */
 			}
 
-			write (fhOut, buffer, strlen (buffer));
+			if (write (fhOut, buffer, strlen (buffer)) < 0)
+				g_warning ("Failed to write plugin config");
 
 			g_free (buffer);
 			g_free (buffer_tmp);
@@ -1902,7 +1904,8 @@ hexchat_pluginpref_set_str_real (hexchat_plugin *pl, const char *var, const char
 			escaped_value = g_strescape (value, NULL);
 			buffer = g_strdup_printf ("%s = %s\n", var, escaped_value);
 			g_free (escaped_value);
-			write (fhOut, buffer, strlen (buffer));
+			if (write (fhOut, buffer, strlen (buffer)) < 0)
+				g_warning ("Failed to write plugin config");
 			g_free (buffer);
 		}
 
