@@ -1,9 +1,9 @@
 # Applications
-option('gtk-frontend', type: 'boolean',
-  description: 'Main graphical interface'
+option('gtk-frontend', type: 'boolean', value: false,
+  description: 'Legacy GTK2 frontend'
 )
-option('gtk4-frontend', type: 'boolean', value: false,
-  description: 'Experimental GTK4 frontend'
+option('gtk4-frontend', type: 'boolean',
+  description: 'Main graphical interface'
 )
 option('text-frontend', type: 'boolean', value: false,
   description: 'Text interface (not generally useful)'
