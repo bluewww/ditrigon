@@ -187,14 +187,14 @@ static const char *const tabcompmenu[] =
 	NULL
 };
 
-static const char *const lagmenutext[] =
-{
-	N_("Off"),
-	N_("Graphical"),
-	N_("Text"),
-	N_("Both"),
-	NULL
-};
+/* static const char *const lagmenutext[] = */
+/* { */
+/* 	N_("Off"), */
+/* 	N_("Graphical"), */
+/* 	N_("Text"), */
+/* 	N_("Both"), */
+/* 	NULL */
+/* }; */
 
 static const char *const ulmenutext[] =
 {
@@ -206,33 +206,33 @@ static const char *const ulmenutext[] =
 	NULL
 };
 
-static const char *const cspos[] =
-{
-	N_("Left (upper)"),
-	N_("Left (lower)"),
-	N_("Right (upper)"),
-	N_("Right (lower)"),
-	N_("Top"),
-	N_("Bottom"),
-	N_("Hidden"),
-	NULL
-};
+/* static const char *const cspos[] = */
+/* { */
+/* 	N_("Left (upper)"), */
+/* 	N_("Left (lower)"), */
+/* 	N_("Right (upper)"), */
+/* 	N_("Right (lower)"), */
+/* 	N_("Top"), */
+/* 	N_("Bottom"), */
+/* 	N_("Hidden"), */
+/* 	NULL */
+/* }; */
 
-static const char *const ulpos[] =
-{
-	N_("Left (upper)"),
-	N_("Left (lower)"),
-	N_("Right (upper)"),
-	N_("Right (lower)"),
-	NULL
-};
+/* static const char *const ulpos[] = */
+/* { */
+/* 	N_("Left (upper)"), */
+/* 	N_("Left (lower)"), */
+/* 	N_("Right (upper)"), */
+/* 	N_("Right (lower)"), */
+/* 	NULL */
+/* }; */
 
-static const char *const tabwin[] =
-{
-	N_("Windows"),
-	N_("Tabs"),
-	NULL
-};
+/* static const char *const tabwin[] = */
+/* { */
+/* 	N_("Windows"), */
+/* 	N_("Tabs"), */
+/* 	NULL */
+/* }; */
 
 static const char *const focusnewtabsmenu[] =
 {
