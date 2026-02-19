@@ -4740,13 +4740,16 @@ command_insert_vars (session *sess, char *cmd)
 				break;
 
 			default:								/* unsupported character? copy it along with the '%'! */
-				cmd--;
-				g_string_append_len (expanded, cmd, 2);
-				cmd += 2;
+				g_string_append_c (expanded, '%');
+				if (cmd[0] == '\0')				/* trailing '%' at end of string */
+					goto done;
+				g_string_append_c (expanded, cmd[0]);
+				cmd++;
 				break;
 		}
 	}
 
+done:
 	g_string_append (expanded, cmd);				/* copy any remaining string after the last '%' */
 
 	return g_string_free (expanded, FALSE);
