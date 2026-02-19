@@ -145,12 +145,12 @@ userlist_install_css (void)
 		".hc-user-row { min-height: 30px; padding: 2px 4px; border-radius: 8px; }\n"
 		".hc-user-host { font-size: 0.83em; }\n"
 		".hc-user-role-badge { min-width: 18px; padding: 0 6px; border-radius: 999px; font-size: 0.78em; font-weight: 700; }\n"
-		".hc-user-role-op-badge { background-color: alpha(#157915, 0.28); color: #8fe48f; }\n"
-		".hc-user-role-halfop-badge { background-color: alpha(#856117, 0.32); color: #f0cf8e; }\n"
-		".hc-user-role-voice-badge { background-color: alpha(#451984, 0.32); color: #c7a2fa; }\n"
-		".hc-user-role-op { color: #157915; }\n"
-		".hc-user-role-halfop { color: #856117; }\n"
-		".hc-user-role-voice { color: #451984; }\n"
+		".hc-user-role-op-badge { background-color: alpha(#26a269, 0.28); color: #2ec27e; }\n"
+		".hc-user-role-halfop-badge { background-color: alpha(#e5a50a, 0.28); color: #f6d32d; }\n"
+		".hc-user-role-voice-badge { background-color: alpha(#813d9c, 0.28); color: #813d9c; }\n"
+		".hc-user-role-op { color: #2ec27e; }\n"
+		".hc-user-role-halfop { color: #f6d32d; }\n"
+		".hc-user-role-voice { color: #813d9c; }\n"
 		".hc-userlist-empty label { font-size: 0.8em; }\n"
 		".hc-userlist-empty image { -gtk-icon-size: 52px; }\n";
 
