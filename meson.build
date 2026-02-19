@@ -96,7 +96,6 @@ test_cflags = [
   '-Wno-padded',
   '-Wno-unused-parameter',
   '-Wno-missing-prototypes',
-  '-Winline',
   '-Wstrict-prototypes',
   '-Werror=implicit-function-declaration',
   '-Werror=pointer-arith',
