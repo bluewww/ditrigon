@@ -63,15 +63,6 @@ if libssl_dep.found()
   config_h.set('HAVE_SSL_CTX_GET_SSL_METHOD',
     cc.has_function('SSL_CTX_get_ssl_method', dependencies: libssl_dep)
   )
-  config_h.set('HAVE_DH_SET0_PQG',
-    cc.has_function('DH_set0_pqg', dependencies: libssl_dep)
-  )
-  config_h.set('HAVE_DH_GET0_KEY',
-    cc.has_function('DH_get0_key', dependencies: libssl_dep)
-  )
-  config_h.set('HAVE_DH_SET0_KEY',
-    cc.has_function('DH_set0_key', dependencies: libssl_dep)
-  )
   config_h.set('HAVE_ERR_REMOVE_THREAD_STATE',
     cc.has_function('ERR_remove_thread_state', dependencies: libssl_dep)
   )
