@@ -2159,7 +2159,7 @@ fe_gtk4_rebuild_menu_bar (void)
 
 	section = g_menu_new ();
 	g_menu_append (section, _("Preferences"), "win.preferences");
-	g_menu_append (section, _("About HexChat"), "win.about");
+	g_menu_append (section, _("About Ditrigon"), "win.about");
 	g_menu_append (section, _("Quit"), "win.quit");
 	g_menu_append_section (root, NULL, G_MENU_MODEL (section));
 	g_object_unref (section);
