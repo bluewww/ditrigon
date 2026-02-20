@@ -487,6 +487,39 @@ servlist_have_auto (void)
 	return 0;
 }
 
+/* State for staggered auto-connect */
+static GSList *autoconnect_list = NULL;
+static guint autoconnect_timeout_tag = 0;
+
+static gint
+servlist_auto_connect_timeout (gpointer data)
+{
+	ircnet *net;
+	session *sess = (session *) data;
+
+	if (!autoconnect_list)
+	{
+		autoconnect_timeout_tag = 0;
+		return 0; /* stop timeout */
+	}
+
+	net = autoconnect_list->data;
+	autoconnect_list = g_slist_next (autoconnect_list);
+
+	/* Connect to this network */
+	servlist_connect (sess, net, TRUE);
+
+	/* If there are more networks, continue with next timeout.
+	 * Otherwise stop (return 0). */
+	if (!autoconnect_list)
+	{
+		autoconnect_timeout_tag = 0;
+		return 0;
+	}
+
+	return 1; /* continue timeout */
+}
+
 int
 servlist_auto_connect (session *sess)
 {
@@ -494,17 +527,29 @@ servlist_auto_connect (session *sess)
 	ircnet *net;
 	int ret = 0;
 
+	/* Build list of networks to auto-connect */
+	if (autoconnect_list)
+		g_slist_free (autoconnect_list);
+	autoconnect_list = NULL;
+
 	while (list)
 	{
 		net = list->data;
 
 		if (net->flags & FLAG_AUTO_CONNECT)
 		{
-			servlist_connect (sess, net, TRUE);
+			autoconnect_list = g_slist_append (autoconnect_list, net);
 			ret = 1;
 		}
 
 		list = list->next;
+	}
+
+	/* Start staggered connection timer (250ms between connections) */
+	if (autoconnect_list && !autoconnect_timeout_tag)
+	{
+		autoconnect_timeout_tag = fe_timeout_add (250,
+			servlist_auto_connect_timeout, sess);
 	}
 
 	return ret;

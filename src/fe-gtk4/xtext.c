@@ -2538,7 +2538,11 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 
 	xtext_render_session = sess;
 
-	if (log)
+	/* Only compute column widths and check for re-rendering if this is
+	 * the currently visible session. For background sessions, skip the
+	 * expensive computation and just append - tab stops will be recalculated
+	 * when the session is switched to. */
+	if (sess == current_tab && log)
 	{
 		int added_col_px;
 		int added_stamp_px;
@@ -2549,7 +2553,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 			/* Re-render to apply a wider tab stop uniformly. */
 			xtext_render_raw_all (buf, log->str);
 			xtext_render_session = NULL;
-			if (sess == current_tab && xtext_is_at_end ())
+			if (xtext_is_at_end ())
 				xtext_scroll_to_end ();
 			return;
 		}
