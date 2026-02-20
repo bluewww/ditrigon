@@ -805,6 +805,8 @@ chanlist_sort_column_activated (GSimpleAction *action, GVariant *parameter,
 		new_col = COL_CHANNEL;
 
 	chanlist.sort_column = new_col;
+	prefs.hex_gui_chanlist_sort_column = new_col;
+	save_config ();
 	g_simple_action_set_state (action, parameter);
 
 	if (chanlist.list)
@@ -828,6 +830,8 @@ chanlist_sort_desc_activated (GSimpleAction *action, GVariant *parameter,
 	g_variant_unref (state);
 
 	chanlist.sort_desc = !current;
+	prefs.hex_gui_chanlist_sort_desc = chanlist.sort_desc ? TRUE : FALSE;
+	save_config ();
 	g_simple_action_set_state (action, g_variant_new_boolean (!current));
 
 	if (chanlist.list)
@@ -999,17 +1003,31 @@ chanlist_open (server *serv, const char *filter, int do_refresh)
 			GTK_SEARCH_BAR (chanlist.search_bar), chanlist.window);
 
 		/* GAction group for sort + save */
+		const char *initial_sort_col;
+		switch (prefs.hex_gui_chanlist_sort_column)
+		{
+		case COL_USERS:
+			initial_sort_col = "users";
+			break;
+		case COL_TOPIC:
+			initial_sort_col = "topic";
+			break;
+		default:
+			initial_sort_col = "channel";
+			break;
+		}
+
 		sort_col_action = g_simple_action_new_stateful (
 			"sort-column",
 			G_VARIANT_TYPE_STRING,
-			g_variant_new_string ("channel"));
+			g_variant_new_string (initial_sort_col));
 		g_signal_connect (sort_col_action, "activate",
 			G_CALLBACK (chanlist_sort_column_activated), NULL);
 
 		sort_desc_action = g_simple_action_new_stateful (
 			"sort-descending",
 			NULL,
-			g_variant_new_boolean (FALSE));
+			g_variant_new_boolean (prefs.hex_gui_chanlist_sort_desc ? TRUE : FALSE));
 		g_signal_connect (sort_desc_action, "activate",
 			G_CALLBACK (chanlist_sort_desc_activated), NULL);
 
@@ -1074,8 +1092,8 @@ chanlist_open (server *serv, const char *filter, int do_refresh)
 
 	chanlist.match_wants_channel = TRUE;
 	chanlist.match_wants_topic = TRUE;
-	chanlist.sort_column = COL_CHANNEL;
-	chanlist.sort_desc = FALSE;
+	chanlist.sort_column = prefs.hex_gui_chanlist_sort_column;
+	chanlist.sort_desc = prefs.hex_gui_chanlist_sort_desc ? TRUE : FALSE;
 
 	g_snprintf (tbuf, sizeof (tbuf), _("Channel List (%s)"),
 		server_get_network (serv, TRUE));

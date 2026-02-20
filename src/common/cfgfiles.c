@@ -410,6 +410,8 @@ const struct prefs vars[] =
 	{"gui_autoopen_send", P_OFFINT (hex_gui_autoopen_send), TYPE_BOOL},
 	{"gui_chanlist_maxusers", P_OFFINT (hex_gui_chanlist_maxusers), TYPE_INT},
 	{"gui_chanlist_minusers", P_OFFINT (hex_gui_chanlist_minusers), TYPE_INT},
+	{"gui_chanlist_sort_column", P_OFFINT (hex_gui_chanlist_sort_column), TYPE_INT},
+	{"gui_chanlist_sort_desc", P_OFFINT (hex_gui_chanlist_sort_desc), TYPE_BOOL},
 	{"gui_compact", P_OFFINT (hex_gui_compact), TYPE_BOOL},
 	{"gui_dialog_height", P_OFFINT (hex_gui_dialog_height), TYPE_INT},
 	{"gui_dialog_left", P_OFFINT (hex_gui_dialog_left), TYPE_INT},
@@ -826,6 +828,8 @@ load_default_config(void)
 	/*FIXME*/ prefs.hex_flood_msg_time = 30;
 	prefs.hex_gui_chanlist_maxusers = 9999;
 	prefs.hex_gui_chanlist_minusers = 5;
+	prefs.hex_gui_chanlist_sort_column = 1; /* COL_USERS */
+	prefs.hex_gui_chanlist_sort_desc = TRUE;
 	prefs.hex_gui_dialog_height = 256;
 	prefs.hex_gui_dialog_width = 500;
 	prefs.hex_gui_lagometer = 1;
