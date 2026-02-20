@@ -156,7 +156,7 @@ tray_icon_name_from_state (feicon icon)
 		return "dialog-warning";
 	case FE_ICON_NORMAL:
 	default:
-		return "hexchat";
+		return "io.github.Ditrigon";
 	}
 }
 
@@ -171,12 +171,12 @@ tray_sni_icon_name (void)
 				return (tray_blink_name1 && tray_blink_name1[0]) ? tray_blink_name1 : "dialog-warning";
 			if (tray_blink_name2 && tray_blink_name2[0])
 				return tray_blink_name2;
-			return "hexchat";
+			return "io.github.Ditrigon";
 		}
 
 		if (tray_blink_on)
 			return tray_icon_name_from_state (tray_blink_icon);
-		return "hexchat";
+		return "io.github.Ditrigon";
 	}
 
 	if (tray_icon_name_override && tray_icon_name_override[0])
