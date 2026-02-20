@@ -1977,7 +1977,9 @@ xtext_render_raw_all (GtkTextBuffer *buf, const char *raw)
 
 	text = raw ? raw : "";
 	col_px = xtext_compute_message_column_px (text, &stamp_px);
-	xtext_set_message_tab_stop (col_px, stamp_px);
+	/* Only update tab stops when rendering the currently visible session */
+	if (xtext_render_session == current_tab)
+		xtext_set_message_tab_stop (col_px, stamp_px);
 
 	xtext_link_hover_clear ();
 
