@@ -545,10 +545,10 @@ servlist_auto_connect (session *sess)
 		list = list->next;
 	}
 
-	/* Start staggered connection timer (500ms between connections) */
+	/* Start staggered connection timer (250ms between connections) */
 	if (autoconnect_list && !autoconnect_timeout_tag)
 	{
-		autoconnect_timeout_tag = fe_timeout_add (500,
+		autoconnect_timeout_tag = fe_timeout_add (250,
 			servlist_auto_connect_timeout, sess);
 	}
 
