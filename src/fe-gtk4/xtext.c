@@ -2546,12 +2546,21 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 		added_col_px = xtext_compute_message_column_px (text, &added_stamp_px);
 		if (added_col_px > xtext_message_col_px)
 		{
-			/* Re-render to apply a wider tab stop uniformly. */
-			xtext_render_raw_all (buf, log->str);
-			xtext_render_session = NULL;
-			if (sess == current_tab && xtext_is_at_end ())
-				xtext_scroll_to_end ();
-			return;
+			/* Only re-render immediately if this is the current visible tab.
+			 * For background sessions, just append and defer re-render until
+			 * the session is switched to (xtext_show_session_rendered will
+			 * recalculate tab stops based on the full log). This prevents
+			 * expensive re-rendering during connection floods. */
+			if (sess == current_tab)
+			{
+				/* Re-render to apply a wider tab stop uniformly. */
+				xtext_render_raw_all (buf, log->str);
+				xtext_render_session = NULL;
+				if (xtext_is_at_end ())
+					xtext_scroll_to_end ();
+				return;
+			}
+			/* For background tabs, just append - no re-render needed */
 		}
 	}
 
