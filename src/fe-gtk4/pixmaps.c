@@ -105,6 +105,17 @@ pixmaps_init (void)
 {
 	ditrigon_register_resource ();
 
+	/* Make the bundled app icon discoverable by name via the icon theme */
+	{
+		GdkDisplay *display = gdk_display_get_default ();
+		if (display)
+		{
+			GtkIconTheme *theme = gtk_icon_theme_get_for_display (display);
+			if (theme)
+				gtk_icon_theme_add_resource_path (theme, "/org/ditrigon/icons");
+		}
+	}
+
 	pix_ulist_voice = load_pixmap ("ulist_voice");
 	pix_ulist_halfop = load_pixmap ("ulist_halfop");
 	pix_ulist_op = load_pixmap ("ulist_op");
