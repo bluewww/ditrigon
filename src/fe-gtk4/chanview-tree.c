@@ -46,6 +46,7 @@ static gboolean tree_css_loaded;
 
 static session *tree_ctx_sess;
 static GtkWidget *tree_ctx_popover;
+static GtkWidget *tree_ctx_target_widget;
 
 static gboolean tree_group_by_server (void);
 static const char *tree_server_state_text (server *serv);
@@ -66,6 +67,7 @@ tree_load_css (void)
 	provider = gtk_css_provider_new ();
 	gtk_css_provider_load_from_string (provider,
 		".hc-tree-row { border-radius: 8px; min-height: 28px; padding: 1px 2px; }"
+		".hc-tree-context-target { border-radius: 8px; background-color: alpha(@accent_bg_color, 0.16); box-shadow: inset 0 0 0 1px alpha(@accent_bg_color, 0.36); }"
 		".hc-tree-label { padding: 1px 0; }"
 		".hc-tree-subtitle { padding: 0; font-size: 0.82em; }"
 		".hc-tree-icon { opacity: 0.72; }"
@@ -277,6 +279,26 @@ tree_node_is_server_entry (HcChanNode *node)
 	return node->children != NULL;
 }
 
+static GtkWidget *
+tree_context_target_for_list_item (GtkListItem *list_item)
+{
+	GtkWidget *expander;
+	GtkWidget *parent;
+
+	if (!list_item)
+		return NULL;
+
+	expander = gtk_list_item_get_child (list_item);
+	if (!expander)
+		return NULL;
+
+	parent = gtk_widget_get_parent (expander);
+	if (parent)
+		return parent;
+
+	return expander;
+}
+
 static void
 tree_update_list_item (GtkListItem *list_item, HcChanNode *node)
 {
@@ -434,6 +456,35 @@ tree_toggle_initial (guint8 setting, int global_value)
 	if (setting == SET_DEFAULT)
 		return global_value != 0;
 	return setting == SET_ON;
+}
+
+static void
+tree_clear_context_target (void)
+{
+	if (!tree_ctx_target_widget)
+		return;
+
+	gtk_widget_remove_css_class (tree_ctx_target_widget, "hc-tree-context-target");
+	g_object_remove_weak_pointer (G_OBJECT (tree_ctx_target_widget),
+		(gpointer *) &tree_ctx_target_widget);
+	tree_ctx_target_widget = NULL;
+}
+
+static void
+tree_set_context_target (GtkWidget *target_widget)
+{
+	if (target_widget == tree_ctx_target_widget)
+		return;
+
+	tree_clear_context_target ();
+
+	if (!target_widget)
+		return;
+
+	tree_ctx_target_widget = target_widget;
+	g_object_add_weak_pointer (G_OBJECT (tree_ctx_target_widget),
+		(gpointer *) &tree_ctx_target_widget);
+	gtk_widget_add_css_class (tree_ctx_target_widget, "hc-tree-context-target");
 }
 
 static void
@@ -630,7 +681,18 @@ tree_ctx_autojoin_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 }
 
 static void
-tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
+tree_ctx_popover_closed_cb (GtkPopover *popover, gpointer user_data)
+{
+	(void) user_data;
+
+	if (GTK_WIDGET (popover) != tree_ctx_popover)
+		return;
+
+	tree_clear_context_target ();
+}
+
+static void
+tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess, GtkWidget *target_widget)
 {
 	GSimpleActionGroup *group;
 	GMenu *menu;
@@ -651,6 +713,7 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 	}
 
 	tree_ctx_sess = sess;
+	tree_set_context_target (target_widget);
 
 	group = g_simple_action_group_new ();
 
@@ -784,6 +847,8 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 	tree_ctx_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
 	g_object_add_weak_pointer (G_OBJECT (tree_ctx_popover),
 		(gpointer *) &tree_ctx_popover);
+	g_signal_connect (tree_ctx_popover, "closed",
+		G_CALLBACK (tree_ctx_popover_closed_cb), NULL);
 	gtk_widget_set_parent (tree_ctx_popover, parent);
 
 	g_object_set_data_full (G_OBJECT (tree_ctx_popover), "chan-actions",
@@ -807,27 +872,24 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess)
 }
 
 static void
-tree_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
+tree_row_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data)
 {
-	guint pos;
+	GtkListItem *list_item;
 	GtkTreeListRow *row;
 	HcChanNode *node;
 	session *sess;
+	GtkWidget *row_box;
+	GtkWidget *target_widget;
+	GtkWidget *parent;
+	double menu_x;
+	double menu_y;
 
-	(void) user_data;
-
-	if (n_press != 1 || !tree_selection || !tree_model || !tree_view)
+	if (n_press != 1)
 		return;
 
-	pos = gtk_single_selection_get_selected (tree_selection);
-	if (pos == GTK_INVALID_LIST_POSITION)
-		return;
-
-	row = g_list_model_get_item (G_LIST_MODEL (tree_model), pos);
-	if (!row)
-		return;
-
-	node = (HcChanNode *) gtk_tree_list_row_get_item (row);
+	list_item = GTK_LIST_ITEM (user_data);
+	row = GTK_TREE_LIST_ROW (gtk_list_item_get_item (list_item));
+	node = row ? (HcChanNode *) gtk_tree_list_row_get_item (row) : NULL;
 	sess = node ? node->sess : NULL;
 	if ((!sess || !is_session (sess)) && node && node->serv &&
 		node->serv->server_session && is_session (node->serv->server_session))
@@ -835,11 +897,30 @@ tree_right_click_cb (GtkGestureClick *gesture, int n_press, double x, double y, 
 
 	if (sess && is_session (sess))
 	{
-		tree_show_context_menu (tree_view, x, y, sess);
+		row_box = gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (gesture));
+		target_widget = tree_context_target_for_list_item (list_item);
+		if (!target_widget)
+			target_widget = row_box;
+		parent = row_box;
+		menu_x = x;
+		menu_y = y;
+		if (row_box && tree_view)
+		{
+			graphene_point_t src_point;
+			graphene_point_t dst_point;
+
+			src_point.x = (float) x;
+			src_point.y = (float) y;
+			if (gtk_widget_compute_point (row_box, tree_view, &src_point, &dst_point))
+			{
+				parent = tree_view;
+				menu_x = dst_point.x;
+				menu_y = dst_point.y;
+			}
+		}
+		tree_show_context_menu (parent, menu_x, menu_y, sess, target_widget);
 		gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 	}
-
-	g_object_unref (row);
 }
 
 static void
@@ -1284,6 +1365,7 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	GtkWidget *label;
 	GtkWidget *subtitle;
 	GtkWidget *badge;
+	GtkGesture *gesture;
 
 	(void) factory;
 	(void) user_data;
@@ -1332,6 +1414,12 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
 	gtk_widget_set_visible (badge, FALSE);
 	gtk_box_append (GTK_BOX (row_box), badge);
+
+	gesture = gtk_gesture_click_new ();
+	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
+	g_signal_connect (gesture, "pressed",
+		G_CALLBACK (tree_row_right_click_cb), list_item);
+	gtk_widget_add_controller (row_box, GTK_EVENT_CONTROLLER (gesture));
 
 	gtk_tree_expander_set_child (GTK_TREE_EXPANDER (expander), row_box);
 	gtk_list_item_set_child (list_item, expander);
@@ -1383,6 +1471,7 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	GtkWidget *subtitle;
 	GtkWidget *icon;
 	GtkWidget *badge;
+	GtkWidget *target_widget;
 
 	(void) factory;
 	(void) user_data;
@@ -1406,10 +1495,20 @@ tree_factory_unbind_cb (GtkSignalListItemFactory *factory, GtkListItem *list_ite
 	subtitle = g_object_get_data (G_OBJECT (list_item), "hc-tree-subtitle");
 	icon = g_object_get_data (G_OBJECT (list_item), "hc-tree-icon");
 	badge = g_object_get_data (G_OBJECT (list_item), "hc-tree-badge");
+	target_widget = tree_context_target_for_list_item (list_item);
 
 	gtk_tree_expander_set_list_row (GTK_TREE_EXPANDER (expander), NULL);
+	if (target_widget)
+	{
+		if (target_widget == tree_ctx_target_widget)
+			tree_clear_context_target ();
+		else
+			gtk_widget_remove_css_class (target_widget, "hc-tree-context-target");
+	}
 	if (row_box)
+	{
 		tree_clear_state_classes (row_box, label);
+	}
 	if (label)
 	{
 		gtk_label_set_text (GTK_LABEL (label), "");
@@ -1470,6 +1569,7 @@ fe_gtk4_chanview_tree_cleanup (void)
 		gtk_widget_unparent (tree_ctx_popover);
 		tree_ctx_popover = NULL;
 	}
+	tree_clear_context_target ();
 	tree_ctx_sess = NULL;
 
 	g_clear_object (&tree_selection);
@@ -1521,12 +1621,6 @@ fe_gtk4_chanview_tree_create_widget (void)
 
 		g_signal_connect (tree_selection, "notify::selected",
 			G_CALLBACK (tree_selection_notify_cb), NULL);
-		{
-			GtkGesture *gesture = gtk_gesture_click_new ();
-			gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
-			g_signal_connect (gesture, "pressed", G_CALLBACK (tree_right_click_cb), NULL);
-			gtk_widget_add_controller (tree_view, GTK_EVENT_CONTROLLER (gesture));
-		}
 	}
 
 	session_scroller = tree_scroller;
