@@ -1093,7 +1093,9 @@ setup_open (void)
 	setup_apply_input_spell ();
 	setup_apply_input_attr ();
 	setup_apply_input_style ();
-	setup_apply_text_font ();
+	/* Don't call setup_apply_text_font() here - it triggers unnecessary
+	 * re-rendering and scrolling. Font is already applied, and will be
+	 * re-applied if changed via the callback in appearance_settings. */
 
 	adw_dialog_present (ADW_DIALOG (prefs_window), main_window);
 }
