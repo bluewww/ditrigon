@@ -2532,17 +2532,21 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	if (log)
 		g_string_append (log, text);
 
+	/* For background sessions, only update the log - don't render to buffer yet.
+	 * This dramatically improves startup performance by deferring all rendering
+	 * until the tab is first viewed. The buffer will be populated on-demand
+	 * in xtext_show_session_rendered(). */
+	if (sess != current_tab)
+		return;
+
+	/* Only render for the currently visible session */
 	buf = session_buffer_ensure (sess);
 	if (!buf)
 		return;
 
 	xtext_render_session = sess;
 
-	/* Only compute column widths and check for re-rendering if this is
-	 * the currently visible session. For background sessions, skip the
-	 * expensive computation and just append - tab stops will be recalculated
-	 * when the session is switched to. */
-	if (sess == current_tab && log)
+	if (log)
 	{
 		int added_col_px;
 		int added_stamp_px;
@@ -2562,7 +2566,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	xtext_render_raw_append (buf, text);
 	xtext_render_session = NULL;
 
-	if (sess == current_tab && xtext_is_at_end ())
+	if (xtext_is_at_end ())
 		xtext_scroll_to_end ();
 }
 
