@@ -1609,7 +1609,7 @@ irc_inline (server *serv, char *buf, int len)
 			goto xit;
 
 		word[1]++;
-		word_eol[1] = buf + 1;	/* but not for HexChat internally */
+		word_eol[1] = buf + 1;	/* but not for Ditrigon internally */
 
 	} else
 	{

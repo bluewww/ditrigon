@@ -403,7 +403,7 @@ plugin_load (session *sess, char *filename, char *arg)
 	if (!g_module_symbol (handle, "hexchat_plugin_init", (gpointer *)&init_func))
 	{
 		g_module_close (handle);
-		return _("No hexchat_plugin_init symbol; is this really a HexChat plugin?");
+		return _("No hexchat_plugin_init symbol; is this really a Ditrigon plugin?");
 	}
 
 	/* find the plugin's deinit routine, if any */
@@ -1717,7 +1717,7 @@ hexchat_emit_print_attrs (hexchat_plugin *ph, hexchat_event_attrs *attrs,
 char *
 hexchat_gettext (hexchat_plugin *ph, const char *msgid)
 {
-	/* so that plugins can use HexChat's internal gettext strings. */
+	/* so that plugins can use Ditrigon's internal gettext strings. */
 	/* e.g. The EXEC plugin uses this on Windows. */
 	return _(msgid);
 }

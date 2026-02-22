@@ -1,4 +1,4 @@
-/* HexChat
+/* Ditrigon
  * Copyright (C) 2021 Patrick Griffis.
  *
  * This program is free software; you can redistribute it and/or modify

@@ -12,7 +12,7 @@
 	"%m  =  machine info\n" \
 	"%n  =  your nick\n" \
 	"%t  =  time/date\n" \
-	"%v  =  HexChat version\n" \
+	"%v  =  Ditrigon version\n" \
 	"%2  =  word 2\n" \
 	"%3  =  word 3\n" \
 	"&2  =  word 2 to the end of line\n" \
@@ -59,7 +59,7 @@
 	"%s  =  the URL string\n\n" \
 	"Putting a ! in front of the command\n" \
 	"indicates it should be sent to a\n" \
-	"shell instead of HexChat")
+	"shell instead of Ditrigon")
 
 typedef struct
 {
@@ -1980,7 +1980,7 @@ win_action_about (GSimpleAction *action, GVariant *parameter, gpointer userdata)
 {
 	static const char *developers[] =
 	{
-		"HexChat contributors",
+		"Ditrigon contributors",
 		NULL
 	};
 	AdwAboutDialog *about;
