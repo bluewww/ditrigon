@@ -1058,9 +1058,10 @@ main (int argc, char *argv[])
 
 			if (xdir != NULL)
 			{
-				if (xdir[strlen (xdir) - 1] == G_DIR_SEPARATOR)
+				gsize xdir_len = strlen (xdir);
+				if (xdir_len > 0 && xdir[xdir_len - 1] == G_DIR_SEPARATOR)
 				{
-					xdir[strlen (xdir) - 1] = 0;
+					xdir[xdir_len - 1] = 0;
 				}
 				break;
 			}
