@@ -1,0 +1,6 @@
+@INCLUDE                = @SOURCE_ROOT@/Doxyfile
+
+# Make Doxygen work from Meson's build dir while reusing the main config.
+INPUT                   = "@SOURCE_ROOT@/src/common" "@SOURCE_ROOT@/src/fe-gtk4"
+PROJECT_LOGO            = "@SOURCE_ROOT@/data/icons/ditrigon.png"
+OUTPUT_DIRECTORY        = "@BUILD_ROOT@/doxygen"
