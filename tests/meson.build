@@ -1,6 +1,6 @@
 if not get_option('gtk4-frontend')
   warning('fuzz-tests enabled but gtk4-frontend is disabled; skipping parser fuzz smoke test')
-elif host_machine.system() == 'windows' or host_machine.system() == 'darwin'
+elif host_machine.system() == 'darwin'
   warning('fuzz-tests are only supported on Linux; skipping parser fuzz smoke test')
 else
   python3 = find_program('python3', required: false)

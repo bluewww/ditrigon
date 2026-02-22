@@ -57,21 +57,7 @@
 	((guint32)(guint8)(c0) | ((guint32)(guint8)(c1) << 8) | \
 	((guint32)(guint8)(c2) << 16) | ((guint32)(guint8)(c3) << 24))
 
-#ifdef WIN32						/* for win32 */
-#define OFLAGS O_BINARY
-#define sleep(t) Sleep(t*1000)
-#include <direct.h>
-#define	F_OK	0
-#define	X_OK	1
-#define	W_OK	2
-#define	R_OK	4
-#ifndef S_ISDIR
-#define	S_ISDIR(m)	((m) & _S_IFDIR)
-#endif
-#define NETWORK_PRIVATE
-#else									/* for unix */
 #define OFLAGS 0
-#endif
 
 #define FONTNAMELEN	127
 #define PATHLEN		255

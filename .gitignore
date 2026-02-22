@@ -8,7 +8,7 @@ tags
 plugins/wmpa/wmpa_h.h
 plugins/wmpa/wmpa_i.c
 src/htm/obj/*
-resource.h
+esource.h
 *.opensdf
 *.sdf
 *.suo
@@ -25,3 +25,4 @@ TAGS
 *.syscap
 *.gdb_history
 *.vscode
+tests/__pycache__
