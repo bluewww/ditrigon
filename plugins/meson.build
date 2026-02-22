@@ -1,4 +1,4 @@
-plugindir = join_paths(get_option('libdir'), 'hexchat/plugins')
+plugindir = join_paths(get_option('libdir'), 'ditrigon/plugins')
 
 if get_option('with-checksum')
   subdir('checksum')

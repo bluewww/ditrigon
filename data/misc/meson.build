@@ -2,71 +2,48 @@ appdir = join_paths(get_option('datadir'), 'applications')
 metainfodir = join_paths(get_option('datadir'), 'metainfo')
 desktop_utils = find_program('desktop-file-validate', required: false)
 
-if get_option('gtk-frontend')
-  if get_option('install-appdata')
-    hexchat_appdata = i18n.merge_file(
-      input: 'io.github.Hexchat.appdata.xml.in',
-      output: 'io.github.Hexchat.appdata.xml',
-      po_dir: '../../po',
-      install: true,
-      install_dir: metainfodir
-    )
-
-    appstream_util = find_program('appstream-util', required: false)
-    if appstream_util.found()
-      test('Validate io.github.Hexchat.appdata.xml', appstream_util,
-        args: ['validate-relax', hexchat_appdata]
-      )
-    endif
-  endif
-
-  desktop_conf = configuration_data()
-  if dbus_glib_dep.found()
-    desktop_conf.set('exec_command', 'hexchat --existing %U')
-  else
-    desktop_conf.set('exec_command', 'hexchat %U')
-  endif
-
-  desktop_file = configure_file(
-    input: 'io.github.Hexchat.desktop.in.in',
-    output: 'io.github.Hexchat.desktop.in',
-    configuration: desktop_conf
-  )
-
-  hexchat_desktop = i18n.merge_file(
-    input: desktop_file,
-    output: 'io.github.Hexchat.desktop',
+if get_option('install-appdata')
+  ditrigon_appdata = i18n.merge_file(
+    input: 'io.github.Ditrigon.appdata.xml.in',
+    output: 'io.github.Ditrigon.appdata.xml',
     po_dir: '../../po',
-    type: 'desktop',
     install: true,
-    install_dir: appdir
+    install_dir: metainfodir
   )
 
-  if desktop_utils.found()
-    test('Validate io.github.Hexchat.desktop', desktop_utils,
-      args: [hexchat_desktop]
+  appstream_util = find_program('appstream-util', required: false)
+  if appstream_util.found()
+    test('Validate io.github.Ditrigon.appdata.xml', appstream_util,
+      args: ['validate-relax', '--nonet', ditrigon_appdata]
     )
   endif
 endif
 
-if get_option('theme-manager')
-  htm_desktop = i18n.merge_file(
-    input: 'io.github.Hexchat.ThemeManager.desktop.in',
-    output: 'io.github.Hexchat.ThemeManager.desktop',
-    po_dir: '../../po',
-    type: 'desktop',
-    install: true,
-    install_dir: appdir
-  )
+desktop_conf = configuration_data()
+if dbus_glib_dep.found()
+  desktop_conf.set('exec_command', 'ditrigon --existing %U')
+else
+  desktop_conf.set('exec_command', 'ditrigon %U')
+endif
 
-  if desktop_utils.found()
-    test('Validate io.github.Hexchat.ThemeManager.desktop', desktop_utils,
-      args: [htm_desktop]
-    )
-  endif
+desktop_file = configure_file(
+  input: 'io.github.Ditrigon.desktop.in.in',
+  output: 'io.github.Ditrigon.desktop.in',
+  configuration: desktop_conf
+)
 
-  install_data('io.github.Hexchat.ThemeManager.xml',
-    install_dir: join_paths(get_option('datadir'), 'mime/packages')
+ditrigon_desktop = i18n.merge_file(
+  input: desktop_file,
+  output: 'io.github.Ditrigon.desktop',
+  po_dir: '../../po',
+  type: 'desktop',
+  install: true,
+  install_dir: appdir
+)
+
+if desktop_utils.found()
+  test('Validate io.github.Ditrigon.desktop', desktop_utils,
+    args: [ditrigon_desktop]
   )
 endif
 
@@ -118,8 +95,8 @@ if get_option('plugin')
     conf.set('LICENSE', metainfo[2])
 
     configure_file(
-      input: 'io.github.Hexchat.Plugin.metainfo.xml.in',
-      output: 'io.github.Hexchat.Plugin.@0@.metainfo.xml'.format(name),
+      input: 'io.github.Ditrigon.Plugin.metainfo.xml.in',
+      output: 'io.github.Ditrigon.Plugin.@0@.metainfo.xml'.format(name),
       configuration: conf,
       install_dir: get_option('install-plugin-metainfo') ? metainfodir : '',
     )

@@ -53,7 +53,7 @@ config_h.set('HAVE_MEMRCHR', cc.has_function('memrchr'))
 config_h.set('HAVE_STRINGS_H', cc.has_header('strings.h'))
 
 config_h.set_quoted('HEXCHATLIBDIR',
-  join_paths(get_option('prefix'), get_option('libdir'), 'hexchat/plugins')
+  join_paths(get_option('prefix'), get_option('libdir'), 'ditrigon/plugins')
 )
 
 if libssl_dep.found()
@@ -166,9 +166,7 @@ if cc.get_id() != 'msvc'
   subdir('data')
   subdir('po') # FIXME: build xgettext
 
-  meson.add_install_script('meson_post_install.py',
-    '@0@'.format(get_option('theme-manager'))
-  )
+  meson.add_install_script('meson_post_install.py')
 endif
 
 if meson.version().version_compare('>= 0.53.0')
