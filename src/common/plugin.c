@@ -2027,7 +2027,7 @@ hexchat_pluginpref_list (hexchat_plugin *pl, char* dest)
 
 	token = g_strdup (pl->name);
 	canonalize_key (token);
-	sprintf (confname, "addon_%s.conf", token);
+	g_snprintf (confname, sizeof (confname), "addon_%s.conf", token);
 	g_free (token);
 
 	fpIn = hexchat_fopen_file (confname, "r", 0);
@@ -2038,7 +2038,7 @@ hexchat_pluginpref_list (hexchat_plugin *pl, char* dest)
 	}
 	else													/* existing config file, get list of settings */
 	{
-		strcpy (dest, "");									/* clean up garbage */
+		dest[0] = '\0';									/* clean up garbage */
 		while (fscanf (fpIn, " %511[^\n]", bufp) != EOF)	/* read whole lines including whitespaces */
 		{
 			token = strtok (buffer, "=");
