@@ -246,7 +246,7 @@ plugin_add (session *sess, char *filename, void *handle, void *init_func,
 
 	if (!fake)
 	{
-		/* win32 uses these because it doesn't have --export-dynamic! */
+		/* Keep callbacks assigned on built-in plugins. */
 		pl->hexchat_hook_command = hexchat_hook_command;
 		pl->hexchat_hook_server = hexchat_hook_server;
 		pl->hexchat_hook_print = hexchat_hook_print;
