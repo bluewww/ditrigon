@@ -48,9 +48,7 @@ proper_unit (guint64 size, char *buf, size_t buf_len)
 	GFormatSizeFlags format_flags = G_FORMAT_SIZE_DEFAULT;
 
 #ifndef __APPLE__
-#ifndef WIN32
 	if (prefs.hex_gui_filesize_iec)
-#endif
 		format_flags = G_FORMAT_SIZE_IEC_UNITS;
 #endif
 
@@ -520,11 +518,7 @@ dcc_open_folder_cb (GtkButton *button, gpointer userdata)
 	if (!dir || !dir[0])
 		return;
 
-#ifndef WIN32
 	uri = g_strdup_printf ("file://%s", dir);
-#else
-	uri = g_strdup (dir);
-#endif
 	fe_open_url (uri);
 	g_free (uri);
 }
