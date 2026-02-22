@@ -87,6 +87,74 @@ static gboolean dcc_read (GIOChannel *, GIOCondition, struct DCC *);
 static gboolean dcc_read_ack (GIOChannel *source, GIOCondition condition, struct DCC *dcc);
 static int dcc_check_timeouts (void);
 
+static gboolean
+parse_u16_field (const char *text, int *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0' || parsed > G_MAXUINT16)
+		return FALSE;
+
+	*value = (int)parsed;
+	return TRUE;
+}
+
+static gboolean
+parse_u32_field (const char *text, guint32 *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0' || parsed > G_MAXUINT32)
+		return FALSE;
+
+	*value = (guint32)parsed;
+	return TRUE;
+}
+
+static gboolean
+parse_positive_int_field (const char *text, int *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0' || parsed == 0 || parsed > G_MAXINT)
+		return FALSE;
+
+	*value = (int)parsed;
+	return TRUE;
+}
+
+static gboolean
+parse_u64_field (const char *text, guint64 *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0')
+		return FALSE;
+
+	*value = parsed;
+	return TRUE;
+}
+
 static int new_id(void)
 {
 	static int id = 0;
@@ -2513,19 +2581,31 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 
 	if (!g_ascii_strcasecmp (type, "CHAT"))
 	{
-		port = atoi (word[8]);
-		addr = strtoul (word[7], NULL, 10);
+		if (!parse_u16_field (word[8], &port) || !parse_u32_field (word[7], &addr) || addr == 0)
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
 
 		if (port == 0)
-			pasvid = atoi (word[9]);
+		{
+			if (!parse_positive_int_field (word[9], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
+		}
 		else if (word[9][0] != 0)
 		{
-			pasvid = atoi (word[9]);
+			if (!parse_positive_int_field (word[9], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
 			psend = 1;
 		}
 
-		if (!addr /*|| (port < 1024 && port != 0)*/
-			|| port > 0xffff || (port == 0 && pasvid == 0))
+		if (port == 0 && pasvid == 0)
 		{
 			dcc_malformed (sess, nick, word_eol[4] + 2);
 			return;
@@ -2560,11 +2640,19 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 
 	if (!g_ascii_strcasecmp (type, "Resume"))
 	{
-		port = atoi (word[7]);
+		if (!parse_u16_field (word[7], &port))
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
 
 		if (port == 0)
 		{ /* PASSIVE */
-			pasvid = atoi(word[9]);
+			if (!parse_positive_int_field (word[9], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
 			dcc = find_dcc_from_id(pasvid, TYPE_SEND);
 		} else
 		{
@@ -2574,7 +2662,12 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			dcc = find_dcc (nick, word[6], TYPE_SEND);
 		if (dcc)
 		{
-			size = g_ascii_strtoull (word[8], NULL, 10);
+			if (!parse_u64_field (word[8], &size))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
+
 			dcc->resumable = size;
 			if (dcc->resumable < dcc->size)
 			{
@@ -2605,7 +2698,12 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 	}
 	if (!g_ascii_strcasecmp (type, "Accept"))
 	{
-		port = atoi (word[7]);
+		if (!parse_u16_field (word[7], &port))
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
+
 		dcc = find_dcc_from_port (port, TYPE_RECV);
 		if (dcc && dcc->dccstat == STAT_QUEUED)
 		{
@@ -2617,12 +2715,24 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 	{
 		char *file = file_part (word[6]);
 
-		port = atoi (word[8]);
-		addr = strtoul (word[7], NULL, 10);
-		size = g_ascii_strtoull (word[9], NULL, 10);
+		if (!parse_u16_field (word[8], &port) ||
+			!parse_u32_field (word[7], &addr) ||
+			!parse_u64_field (word[9], &size) ||
+			addr == 0 ||
+			size == 0)
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
 
 		if (port == 0) /* Passive dcc requested */
-			pasvid = atoi (word[10]);
+		{
+			if (!parse_positive_int_field (word[10], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
+		}
 		else if (word[10][0] != 0)
 		{
 			/* Requesting passive dcc.
@@ -2634,13 +2744,16 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			 * because this field is always null (no pasvid)
 			 * in normal dcc sends.
 			 */
-			pasvid = atoi (word[10]);
+			if (!parse_positive_int_field (word[10], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
 			psend = 1;
 		}
 
 
-		if (!addr || !size /*|| (port < 1024 && port != 0)*/
-			|| port > 0xffff || (port == 0 && pasvid == 0))
+		if (port == 0 && pasvid == 0)
 		{
 			dcc_malformed (sess, nick, word_eol[4] + 2);
 			return;
