@@ -2514,18 +2514,21 @@ dcc_add_file (session *sess, char *file, guint64 size, int port, char *nick, gui
 {
 	struct DCC *dcc;
 	char tbuf[512];
+	gsize dcc_dir_len = strlen (prefs.hex_dcc_dir);
 
 	dcc = new_dcc ();
 	if (dcc)
 	{
 		dcc->file = g_strdup (file);
 
-		dcc->destfile = g_malloc (strlen (prefs.hex_dcc_dir) + strlen (nick) +
-										  strlen (file) + 4);
-
-		strcpy (dcc->destfile, prefs.hex_dcc_dir);
-		if (prefs.hex_dcc_dir[strlen (prefs.hex_dcc_dir) - 1] != G_DIR_SEPARATOR)
-			strcat (dcc->destfile, G_DIR_SEPARATOR_S);
+		dcc->destfile = g_malloc (dcc_dir_len + strlen (nick) + strlen (file) + 5);
+		dcc->destfile[0] = '\0';
+		if (dcc_dir_len > 0)
+		{
+			strcat (dcc->destfile, prefs.hex_dcc_dir);
+			if (prefs.hex_dcc_dir[dcc_dir_len - 1] != G_DIR_SEPARATOR)
+				strcat (dcc->destfile, G_DIR_SEPARATOR_S);
+		}
 		if (prefs.hex_dcc_save_nick)
 		{
 #ifdef WIN32
