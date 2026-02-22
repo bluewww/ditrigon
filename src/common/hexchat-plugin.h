@@ -57,7 +57,7 @@ typedef struct
 #ifndef PLUGIN_C
 struct _hexchat_plugin
 {
-	/* these are only used on win32 */
+	/* runtime callback table for built-in plugin instances */
 	hexchat_hook *(*hexchat_hook_command) (hexchat_plugin *ph,
 		    const char *name,
 		    int pri,

@@ -35,5 +35,18 @@ else
       is_parallel: false,
       timeout: 90,
     )
+
+    servlist_nick_overflow_script = files('servlist_nick_overflow_regression.py')
+    test('Servlist Nick Overflow Regression', python3,
+      args: [servlist_nick_overflow_script, ditrigon_gtk4_exe],
+      depends: [ditrigon_gtk4_exe],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['fuzz'],
+      is_parallel: false,
+      timeout: 90,
+    )
   endif
 endif
