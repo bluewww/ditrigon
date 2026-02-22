@@ -1620,13 +1620,37 @@ exec_handle_colors (char *buf, int len)
 	char numb[16];
 	char *nbuf;
 	int i = 0, j = 0, k = 0, firstn = 0, col, colf = 0, colb = 0;
+	int out_cap;
 	int esc = FALSE, backc = FALSE, bold = FALSE;
 
+#define APPEND_CHAR(ch) \
+	do { \
+		if (j < out_cap) \
+		{ \
+			nbuf[j] = (ch); \
+			j++; \
+		} \
+	} while (0)
+
+#define APPEND_FMT(...) \
+	do { \
+		int avail = out_cap - j; \
+		if (avail > 0) \
+		{ \
+			int written = g_snprintf (&nbuf[j], avail + 1, __VA_ARGS__); \
+			if (written > avail) \
+				written = avail; \
+			if (written > 0) \
+				j += written; \
+		} \
+	} while (0)
+
 	/* any escape codes in this text? */
-	if (strchr (buf, 27) == 0)
+	if (len <= 0 || memchr (buf, 27, len) == NULL)
 		return;
 
 	nbuf = g_malloc (len + 1);
+	out_cap = len;
 
 	while (i < len)
 	{
@@ -1659,8 +1683,7 @@ exec_handle_colors (char *buf, int len)
 						/* ^[[0m */
 						if (k == 0 || (numb[0] == '0' && k == 1))
 						{
-							nbuf[j] = '\017';
-							j++;
+							APPEND_CHAR ('\017');
 							bold = FALSE;
 							goto cont;
 						}
@@ -1691,11 +1714,11 @@ exec_handle_colors (char *buf, int len)
 						{
 							colb = escconv[colb % 14];
 							colf = escconv[colf % 14];
-							j += sprintf (&nbuf[j], "\003%d,%02d", colf, colb);
+							APPEND_FMT ("\003%d,%02d", colf, colb);
 						} else
 						{
 							colf = escconv[colf % 14];
-							j += sprintf (&nbuf[j], "\003%02d", colf);
+							APPEND_FMT ("\003%02d", colf);
 						}
 					}
 cont:				esc = FALSE;
@@ -1711,8 +1734,7 @@ cont:				esc = FALSE;
 				}
 			} else
 			{
-norm:			nbuf[j] = buf[i];
-				j++;
+norm:			APPEND_CHAR (buf[i]);
 			}
 		}
 		i++;
@@ -1721,6 +1743,9 @@ norm:			nbuf[j] = buf[i];
 	nbuf[j] = 0;
 	memcpy (buf, nbuf, j + 1);
 	g_free (nbuf);
+
+#undef APPEND_CHAR
+#undef APPEND_FMT
 }
 
 #ifndef HAVE_MEMRCHR
