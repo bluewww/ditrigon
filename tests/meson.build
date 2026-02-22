@@ -48,5 +48,18 @@ else
       is_parallel: false,
       timeout: 90,
     )
+
+    safe_strcpy_cfg_script = files('safe_strcpy_cfg_utf8_regression.py')
+    test('Safe Strcpy Config UTF-8 Regression', python3,
+      args: [safe_strcpy_cfg_script, ditrigon_gtk4_exe],
+      depends: [ditrigon_gtk4_exe],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['fuzz'],
+      is_parallel: false,
+      timeout: 90,
+    )
   endif
 endif

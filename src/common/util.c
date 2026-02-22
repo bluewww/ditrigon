@@ -1127,17 +1127,33 @@ str_ihash (const unsigned char *key)
 	return h;
 }
 
-/* features: 1. "src" must be valid, NULL terminated UTF-8 */
-/*           2. "dest" will be left with valid UTF-8 - no partial chars! */
+/* "dest" will be left with valid UTF-8 - no partial chars. */
+/* Invalid or incomplete UTF-8 in "src" truncates output at that point. */
 
 void
 safe_strcpy (char *dest, const char *src, int bytes_left)
 {
 	int mbl;
+	gsize src_left;
+
+	if (bytes_left <= 0)
+		return;
+
+	src_left = strlen (src);
 
 	while (1)
 	{
 		mbl = g_utf8_skip[*((unsigned char *)src)];
+
+		if (mbl > 1)
+		{
+			/* Refuse malformed/truncated multibyte sequences. */
+			if ((gsize)mbl > src_left || !g_utf8_validate (src, mbl, NULL))
+			{
+				*dest = 0;
+				break;
+			}
+		}
 
 		if (bytes_left < (mbl + 1)) /* can't fit with NULL? */
 		{
@@ -1153,6 +1169,7 @@ safe_strcpy (char *dest, const char *src, int bytes_left)
 			dest++;
 			src++;
 			bytes_left--;
+			src_left--;
 		}
 		else				/* multibyte char */
 		{
@@ -1160,6 +1177,7 @@ safe_strcpy (char *dest, const char *src, int bytes_left)
 			dest += mbl;
 			src += mbl;
 			bytes_left -= mbl;
+			src_left -= mbl;
 		}
 	}
 }
