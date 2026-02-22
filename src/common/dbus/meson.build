@@ -15,20 +15,20 @@ dbus_includes = [
 dbus_service_dir = join_paths(get_option('datadir'), 'dbus-1/services')
 
 if get_option('dbus-service-use-appid')
-  dbus_service_name = 'io.github.Hexchat'
-  dbus_output_file = 'io.github.Hexchat.service'
-  dbus_cargs = '-DDBUS_SERVICE="io.github.Hexchat"'
+  dbus_service_name = 'io.github.Ditrigon'
+  dbus_output_file = 'io.github.Ditrigon.service'
+  dbus_cargs = '-DDBUS_SERVICE="io.github.Ditrigon"'
 else
-  dbus_service_name = 'org.hexchat.service'
-  dbus_output_file = 'org.hexchat.service.service'
-  dbus_cargs = '-DDBUS_SERVICE="org.hexchat.service"'
+  dbus_service_name = 'org.ditrigon.service'
+  dbus_output_file = 'org.ditrigon.service.service'
+  dbus_cargs = '-DDBUS_SERVICE="org.ditrigon.service"'
 endif
 
 dbus_conf = configuration_data()
 dbus_conf.set('bindir', join_paths(get_option('prefix'), get_option('bindir')))
 dbus_conf.set('service_name', dbus_service_name)
 configure_file(
-  input: 'org.hexchat.service.service.in',
+  input: 'org.ditrigon.service.service.in',
   output: dbus_output_file,
   configuration: dbus_conf,
   install: true,
