@@ -40,11 +40,7 @@ ditrigon_gtk4_deps = [
   gtk4_dep,
 ]
 
-if host_machine.system() == 'windows'
-  ditrigon_gtk4_sources += 'notifications/notification-dummy.c'
-else
-  ditrigon_gtk4_sources += 'notifications/notification-freedesktop.c'
-endif
+ditrigon_gtk4_sources += 'notifications/notification-freedesktop.c'
 
 iso_codes = dependency('iso-codes', required: false)
 ditrigon_gtk4_cflags = []

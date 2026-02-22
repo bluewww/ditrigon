@@ -41,11 +41,6 @@ if system == 'linux' or system == 'gnu' or system.startswith('gnu/') or system =
     sysinfo_sources += 'osx/backend.m'
   endif
 
-elif system == 'windows'
-  sysinfo_sources += [
-    'win32/backend.c',
-    '../../src/common/sysinfo/win32/backend.c'
-  ]
 else
   error('sysinfo: Unknown system?')
 endif
