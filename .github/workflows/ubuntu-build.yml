@@ -12,12 +12,21 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - name: Cache APT Packages
+        uses: actions/cache@v4
+        with:
+          path: .apt-cache/archives
+          key: ${{ runner.os }}-ubuntu-24.04-apt-${{ hashFiles('.github/workflows/ubuntu-build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ubuntu-24.04-apt-
 
       - name: Install Dependencies
         run: |
+          mkdir -p "$GITHUB_WORKSPACE/.apt-cache/archives/partial"
           sudo apt-get update
-          sudo apt-get install -y meson doxygen graphviz libcanberra-dev libdbus-glib-1-dev libglib2.0-dev libgtk-4-dev libadwaita-1-dev libluajit-5.1-dev libpci-dev libperl-dev libssl-dev python3-dev python3-cffi mono-devel desktop-file-utils gettext
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::archives="$GITHUB_WORKSPACE/.apt-cache/archives" meson doxygen graphviz libcanberra-dev libdbus-glib-1-dev libglib2.0-dev libgtk-4-dev libadwaita-1-dev libluajit-5.1-dev libpci-dev libperl-dev libssl-dev python3-dev python3-cffi mono-devel desktop-file-utils gettext
 
       - name: Configure
         run: meson setup _builddir -Ddocs=enabled
