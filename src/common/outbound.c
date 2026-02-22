@@ -2660,7 +2660,8 @@ cmd_load (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 char *
 split_up_text(struct session *sess, char *text, int cmd_length, char *split_text)
 {
-	unsigned int max, space_offset;
+	unsigned int max;
+	gsize space_offset;
 	char *space;
 
 	/* maximum allowed text */
@@ -2698,7 +2699,8 @@ split_up_text(struct session *sess, char *text, int cmd_length, char *split_text
 		space = g_utf8_strrchr (text, max, ' ');
 		if (space)
 		{
-			space_offset = g_utf8_pointer_to_offset (text, space);
+			/* Keep this in bytes because max is a byte limit. */
+			space_offset = (gsize)(space - text);
 
 			/* Only split if last word is of sane length */
 			if (max != space_offset && max - space_offset < 20)
