@@ -118,6 +118,9 @@ url_add (char *urltext, int len)
 	char *data;
 	int size;
 
+	if (len <= 0)
+		return;
+
 	/* we don't need any URLs if we have neither URL grabbing nor URL logging enabled */
 	if (!prefs.hex_url_grabber && !prefs.hex_url_logging)
 	{
@@ -132,7 +135,7 @@ url_add (char *urltext, int len)
 		data[len] = 0;
 	}
 	/* chop trailing ) but only if there's no counterpart */
-	if (data[len - 1] == ')' && strchr (data, '(') == NULL)
+	if (len > 0 && data[len - 1] == ')' && strchr (data, '(') == NULL)
 	{
 		data[len - 1] = 0;
 	}

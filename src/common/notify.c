@@ -504,15 +504,23 @@ notify_checklist_for_server (server *serv)
 	GSList *list = notify_list;
 	int i = 0;
 
-	strcpy (outbuf, "ISON ");
+	g_strlcpy (outbuf, "ISON ", sizeof (outbuf));
 	while (list)
 	{
+		gsize outlen;
+		gsize name_len;
+
 		notify = list->data;
 		if (notify_do_network (notify, serv))
 		{
+			outlen = strlen (outbuf);
+			name_len = strlen (notify->name);
+			if (outlen + name_len + 1 >= sizeof (outbuf))
+				break;
+
 			i++;
-			strcat (outbuf, notify->name);
-			strcat (outbuf, " ");
+			g_strlcat (outbuf, notify->name, sizeof (outbuf));
+			g_strlcat (outbuf, " ", sizeof (outbuf));
 			if (strlen (outbuf) > 460)
 			{
 				/* LAME: we can't send more than 512 bytes to the server, but     *

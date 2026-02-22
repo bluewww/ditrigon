@@ -52,8 +52,10 @@
 #define FILEPATH_LEN_MAX MAXPATHLEN
 #endif
 
-/* force a 32bit CMP.L */
-#define WORDL(c0, c1, c2, c3) (guint32)(c0 | (c1 << 8) | (c2 << 16) | (c3 << 24))
+/* force a 32-bit compare key; cast before shifting to avoid signed-shift UB */
+#define WORDL(c0, c1, c2, c3) \
+	((guint32)(guint8)(c0) | ((guint32)(guint8)(c1) << 8) | \
+	((guint32)(guint8)(c2) << 16) | ((guint32)(guint8)(c3) << 24))
 
 #ifdef WIN32						/* for win32 */
 #define OFLAGS O_BINARY

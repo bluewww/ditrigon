@@ -119,39 +119,26 @@ ignore_showlist (session *sess)
 
 	while (list)
 	{
+		const char *priv;
+		const char *noti;
+		const char *chan;
+		const char *ctcp;
+		const char *dcc;
+		const char *invi;
+		const char *unig;
+
 		ig = list->data;
 		i++;
 
-		g_snprintf (tbuf, sizeof (tbuf), " %-25s ", ig->mask);
-		if (ig->type & IG_PRIV)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		if (ig->type & IG_NOTI)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		if (ig->type & IG_CHAN)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		if (ig->type & IG_CTCP)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		if (ig->type & IG_DCC)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		if (ig->type & IG_INVI)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		if (ig->type & IG_UNIG)
-			strcat (tbuf, _("YES  "));
-		else
-			strcat (tbuf, _("NO   "));
-		strcat (tbuf, "\n");
+		priv = (ig->type & IG_PRIV) ? _("YES  ") : _("NO   ");
+		noti = (ig->type & IG_NOTI) ? _("YES  ") : _("NO   ");
+		chan = (ig->type & IG_CHAN) ? _("YES  ") : _("NO   ");
+		ctcp = (ig->type & IG_CTCP) ? _("YES  ") : _("NO   ");
+		dcc = (ig->type & IG_DCC) ? _("YES  ") : _("NO   ");
+		invi = (ig->type & IG_INVI) ? _("YES  ") : _("NO   ");
+		unig = (ig->type & IG_UNIG) ? _("YES  ") : _("NO   ");
+		g_snprintf (tbuf, sizeof (tbuf), " %-25s %s%s%s%s%s%s%s\n",
+						ig->mask, priv, noti, chan, ctcp, dcc, invi, unig);
 		PrintText (sess, tbuf);
 		/*EMIT_SIGNAL (XP_TE_IGNORELIST, sess, ig->mask, 0, 0, 0, 0); */
 		/* use this later, when TE's support 7 args */
@@ -420,4 +407,3 @@ flood_check (char *nick, char *ip, server *serv, session *sess, int what)	/*0=ct
 	}
 	return 1;
 }
-

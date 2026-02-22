@@ -68,6 +68,12 @@ static int timeout_timer = 0;
 
 static char *dcctypes[] = { "SEND", "RECV", "CHAT", "CHAT" };
 
+#ifdef O_NOFOLLOW
+#define DCC_OPEN_NOFOLLOW O_NOFOLLOW
+#else
+#define DCC_OPEN_NOFOLLOW 0
+#endif
+
 struct dccstat_info dccstat[] = {
 	{N_("Waiting"), 1 /*black */ },
 	{N_("Active"), 12 /*cyan */ },
@@ -86,6 +92,74 @@ static gboolean dcc_send_data (GIOChannel *, GIOCondition, struct DCC *);
 static gboolean dcc_read (GIOChannel *, GIOCondition, struct DCC *);
 static gboolean dcc_read_ack (GIOChannel *source, GIOCondition condition, struct DCC *dcc);
 static int dcc_check_timeouts (void);
+
+static gboolean
+parse_u16_field (const char *text, int *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0' || parsed > G_MAXUINT16)
+		return FALSE;
+
+	*value = (int)parsed;
+	return TRUE;
+}
+
+static gboolean
+parse_u32_field (const char *text, guint32 *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0' || parsed > G_MAXUINT32)
+		return FALSE;
+
+	*value = (guint32)parsed;
+	return TRUE;
+}
+
+static gboolean
+parse_positive_int_field (const char *text, int *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0' || parsed == 0 || parsed > G_MAXINT)
+		return FALSE;
+
+	*value = (int)parsed;
+	return TRUE;
+}
+
+static gboolean
+parse_u64_field (const char *text, guint64 *value)
+{
+	char *end = NULL;
+	guint64 parsed;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	parsed = g_ascii_strtoull (text, &end, 10);
+	if (end == text || *end != '\0')
+		return FALSE;
+
+	*value = parsed;
+	return TRUE;
+}
 
 static int new_id(void)
 {
@@ -664,8 +738,8 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 
 		if (dcc->resumable)
 		{
-			gchar *filename_fs = g_filename_from_utf8(dcc->destfile, -1, NULL, NULL, NULL);
-			dcc->fp = g_open(dcc->destfile, O_WRONLY | O_APPEND | OFLAGS, 0);
+			gchar *filename_fs = g_filename_from_utf8 (dcc->destfile, -1, NULL, NULL, NULL);
+			dcc->fp = g_open (filename_fs, O_WRONLY | O_APPEND | OFLAGS | DCC_OPEN_NOFOLLOW, 0);
 			g_free (filename_fs);
 
 			dcc->pos = dcc->resumable;
@@ -689,12 +763,14 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 				dcc->destfile = g_strdup (buf);
 
 				EMIT_SIGNAL (XP_TE_DCCRENAME, dcc->serv->front_session,
-								 old, dcc->destfile, NULL, NULL, 0);
+							 old, dcc->destfile, NULL, NULL, 0);
 				g_free (old);
 			}
 
 			filename_fs = g_filename_from_utf8 (dcc->destfile, -1, NULL, NULL, NULL);
-			dcc->fp = g_open (filename_fs, OFLAGS | O_TRUNC | O_WRONLY | O_CREAT, prefs.hex_dcc_permissions);
+			dcc->fp = g_open (filename_fs,
+							  OFLAGS | O_TRUNC | O_WRONLY | O_CREAT | DCC_OPEN_NOFOLLOW,
+							  prefs.hex_dcc_permissions);
 			g_free (filename_fs);
 		}
 	}
@@ -1253,24 +1329,54 @@ dcc_http_proxy_traverse (GIOChannel *source, GIOCondition condition, struct DCC 
 
 	if (proxy->phase == 0)
 	{
-		char buf[256];
-		char auth_data[128];
-		char auth_data2[68];
-		int n, n2;
+		char *auth_data = NULL;
+		char *auth_plain = NULL;
+		char *connect_req = NULL;
+		gsize request_len;
 
-		n = g_snprintf (buf, sizeof (buf), "CONNECT %s:%d HTTP/1.0\r\n",
-                                          net_ip(dcc->addr), dcc->port);
 		if (prefs.hex_net_proxy_auth)
 		{
-			n2 = g_snprintf (auth_data2, sizeof (auth_data2), "%s:%s",
-							prefs.hex_net_proxy_user, prefs.hex_net_proxy_pass);
-			base64_encode (auth_data, auth_data2, n2);
-			n += g_snprintf (buf+n, sizeof (buf)-n, "Proxy-Authorization: Basic %s\r\n", auth_data);
+			auth_plain = g_strdup_printf ("%s:%s",
+							 prefs.hex_net_proxy_user, prefs.hex_net_proxy_pass);
+			auth_data = g_base64_encode ((const guchar *) auth_plain, strlen (auth_plain));
+			connect_req = g_strdup_printf ("CONNECT %s:%d HTTP/1.0\r\n"
+								   "Proxy-Authorization: Basic %s\r\n"
+								   "\r\n",
+								   net_ip (dcc->addr), dcc->port, auth_data);
 		}
-		n += g_snprintf (buf+n, sizeof (buf)-n, "\r\n");
-		proxy->buffersize = n;
+		else
+		{
+			connect_req = g_strdup_printf ("CONNECT %s:%d HTTP/1.0\r\n\r\n",
+								   net_ip (dcc->addr), dcc->port);
+		}
+
+		if (connect_req == NULL)
+		{
+			g_free (auth_data);
+			g_free (auth_plain);
+			dcc->dccstat = STAT_FAILED;
+			fe_dcc_update (dcc);
+			return TRUE;
+		}
+
+		request_len = strlen (connect_req);
+		if (request_len >= MAX_PROXY_BUFFER)
+		{
+			g_free (connect_req);
+			g_free (auth_data);
+			g_free (auth_plain);
+			PrintText (dcc->serv->front_session, "HTTP\tProxy request is too long.\n");
+			dcc->dccstat = STAT_FAILED;
+			fe_dcc_update (dcc);
+			return TRUE;
+		}
+
 		proxy->bufferused = 0;
-		memcpy (proxy->buffer, buf, proxy->buffersize);
+		proxy->buffersize = (int) request_len;
+		memcpy (proxy->buffer, connect_req, request_len);
+		g_free (connect_req);
+		g_free (auth_data);
+		g_free (auth_plain);
 		dcc->wiotag = fe_input_add (dcc->sok, FIA_WRITE|FIA_EX,
 									dcc_http_proxy_traverse, dcc);
 		++proxy->phase;
@@ -1752,7 +1858,11 @@ dcc_send (struct session *sess, char *to, char *filename, gint64 maxcps, int pas
 		safe_strcpy (wild, file_part (filename), sizeof (wild));
 		path_part (filename, path, sizeof (path));
 		if (path[0] != '/' || path[1] != '\0')
-			path[strlen (path) - 1] = 0;	/* remove trailing slash */
+		{
+			gsize path_len = strlen (path);
+			if (path_len > 0 && path[path_len - 1] == G_DIR_SEPARATOR)
+				path[path_len - 1] = 0;	/* remove trailing slash */
+		}
 
 		dccsess = sess;
 		dccto = to;
@@ -2341,13 +2451,16 @@ dcc_resume (struct DCC *dcc)
 	{
 		dcc->resume_sent = 1;
 		/* filename contains spaces? Quote them! */
-		g_snprintf (tbuf, sizeof (tbuf) - 10, strchr (dcc->file, ' ') ?
+		g_snprintf (tbuf, sizeof (tbuf), strchr (dcc->file, ' ') ?
 					  "DCC RESUME \"%s\" %d %" G_GUINT64_FORMAT :
 					  "DCC RESUME %s %d %" G_GUINT64_FORMAT,
 					  dcc->file, dcc->port, dcc->resumable);
 
 		if (dcc->pasvid)
- 			sprintf (tbuf + strlen (tbuf), " %d", dcc->pasvid);
+		{
+			gsize used = strlen (tbuf);
+			g_snprintf (tbuf + used, sizeof (tbuf) - used, " %d", dcc->pasvid);
+		}
 
 		dcc->serv->p_ctcp (dcc->serv, dcc->nick, tbuf);
 		return 1;
@@ -2431,18 +2544,21 @@ dcc_add_file (session *sess, char *file, guint64 size, int port, char *nick, gui
 {
 	struct DCC *dcc;
 	char tbuf[512];
+	gsize dcc_dir_len = strlen (prefs.hex_dcc_dir);
 
 	dcc = new_dcc ();
 	if (dcc)
 	{
 		dcc->file = g_strdup (file);
 
-		dcc->destfile = g_malloc (strlen (prefs.hex_dcc_dir) + strlen (nick) +
-										  strlen (file) + 4);
-
-		strcpy (dcc->destfile, prefs.hex_dcc_dir);
-		if (prefs.hex_dcc_dir[strlen (prefs.hex_dcc_dir) - 1] != G_DIR_SEPARATOR)
-			strcat (dcc->destfile, G_DIR_SEPARATOR_S);
+		dcc->destfile = g_malloc (dcc_dir_len + strlen (nick) + strlen (file) + 5);
+		dcc->destfile[0] = '\0';
+		if (dcc_dir_len > 0)
+		{
+			strcat (dcc->destfile, prefs.hex_dcc_dir);
+			if (prefs.hex_dcc_dir[dcc_dir_len - 1] != G_DIR_SEPARATOR)
+				strcat (dcc->destfile, G_DIR_SEPARATOR_S);
+		}
 		if (prefs.hex_dcc_save_nick)
 		{
 #ifdef WIN32
@@ -2513,19 +2629,31 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 
 	if (!g_ascii_strcasecmp (type, "CHAT"))
 	{
-		port = atoi (word[8]);
-		addr = strtoul (word[7], NULL, 10);
+		if (!parse_u16_field (word[8], &port) || !parse_u32_field (word[7], &addr) || addr == 0)
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
 
 		if (port == 0)
-			pasvid = atoi (word[9]);
+		{
+			if (!parse_positive_int_field (word[9], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
+		}
 		else if (word[9][0] != 0)
 		{
-			pasvid = atoi (word[9]);
+			if (!parse_positive_int_field (word[9], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
 			psend = 1;
 		}
 
-		if (!addr /*|| (port < 1024 && port != 0)*/
-			|| port > 0xffff || (port == 0 && pasvid == 0))
+		if (port == 0 && pasvid == 0)
 		{
 			dcc_malformed (sess, nick, word_eol[4] + 2);
 			return;
@@ -2560,11 +2688,19 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 
 	if (!g_ascii_strcasecmp (type, "Resume"))
 	{
-		port = atoi (word[7]);
+		if (!parse_u16_field (word[7], &port))
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
 
 		if (port == 0)
 		{ /* PASSIVE */
-			pasvid = atoi(word[9]);
+			if (!parse_positive_int_field (word[9], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
 			dcc = find_dcc_from_id(pasvid, TYPE_SEND);
 		} else
 		{
@@ -2574,7 +2710,12 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			dcc = find_dcc (nick, word[6], TYPE_SEND);
 		if (dcc)
 		{
-			size = g_ascii_strtoull (word[8], NULL, 10);
+			if (!parse_u64_field (word[8], &size))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
+
 			dcc->resumable = size;
 			if (dcc->resumable < dcc->size)
 			{
@@ -2605,7 +2746,12 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 	}
 	if (!g_ascii_strcasecmp (type, "Accept"))
 	{
-		port = atoi (word[7]);
+		if (!parse_u16_field (word[7], &port))
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
+
 		dcc = find_dcc_from_port (port, TYPE_RECV);
 		if (dcc && dcc->dccstat == STAT_QUEUED)
 		{
@@ -2617,12 +2763,24 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 	{
 		char *file = file_part (word[6]);
 
-		port = atoi (word[8]);
-		addr = strtoul (word[7], NULL, 10);
-		size = g_ascii_strtoull (word[9], NULL, 10);
+		if (!parse_u16_field (word[8], &port) ||
+			!parse_u32_field (word[7], &addr) ||
+			!parse_u64_field (word[9], &size) ||
+			addr == 0 ||
+			size == 0)
+		{
+			dcc_malformed (sess, nick, word_eol[4] + 2);
+			return;
+		}
 
 		if (port == 0) /* Passive dcc requested */
-			pasvid = atoi (word[10]);
+		{
+			if (!parse_positive_int_field (word[10], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
+		}
 		else if (word[10][0] != 0)
 		{
 			/* Requesting passive dcc.
@@ -2634,13 +2792,16 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			 * because this field is always null (no pasvid)
 			 * in normal dcc sends.
 			 */
-			pasvid = atoi (word[10]);
+			if (!parse_positive_int_field (word[10], &pasvid))
+			{
+				dcc_malformed (sess, nick, word_eol[4] + 2);
+				return;
+			}
 			psend = 1;
 		}
 
 
-		if (!addr || !size /*|| (port < 1024 && port != 0)*/
-			|| port > 0xffff || (port == 0 && pasvid == 0))
+		if (port == 0 && pasvid == 0)
 		{
 			dcc_malformed (sess, nick, word_eol[4] + 2);
 			return;

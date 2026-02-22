@@ -1021,7 +1021,7 @@ inbound_notice (server *serv, char *to, char *nick, char *msg, char *ip, int id,
 		}
 
 		len = strlen(msg);
-		if (msg[len - 1] == '\001')
+		if (len > 0 && msg[len - 1] == '\001')
 			msg[len - 1] = '\000';
 	}
 

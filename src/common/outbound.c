@@ -1620,13 +1620,37 @@ exec_handle_colors (char *buf, int len)
 	char numb[16];
 	char *nbuf;
 	int i = 0, j = 0, k = 0, firstn = 0, col, colf = 0, colb = 0;
+	int out_cap;
 	int esc = FALSE, backc = FALSE, bold = FALSE;
 
+#define APPEND_CHAR(ch) \
+	do { \
+		if (j < out_cap) \
+		{ \
+			nbuf[j] = (ch); \
+			j++; \
+		} \
+	} while (0)
+
+#define APPEND_FMT(...) \
+	do { \
+		int avail = out_cap - j; \
+		if (avail > 0) \
+		{ \
+			int written = g_snprintf (&nbuf[j], avail + 1, __VA_ARGS__); \
+			if (written > avail) \
+				written = avail; \
+			if (written > 0) \
+				j += written; \
+		} \
+	} while (0)
+
 	/* any escape codes in this text? */
-	if (strchr (buf, 27) == 0)
+	if (len <= 0 || memchr (buf, 27, len) == NULL)
 		return;
 
 	nbuf = g_malloc (len + 1);
+	out_cap = len;
 
 	while (i < len)
 	{
@@ -1659,8 +1683,7 @@ exec_handle_colors (char *buf, int len)
 						/* ^[[0m */
 						if (k == 0 || (numb[0] == '0' && k == 1))
 						{
-							nbuf[j] = '\017';
-							j++;
+							APPEND_CHAR ('\017');
 							bold = FALSE;
 							goto cont;
 						}
@@ -1691,11 +1714,11 @@ exec_handle_colors (char *buf, int len)
 						{
 							colb = escconv[colb % 14];
 							colf = escconv[colf % 14];
-							j += sprintf (&nbuf[j], "\003%d,%02d", colf, colb);
+							APPEND_FMT ("\003%d,%02d", colf, colb);
 						} else
 						{
 							colf = escconv[colf % 14];
-							j += sprintf (&nbuf[j], "\003%02d", colf);
+							APPEND_FMT ("\003%02d", colf);
 						}
 					}
 cont:				esc = FALSE;
@@ -1711,8 +1734,7 @@ cont:				esc = FALSE;
 				}
 			} else
 			{
-norm:			nbuf[j] = buf[i];
-				j++;
+norm:			APPEND_CHAR (buf[i]);
 			}
 		}
 		i++;
@@ -1721,6 +1743,9 @@ norm:			nbuf[j] = buf[i];
 	nbuf[j] = 0;
 	memcpy (buf, nbuf, j + 1);
 	g_free (nbuf);
+
+#undef APPEND_CHAR
+#undef APPEND_FMT
 }
 
 #ifndef HAVE_MEMRCHR
@@ -2660,7 +2685,8 @@ cmd_load (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 char *
 split_up_text(struct session *sess, char *text, int cmd_length, char *split_text)
 {
-	unsigned int max, space_offset;
+	unsigned int max;
+	gsize space_offset;
 	char *space;
 
 	/* maximum allowed text */
@@ -2698,7 +2724,8 @@ split_up_text(struct session *sess, char *text, int cmd_length, char *split_text
 		space = g_utf8_strrchr (text, max, ' ');
 		if (space)
 		{
-			space_offset = g_utf8_pointer_to_offset (text, space);
+			/* Keep this in bytes because max is a byte limit. */
+			space_offset = (gsize)(space - text);
 
 			/* Only split if last word is of sane length */
 			if (max != space_offset && max - space_offset < 20)
@@ -3872,23 +3899,50 @@ cmd_userlist (struct session *sess, char *tbuf, char *word[],
 	return TRUE;
 }
 
+static void
+wallchop_flush (multidata *data)
+{
+	gsize len;
+
+	if (!data->i)
+		return;
+
+	len = strlen (data->tbuf);
+	g_snprintf (data->tbuf + len, TBUFSIZE - len, " :[@%s] %s",
+					data->sess->channel, data->reason);
+	data->sess->server->p_raw (data->sess->server, data->tbuf);
+	g_strlcpy (data->tbuf, "NOTICE ", TBUFSIZE);
+	data->i = 0;
+}
+
 static int
 wallchop_cb (struct User *user, multidata *data)
 {
 	if (user->op)
 	{
+		gsize used;
+		gsize nick_len;
+
+		used = strlen (data->tbuf);
+		nick_len = strlen (user->nick);
+
+		if (data->i && used + nick_len + 1 >= TBUFSIZE)
+		{
+			wallchop_flush (data);
+			used = strlen (data->tbuf);
+		}
+
+		if (nick_len >= (TBUFSIZE - used))
+			return TRUE;
+
 		if (data->i)
-			strcat (data->tbuf, ",");
-		strcat (data->tbuf, user->nick);
+			g_strlcat (data->tbuf, ",", TBUFSIZE);
+		g_strlcat (data->tbuf, user->nick, TBUFSIZE);
 		data->i++;
 	}
 	if (data->i == 5)
 	{
-		data->i = 0;
-		sprintf (data->tbuf + strlen (data->tbuf),
-					" :[@%s] %s", data->sess->channel, data->reason);
-		data->sess->server->p_raw (data->sess->server, data->tbuf);
-		strcpy (data->tbuf, "NOTICE ");
+		wallchop_flush (data);
 	}
 
 	return TRUE;
@@ -3903,7 +3957,7 @@ cmd_wallchop (struct session *sess, char *tbuf, char *word[],
 	if (!(*word_eol[2]))
 		return FALSE;
 
-	strcpy (tbuf, "NOTICE ");
+	g_strlcpy (tbuf, "NOTICE ", TBUFSIZE);
 
 	data.reason = word_eol[2];
 	data.tbuf = tbuf;
@@ -3912,11 +3966,7 @@ cmd_wallchop (struct session *sess, char *tbuf, char *word[],
 	tree_foreach (sess->usertree, (tree_traverse_func*)wallchop_cb, &data);
 
 	if (data.i)
-	{
-		sprintf (tbuf + strlen (tbuf),
-					" :[@%s] %s", sess->channel, word_eol[2]);
-		sess->server->p_raw (sess->server, tbuf);
-	}
+		wallchop_flush (&data);
 
 	return TRUE;
 }

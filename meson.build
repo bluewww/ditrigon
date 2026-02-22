@@ -143,6 +143,11 @@ subdir('src')
 if get_option('plugin')
   subdir('plugins')
 endif
+
+if get_option('fuzz-tests')
+  subdir('tests')
+endif
+
 if cc.get_id() != 'msvc'
   subdir('data')
   subdir('po') # FIXME: build xgettext

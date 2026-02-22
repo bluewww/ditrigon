@@ -1553,7 +1553,7 @@ handle_message_tags (server *serv, const char *tags_str,
 		if (serv->have_account_tag && !strcmp (key, "account"))
 			tags_data->account = g_strdup (value);
 
-		if (serv->have_idmsg && strcmp (key, "solanum.chat/identified"))
+		if (serv->have_idmsg && !strcmp (key, "solanum.chat/identified"))
 			tags_data->identified = TRUE;
 
 		if (serv->have_server_time && !strcmp (key, "time"))
