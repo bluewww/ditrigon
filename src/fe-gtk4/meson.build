@@ -64,7 +64,7 @@ resources = gnome.compile_resources('resources-gtk4',
   extra_args: ['--manual-register']
 )
 
-executable('ditrigon',
+ditrigon_gtk4_exe = executable('ditrigon',
   sources: resources + ditrigon_gtk4_sources,
   dependencies: ditrigon_gtk4_deps,
   c_args: ditrigon_gtk4_cflags,

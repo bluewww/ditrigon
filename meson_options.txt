@@ -16,6 +16,9 @@ option('theme-manager', type: 'boolean', value: false,
 option('tls', type: 'feature', value: 'enabled',
   description: 'Support for TLS connections, requires openssl'
 )
+option('fuzz-tests', type: 'boolean', value: false,
+  description: 'Enable parser fuzz smoke tests (Linux GTK4 + xvfb)'
+)
 option('plugin', type: 'boolean',
   description: 'Support for loadable plugins'
 )
