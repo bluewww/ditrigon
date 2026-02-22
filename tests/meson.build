@@ -22,5 +22,18 @@ else
       is_parallel: false,
       timeout: 180,
     )
+
+    utf8_regression_script = files('parser_utf8_truncation_regression.py')
+    test('Parser UTF-8 Truncation Regression', python3,
+      args: [utf8_regression_script, ditrigon_gtk4_exe],
+      depends: [ditrigon_gtk4_exe],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['fuzz'],
+      is_parallel: false,
+      timeout: 90,
+    )
   endif
 endif
