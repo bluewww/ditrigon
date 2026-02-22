@@ -1828,7 +1828,11 @@ dcc_send (struct session *sess, char *to, char *filename, gint64 maxcps, int pas
 		safe_strcpy (wild, file_part (filename), sizeof (wild));
 		path_part (filename, path, sizeof (path));
 		if (path[0] != '/' || path[1] != '\0')
-			path[strlen (path) - 1] = 0;	/* remove trailing slash */
+		{
+			gsize path_len = strlen (path);
+			if (path_len > 0 && path[path_len - 1] == G_DIR_SEPARATOR)
+				path[path_len - 1] = 0;	/* remove trailing slash */
+		}
 
 		dccsess = sess;
 		dccto = to;
