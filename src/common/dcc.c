@@ -2417,13 +2417,16 @@ dcc_resume (struct DCC *dcc)
 	{
 		dcc->resume_sent = 1;
 		/* filename contains spaces? Quote them! */
-		g_snprintf (tbuf, sizeof (tbuf) - 10, strchr (dcc->file, ' ') ?
+		g_snprintf (tbuf, sizeof (tbuf), strchr (dcc->file, ' ') ?
 					  "DCC RESUME \"%s\" %d %" G_GUINT64_FORMAT :
 					  "DCC RESUME %s %d %" G_GUINT64_FORMAT,
 					  dcc->file, dcc->port, dcc->resumable);
 
 		if (dcc->pasvid)
- 			sprintf (tbuf + strlen (tbuf), " %d", dcc->pasvid);
+		{
+			gsize used = strlen (tbuf);
+			g_snprintf (tbuf + used, sizeof (tbuf) - used, " %d", dcc->pasvid);
+		}
 
 		dcc->serv->p_ctcp (dcc->serv, dcc->nick, tbuf);
 		return 1;
