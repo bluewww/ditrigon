@@ -58,6 +58,7 @@ typedef struct
 static GHashTable *session_logs;
 static GHashTable *session_buffers;
 static GHashTable *session_at_bottom;
+static GHashTable *session_buffers_dirty;
 static GHashTable *color_tags;
 static GtkTextTagTable *shared_tag_table;
 static GtkTextTag *tag_stamp;
@@ -945,6 +946,27 @@ session_buffer_ensure (session *sess)
 	gtk_text_buffer_create_mark (buf, "anchor", &iter, TRUE);
 	g_hash_table_insert (session_buffers, sess, buf);
 	return buf;
+}
+
+static gboolean
+session_buffer_is_dirty (session *sess)
+{
+	if (!session_buffers_dirty || !sess || !is_session (sess))
+		return FALSE;
+
+	return g_hash_table_contains (session_buffers_dirty, sess);
+}
+
+static void
+session_buffer_set_dirty (session *sess, gboolean dirty)
+{
+	if (!session_buffers_dirty || !sess || !is_session (sess))
+		return;
+
+	if (dirty)
+		g_hash_table_insert (session_buffers_dirty, sess, GINT_TO_POINTER (TRUE));
+	else
+		g_hash_table_remove (session_buffers_dirty, sess);
 }
 
 static GtkTextTag *
@@ -2148,6 +2170,7 @@ xtext_show_session_rendered (session *sess)
 	GtkTextIter start;
 	GtkTextIter end;
 	gboolean is_empty;
+	gboolean buffer_dirty;
 	gboolean restore_at_bottom;
 	int col_px;
 	int stamp_px;
@@ -2190,12 +2213,14 @@ xtext_show_session_rendered (session *sess)
 	/* Check if buffer needs rendering */
 	gtk_text_buffer_get_bounds (buf, &start, &end);
 	is_empty = gtk_text_iter_equal (&start, &end);
+	buffer_dirty = session_buffer_is_dirty (sess);
 
-	if ((is_empty || xtext_buffers_stale) && log && log->len > 0)
+	if (is_empty || xtext_buffers_stale || buffer_dirty)
 	{
 		xtext_render_session = sess;
-		xtext_render_raw_all (buf, log->str);
+		xtext_render_raw_all (buf, (log && log->len > 0) ? log->str : "");
 		xtext_render_session = NULL;
+		session_buffer_set_dirty (sess, FALSE);
 	}
 	else
 	{
@@ -2344,6 +2369,8 @@ fe_gtk4_xtext_init (void)
 			NULL, session_buffer_free);
 	if (!session_at_bottom)
 		session_at_bottom = g_hash_table_new (g_direct_hash, g_direct_equal);
+	if (!session_buffers_dirty)
+		session_buffers_dirty = g_hash_table_new (g_direct_hash, g_direct_equal);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
 	xtext_create_shared_tag_table ();
@@ -2372,6 +2399,11 @@ fe_gtk4_xtext_cleanup (void)
 	{
 		g_hash_table_unref (session_at_bottom);
 		session_at_bottom = NULL;
+	}
+	if (session_buffers_dirty)
+	{
+		g_hash_table_unref (session_buffers_dirty);
+		session_buffers_dirty = NULL;
 	}
 	if (color_tags)
 	{
@@ -2537,7 +2569,10 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	 * until the tab is first viewed. The buffer will be populated on-demand
 	 * in xtext_show_session_rendered(). */
 	if (sess != current_tab)
+	{
+		session_buffer_set_dirty (sess, TRUE);
 		return;
+	}
 
 	/* Only render for the currently visible session */
 	buf = session_buffer_ensure (sess);
@@ -2557,6 +2592,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 			/* Re-render to apply a wider tab stop uniformly. */
 			xtext_render_raw_all (buf, log->str);
 			xtext_render_session = NULL;
+			session_buffer_set_dirty (sess, FALSE);
 			if (xtext_is_at_end ())
 				xtext_scroll_to_end ();
 			return;
@@ -2565,6 +2601,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 
 	xtext_render_raw_append (buf, text);
 	xtext_render_session = NULL;
+	session_buffer_set_dirty (sess, FALSE);
 
 	if (xtext_is_at_end ())
 		xtext_scroll_to_end ();
@@ -2604,6 +2641,9 @@ fe_gtk4_xtext_remove_session (session *sess)
 
 	if (session_at_bottom)
 		g_hash_table_remove (session_at_bottom, sess);
+
+	if (session_buffers_dirty)
+		g_hash_table_remove (session_buffers_dirty, sess);
 
 	if (session_buffers)
 	{
@@ -2659,6 +2699,7 @@ fe_gtk4_xtext_clear_session (session *sess, int lines)
 		xtext_render_session = sess;
 		xtext_render_raw_all (buf, log->str);
 		xtext_render_session = NULL;
+		session_buffer_set_dirty (sess, FALSE);
 	}
 
 	if (session_at_bottom)
