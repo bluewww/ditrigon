@@ -1329,24 +1329,54 @@ dcc_http_proxy_traverse (GIOChannel *source, GIOCondition condition, struct DCC 
 
 	if (proxy->phase == 0)
 	{
-		char buf[256];
-		char auth_data[128];
-		char auth_data2[68];
-		int n, n2;
+		char *auth_data = NULL;
+		char *auth_plain = NULL;
+		char *connect_req = NULL;
+		gsize request_len;
 
-		n = g_snprintf (buf, sizeof (buf), "CONNECT %s:%d HTTP/1.0\r\n",
-                                          net_ip(dcc->addr), dcc->port);
 		if (prefs.hex_net_proxy_auth)
 		{
-			n2 = g_snprintf (auth_data2, sizeof (auth_data2), "%s:%s",
-							prefs.hex_net_proxy_user, prefs.hex_net_proxy_pass);
-			base64_encode (auth_data, auth_data2, n2);
-			n += g_snprintf (buf+n, sizeof (buf)-n, "Proxy-Authorization: Basic %s\r\n", auth_data);
+			auth_plain = g_strdup_printf ("%s:%s",
+							 prefs.hex_net_proxy_user, prefs.hex_net_proxy_pass);
+			auth_data = g_base64_encode ((const guchar *) auth_plain, strlen (auth_plain));
+			connect_req = g_strdup_printf ("CONNECT %s:%d HTTP/1.0\r\n"
+								   "Proxy-Authorization: Basic %s\r\n"
+								   "\r\n",
+								   net_ip (dcc->addr), dcc->port, auth_data);
 		}
-		n += g_snprintf (buf+n, sizeof (buf)-n, "\r\n");
-		proxy->buffersize = n;
+		else
+		{
+			connect_req = g_strdup_printf ("CONNECT %s:%d HTTP/1.0\r\n\r\n",
+								   net_ip (dcc->addr), dcc->port);
+		}
+
+		if (connect_req == NULL)
+		{
+			g_free (auth_data);
+			g_free (auth_plain);
+			dcc->dccstat = STAT_FAILED;
+			fe_dcc_update (dcc);
+			return TRUE;
+		}
+
+		request_len = strlen (connect_req);
+		if (request_len >= MAX_PROXY_BUFFER)
+		{
+			g_free (connect_req);
+			g_free (auth_data);
+			g_free (auth_plain);
+			PrintText (dcc->serv->front_session, "HTTP\tProxy request is too long.\n");
+			dcc->dccstat = STAT_FAILED;
+			fe_dcc_update (dcc);
+			return TRUE;
+		}
+
 		proxy->bufferused = 0;
-		memcpy (proxy->buffer, buf, proxy->buffersize);
+		proxy->buffersize = (int) request_len;
+		memcpy (proxy->buffer, connect_req, request_len);
+		g_free (connect_req);
+		g_free (auth_data);
+		g_free (auth_plain);
 		dcc->wiotag = fe_input_add (dcc->sok, FIA_WRITE|FIA_EX,
 									dcc_http_proxy_traverse, dcc);
 		++proxy->phase;

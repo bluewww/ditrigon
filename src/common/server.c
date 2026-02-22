@@ -923,7 +923,7 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 		prefs.local_ip = inet_addr (tbuf);
 		break;
 	case '7':						  /* gethostbyname (prefs.hex_net_bind_host) failed */
-		sprintf (outbuf,
+		g_snprintf (outbuf, sizeof (outbuf),
 					_("Cannot resolve hostname %s\nCheck your IP Settings!\n"),
 					prefs.hex_net_bind_host);
 		PrintText (sess, outbuf);
@@ -1330,21 +1330,37 @@ static int
 traverse_http (int print_fd, int sok, char *serverAddr, int port)
 {
 	char buf[512];
-	char auth_data[256];
-	char auth_data2[252];
-	int n, n2;
+	char *auth_data = NULL;
+	char *auth_plain = NULL;
+	char *connect_req = NULL;
+	int n;
 
-	n = g_snprintf (buf, sizeof (buf), "CONNECT %s:%d HTTP/1.0\r\n",
-					  serverAddr, port);
 	if (prefs.hex_net_proxy_auth)
 	{
-		n2 = g_snprintf (auth_data2, sizeof (auth_data2), "%s:%s",
-							prefs.hex_net_proxy_user, prefs.hex_net_proxy_pass);
-		base64_encode (auth_data, auth_data2, n2);
-		n += g_snprintf (buf+n, sizeof (buf)-n, "Proxy-Authorization: Basic %s\r\n", auth_data);
+		auth_plain = g_strdup_printf ("%s:%s",
+							 prefs.hex_net_proxy_user, prefs.hex_net_proxy_pass);
+		auth_data = g_base64_encode ((const guchar *) auth_plain, strlen (auth_plain));
+		connect_req = g_strdup_printf ("CONNECT %s:%d HTTP/1.0\r\n"
+								   "Proxy-Authorization: Basic %s\r\n"
+								   "\r\n",
+								   serverAddr, port, auth_data);
 	}
-	n += g_snprintf (buf+n, sizeof (buf)-n, "\r\n");
-	send (sok, buf, n, 0);
+	else
+	{
+		connect_req = g_strdup_printf ("CONNECT %s:%d HTTP/1.0\r\n\r\n", serverAddr, port);
+	}
+
+	if (connect_req == NULL)
+	{
+		g_free (auth_data);
+		g_free (auth_plain);
+		return 1;
+	}
+
+	send (sok, connect_req, strlen (connect_req), 0);
+	g_free (connect_req);
+	g_free (auth_data);
+	g_free (auth_plain);
 
 	n = http_read_line (print_fd, sok, buf, sizeof (buf));
 	/* "HTTP/1.0 200 OK" */
