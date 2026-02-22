@@ -716,7 +716,7 @@ log_write (session *sess, char *text, time_t ts)
 	if (write (sess->logfd, temp, len) < 0)
 		g_warning ("Failed to write to log");
 	/* lots of scripts/plugins print without a \n at the end */
-	if (temp[len - 1] != '\n')
+	if (len == 0 || temp[len - 1] != '\n')
 		if (write (sess->logfd, "\n", 1) < 0)
 			g_warning ("Failed to write to log");
 	g_free (temp);
