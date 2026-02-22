@@ -402,12 +402,12 @@ servlist_connect (session *sess, ircnet *net, gboolean join)
 
 	if (net->flags & FLAG_USE_GLOBAL)
 	{
-		strcpy (serv->nick, prefs.hex_irc_nick1);
+		safe_strcpy (serv->nick, prefs.hex_irc_nick1, sizeof (serv->nick));
 	}
 	else
 	{
 		if (net->nick)
-			strcpy (serv->nick, net->nick);
+			safe_strcpy (serv->nick, net->nick, sizeof (serv->nick));
 	}
 
 	serv->dont_use_proxy = (net->flags & FLAG_USE_PROXY) ? FALSE : TRUE;
