@@ -3874,23 +3874,50 @@ cmd_userlist (struct session *sess, char *tbuf, char *word[],
 	return TRUE;
 }
 
+static void
+wallchop_flush (multidata *data)
+{
+	gsize len;
+
+	if (!data->i)
+		return;
+
+	len = strlen (data->tbuf);
+	g_snprintf (data->tbuf + len, TBUFSIZE - len, " :[@%s] %s",
+					data->sess->channel, data->reason);
+	data->sess->server->p_raw (data->sess->server, data->tbuf);
+	g_strlcpy (data->tbuf, "NOTICE ", TBUFSIZE);
+	data->i = 0;
+}
+
 static int
 wallchop_cb (struct User *user, multidata *data)
 {
 	if (user->op)
 	{
+		gsize used;
+		gsize nick_len;
+
+		used = strlen (data->tbuf);
+		nick_len = strlen (user->nick);
+
+		if (data->i && used + nick_len + 1 >= TBUFSIZE)
+		{
+			wallchop_flush (data);
+			used = strlen (data->tbuf);
+		}
+
+		if (nick_len >= (TBUFSIZE - used))
+			return TRUE;
+
 		if (data->i)
-			strcat (data->tbuf, ",");
-		strcat (data->tbuf, user->nick);
+			g_strlcat (data->tbuf, ",", TBUFSIZE);
+		g_strlcat (data->tbuf, user->nick, TBUFSIZE);
 		data->i++;
 	}
 	if (data->i == 5)
 	{
-		data->i = 0;
-		sprintf (data->tbuf + strlen (data->tbuf),
-					" :[@%s] %s", data->sess->channel, data->reason);
-		data->sess->server->p_raw (data->sess->server, data->tbuf);
-		strcpy (data->tbuf, "NOTICE ");
+		wallchop_flush (data);
 	}
 
 	return TRUE;
@@ -3905,7 +3932,7 @@ cmd_wallchop (struct session *sess, char *tbuf, char *word[],
 	if (!(*word_eol[2]))
 		return FALSE;
 
-	strcpy (tbuf, "NOTICE ");
+	g_strlcpy (tbuf, "NOTICE ", TBUFSIZE);
 
 	data.reason = word_eol[2];
 	data.tbuf = tbuf;
@@ -3914,11 +3941,7 @@ cmd_wallchop (struct session *sess, char *tbuf, char *word[],
 	tree_foreach (sess->usertree, (tree_traverse_func*)wallchop_cb, &data);
 
 	if (data.i)
-	{
-		sprintf (tbuf + strlen (tbuf),
-					" :[@%s] %s", sess->channel, word_eol[2]);
-		sess->server->p_raw (sess->server, tbuf);
-	}
+		wallchop_flush (&data);
 
 	return TRUE;
 }
