@@ -120,7 +120,6 @@ global_ldflags = []
 test_ldflags = [
   '-Wl,-z,relro',
   '-Wl,-z,now',
-  # mingw
   '-Wl,--nxcompat',
 ]
 
