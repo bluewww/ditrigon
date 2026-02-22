@@ -155,6 +155,7 @@ process_data_init (char *buf, char *cmd, char *word[],
 						 char *word_eol[], gboolean handle_quotes,
 						 gboolean allow_escape_quotes)
 {
+	char * const cmd_end = cmd + strlen (cmd);
 	int wordcount = 2;
 	int space = FALSE;
 	int quote = FALSE;
@@ -195,42 +196,42 @@ process_data_init (char *buf, char *cmd, char *word[],
 				quote = TRUE;
 			cmd++;
 			break;
-		case ' ':
-			if (!quote)
-			{
-				if (!space)
+			case ' ':
+				if (!quote)
 				{
-					buf[j] = 0;
-					j++;
-
-					if (wordcount < PDIWORDS)
+					if (!space)
 					{
-						word[wordcount] = &buf[j];
-						word_eol[wordcount] = cmd + 1;
-						wordcount++;
-					}
+						buf[j] = 0;
+						j++;
 
-					space = TRUE;
+						if (wordcount < PDIWORDS)
+						{
+							word[wordcount] = &buf[j];
+							word_eol[wordcount] = cmd + 1;
+							wordcount++;
+						}
+
+						space = TRUE;
+					}
+					cmd++;
+					break;
 				}
-				cmd++;
-				break;
-			}
-		default:
+			default:
 def:
-			space = FALSE;
-			len = g_utf8_skip[((unsigned char *)cmd)[0]];
-			if (len == 1)
-			{
-				buf[j] = *cmd;
-				j++;
-				cmd++;
-			} else
-			{
-				/* skip past a multi-byte utf8 char */
-				memcpy (buf + j, cmd, len);
-				j += len;
-				cmd += len;
-			}
+				space = FALSE;
+				len = g_utf8_skip[((unsigned char *)cmd)[0]];
+				if (len <= 1 || cmd + len > cmd_end || !g_utf8_validate (cmd, len, NULL))
+				{
+					buf[j] = *cmd;
+					j++;
+					cmd++;
+				} else
+				{
+					/* skip past a multi-byte utf8 char */
+					memcpy (buf + j, cmd, len);
+					j += len;
+					cmd += len;
+				}
 		}
 	}
 }
