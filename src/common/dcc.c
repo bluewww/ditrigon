@@ -68,6 +68,12 @@ static int timeout_timer = 0;
 
 static char *dcctypes[] = { "SEND", "RECV", "CHAT", "CHAT" };
 
+#ifdef O_NOFOLLOW
+#define DCC_OPEN_NOFOLLOW O_NOFOLLOW
+#else
+#define DCC_OPEN_NOFOLLOW 0
+#endif
+
 struct dccstat_info dccstat[] = {
 	{N_("Waiting"), 1 /*black */ },
 	{N_("Active"), 12 /*cyan */ },
@@ -732,8 +738,8 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 
 		if (dcc->resumable)
 		{
-			gchar *filename_fs = g_filename_from_utf8(dcc->destfile, -1, NULL, NULL, NULL);
-			dcc->fp = g_open(dcc->destfile, O_WRONLY | O_APPEND | OFLAGS, 0);
+			gchar *filename_fs = g_filename_from_utf8 (dcc->destfile, -1, NULL, NULL, NULL);
+			dcc->fp = g_open (filename_fs, O_WRONLY | O_APPEND | OFLAGS | DCC_OPEN_NOFOLLOW, 0);
 			g_free (filename_fs);
 
 			dcc->pos = dcc->resumable;
@@ -757,12 +763,14 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 				dcc->destfile = g_strdup (buf);
 
 				EMIT_SIGNAL (XP_TE_DCCRENAME, dcc->serv->front_session,
-								 old, dcc->destfile, NULL, NULL, 0);
+							 old, dcc->destfile, NULL, NULL, 0);
 				g_free (old);
 			}
 
 			filename_fs = g_filename_from_utf8 (dcc->destfile, -1, NULL, NULL, NULL);
-			dcc->fp = g_open (filename_fs, OFLAGS | O_TRUNC | O_WRONLY | O_CREAT, prefs.hex_dcc_permissions);
+			dcc->fp = g_open (filename_fs,
+							  OFLAGS | O_TRUNC | O_WRONLY | O_CREAT | DCC_OPEN_NOFOLLOW,
+							  prefs.hex_dcc_permissions);
 			g_free (filename_fs);
 		}
 	}
