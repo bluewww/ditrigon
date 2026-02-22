@@ -147,6 +147,21 @@ if get_option('fuzz-tests')
   subdir('tests')
 endif
 
+doxygen = find_program('doxygen', required: get_option('docs'))
+if doxygen.found()
+  doxygen_conf = configure_file(
+    input: 'Doxyfile.meson.in',
+    output: 'Doxyfile.meson',
+    configuration: {
+      'SOURCE_ROOT': meson.source_root(),
+      'BUILD_ROOT': meson.build_root(),
+    },
+  )
+  run_target('doxygen',
+    command: [doxygen, doxygen_conf],
+  )
+endif
+
 if cc.get_id() != 'msvc'
   subdir('data')
   subdir('po') # FIXME: build xgettext

@@ -45,7 +45,7 @@ fe_args (int argc, char *argv[])
 		{"url", 0, G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_STRING, &arg_url, N_("Open an irc://server:port/channel?key URL"), "URL"},
 		{"command", 'c', 0, G_OPTION_ARG_STRING, &arg_command, N_("Execute command:"), "COMMAND"},
 #ifdef USE_DBUS
-		{"existing", 'e', 0, G_OPTION_ARG_NONE, &arg_existing, N_("Open URL or execute command in an existing HexChat"), NULL},
+		{"existing", 'e', 0, G_OPTION_ARG_NONE, &arg_existing, N_("Open URL or execute command in an existing Ditrigon"), NULL},
 #endif
 		{"version", 'v', 0, G_OPTION_ARG_NONE, &arg_show_version, N_("Show version information"), NULL},
 		{G_OPTION_REMAINING, '\0', 0, G_OPTION_ARG_STRING_ARRAY, &arg_urls, N_("Open an irc://server:port/channel?key URL"), "URL"},

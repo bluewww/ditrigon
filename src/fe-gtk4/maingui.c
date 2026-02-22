@@ -1356,7 +1356,7 @@ fe_new_window (struct session *sess, int focus)
 	done_intro = 1;
 
 	g_snprintf (buf, sizeof (buf),
-				"HexChat-GTK4 %s\n"
+				"Ditrigon-GTK4 %s\n"
 				"Running on %s\n",
 				PACKAGE_VERSION,
 				get_sys_str (1));

@@ -19,6 +19,9 @@ option('tls', type: 'feature', value: 'enabled',
 option('fuzz-tests', type: 'boolean', value: false,
   description: 'Enable parser fuzz smoke tests (Linux GTK4 + xvfb)'
 )
+option('docs', type: 'feature', value: 'auto',
+  description: 'Build API documentation with Doxygen'
+)
 option('plugin', type: 'boolean',
   description: 'Support for loadable plugins'
 )

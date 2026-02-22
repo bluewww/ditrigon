@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deterministic parser fuzz smoke test for HexChat.
+Deterministic parser fuzz smoke test for Ditrigon.
 
 This is intentionally lightweight and bounded so it can run in CI:
 - exercises IRC message/tag parsing and DCC CTCP handling paths

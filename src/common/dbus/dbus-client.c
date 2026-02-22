@@ -83,7 +83,7 @@ hexchat_remote (void)
 		return;
 	}
 
-	/* Checks if HexChat is already running */
+	/* Checks if Ditrigon is already running */
 	dbus = g_dbus_proxy_new_sync (connection,
 								  G_DBUS_PROXY_FLAGS_NONE,
 								  NULL,
@@ -129,7 +129,7 @@ hexchat_remote (void)
 
 	if (!remote_object)
 	{
-		write_error("Failed to connect to HexChat", &error);
+		write_error("Failed to connect to Ditrigon", &error);
 		g_object_unref (connection);
 		exit (0);
 	}

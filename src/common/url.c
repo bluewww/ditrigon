@@ -169,7 +169,7 @@ url_add (char *urltext, int len)
 	if (prefs.hex_url_grabber_limit > 0 && size >= prefs.hex_url_grabber_limit)
 	{
 		/* the loop is necessary to handle having the limit lowered while
-		   HexChat is running */
+		   Ditrigon is running */
 		size -= prefs.hex_url_grabber_limit;
 		for(; size > 0; size--)
 		{

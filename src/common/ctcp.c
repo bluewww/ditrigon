@@ -133,7 +133,7 @@ ctcp_handle (session *sess, char *to, char *nick, char *ip,
 
 	if (!g_ascii_strcasecmp (msg, "VERSION") && !prefs.hex_irc_hide_version)
 	{
-		g_snprintf (outbuf, sizeof (outbuf), "VERSION HexChat "PACKAGE_VERSION" / %s",
+		g_snprintf (outbuf, sizeof (outbuf), "VERSION Ditrigon "PACKAGE_VERSION" / %s",
 					 get_sys_str (1));
 		serv->p_nctcp (serv, nick, outbuf);
 	}

@@ -695,7 +695,7 @@ chanlist_filereq_done (void *userdata, char *file)
 		return;
 
 	t = time (0);
-	g_snprintf (buf, sizeof (buf), "HexChat Channel List: %s - %s\n",
+	g_snprintf (buf, sizeof (buf), "Ditrigon Channel List: %s - %s\n",
 		serv->servername,
 		ctime (&t));
 	if (write (fh, buf, strlen (buf)) < 0)
