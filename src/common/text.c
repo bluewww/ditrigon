@@ -2274,19 +2274,21 @@ sound_play (const char *file, gboolean quiet)
 											CA_PROP_APPLICATION_ICON_NAME, "hexchat", NULL);
 		}
 
-		if (ca_context_play (ca_con, 0, CA_PROP_MEDIA_FILENAME, wavfile, NULL) != 0)
+			if (ca_context_play (ca_con, 0, CA_PROP_MEDIA_FILENAME, wavfile, NULL) != 0)
 #endif
-		{
-			cmd = g_find_program_in_path ("play");
-	
-			if (cmd)
 			{
-				buf = g_strdup_printf ("%s \"%s\"", cmd, wavfile);
-				hexchat_exec (buf);
-				g_free (buf);
-				g_free (cmd);
+				cmd = g_find_program_in_path ("play");
+
+				if (cmd)
+				{
+					char *quoted_wavfile = g_shell_quote (wavfile);
+					buf = g_strdup_printf ("%s %s", cmd, quoted_wavfile);
+					hexchat_exec (buf);
+					g_free (buf);
+					g_free (quoted_wavfile);
+					g_free (cmd);
+				}
 			}
-		}
 #endif
 	}
 	else
