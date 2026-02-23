@@ -65,6 +65,7 @@ static GHashTable *session_logs;
 static GHashTable *session_buffers;
 static GHashTable *session_buffers_dirty;
 static GHashTable *session_widgets;
+static GHashTable *session_replay_marklast;
 static GHashTable *color_tags;
 static GtkTextTagTable *shared_tag_table;
 static GtkTextTag *tag_stamp;
@@ -2301,6 +2302,7 @@ xtext_show_session_rendered (session *sess)
 	GtkTextIter end;
 	gboolean is_empty;
 	gboolean buffer_dirty;
+	gboolean replay_marklast_pending;
 	int col_px;
 	int stamp_px;
 
@@ -2359,6 +2361,14 @@ xtext_show_session_rendered (session *sess)
 		/* Buffer already has content; just recompute tab stop */
 		col_px = xtext_compute_message_column_px (log ? log->str : "", &stamp_px);
 		xtext_set_message_tab_stop (col_px, stamp_px);
+	}
+
+	replay_marklast_pending = session_replay_marklast &&
+		g_hash_table_contains (session_replay_marklast, sess);
+	if (replay_marklast_pending)
+	{
+		g_hash_table_remove (session_replay_marklast, sess);
+		xtext_scroll_to_end ();
 	}
 }
 
@@ -2519,6 +2529,8 @@ fe_gtk4_xtext_init (void)
 	if (!session_widgets)
 		session_widgets = g_hash_table_new_full (g_direct_hash, g_direct_equal,
 			NULL, session_widget_free);
+	if (!session_replay_marklast)
+		session_replay_marklast = g_hash_table_new (g_direct_hash, g_direct_equal);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
 	xtext_create_shared_tag_table ();
@@ -2556,6 +2568,11 @@ fe_gtk4_xtext_cleanup (void)
 	{
 		g_hash_table_unref (session_widgets);
 		session_widgets = NULL;
+	}
+	if (session_replay_marklast)
+	{
+		g_hash_table_unref (session_replay_marklast);
+		session_replay_marklast = NULL;
 	}
 	if (color_tags)
 	{
@@ -2786,6 +2803,24 @@ fe_gtk4_xtext_force_scroll_to_end (void)
 }
 
 void
+fe_gtk4_xtext_set_marker_last (session *sess)
+{
+	if (!sess || !is_session (sess))
+		return;
+
+	if (session_replay_marklast)
+		g_hash_table_insert (session_replay_marklast, sess, GINT_TO_POINTER (TRUE));
+
+	/* If the replayed session is currently visible, apply immediately. */
+	if (sess == current_tab && log_view)
+	{
+		xtext_scroll_to_end ();
+		if (session_replay_marklast)
+			g_hash_table_remove (session_replay_marklast, sess);
+	}
+}
+
+void
 fe_gtk4_xtext_show_session (session *sess)
 {
 	xtext_show_session_rendered (sess);
@@ -2804,6 +2839,9 @@ fe_gtk4_xtext_remove_session (session *sess)
 
 	if (session_buffers_dirty)
 		g_hash_table_remove (session_buffers_dirty, sess);
+
+	if (session_replay_marklast)
+		g_hash_table_remove (session_replay_marklast, sess);
 
 	if (session_widgets)
 	{

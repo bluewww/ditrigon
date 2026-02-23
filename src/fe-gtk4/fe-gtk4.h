@@ -84,6 +84,7 @@ GtkWidget *fe_gtk4_xtext_create_widget (void);
 void fe_gtk4_xtext_append_for_session (session *sess, const char *text);
 void fe_gtk4_xtext_show_session (session *sess);
 void fe_gtk4_xtext_force_scroll_to_end (void);
+void fe_gtk4_xtext_set_marker_last (session *sess);
 void fe_gtk4_xtext_remove_session (session *sess);
 void fe_gtk4_xtext_clear_session (session *sess, int lines);
 const char *fe_gtk4_xtext_get_session_text (session *sess);

@@ -1351,6 +1351,8 @@ fe_new_window (struct session *sess, int focus)
 		g_idle_add (fe_idle, NULL);
 #endif
 
+	sess->scrollback_replay_marklast = fe_gtk4_xtext_set_marker_last;
+
 	if (done_intro)
 		return;
 	done_intro = 1;
