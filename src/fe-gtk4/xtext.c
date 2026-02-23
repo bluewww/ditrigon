@@ -89,11 +89,13 @@ static double xtext_secondary_pending_x;
 static double xtext_secondary_pending_y;
 static guint xtext_resize_tick_id;
 static guint xtext_resize_idle_id;
+static guint xtext_scroll_to_end_idle_id;
 static int xtext_last_view_width;
 static session *xtext_render_session;
 static GtkWidget *xtext_stack;
 static GtkWidget *xtext_empty_scroll;
 static GtkWidget *xtext_empty_view;
+static GtkWidget *xtext_scroll_to_end_view;
 
 static void xtext_render_raw_append (GtkTextBuffer *buf, const char *raw);
 static gboolean xtext_is_at_end (void);
@@ -104,6 +106,8 @@ static GtkTextBuffer *xtext_create_buffer_with_marks (void);
 static void xtext_setup_view_controllers (GtkWidget *view);
 static HcSessionWidget *session_widget_ensure (session *sess);
 static void session_buffer_mark_all_dirty (void);
+static void xtext_scroll_to_end_idle_finish (void);
+static void xtext_scroll_to_end_idle_cancel (void);
 
 static gboolean
 xtext_is_space_char (gunichar ch)
@@ -2191,6 +2195,21 @@ xtext_render_raw_append (GtkTextBuffer *buf, const char *raw)
 	xtext_render_raw_at_iter (buf, &iter, raw ? raw : "");
 }
 
+static void
+xtext_scroll_to_end_idle_finish (void)
+{
+	xtext_scroll_to_end_idle_id = 0;
+	xtext_scroll_to_end_view = NULL;
+}
+
+static void
+xtext_scroll_to_end_idle_cancel (void)
+{
+	if (xtext_scroll_to_end_idle_id != 0)
+		g_source_remove (xtext_scroll_to_end_idle_id);
+	xtext_scroll_to_end_idle_finish ();
+}
+
 static gboolean
 scroll_to_end_idle (gpointer data)
 {
@@ -2198,18 +2217,28 @@ scroll_to_end_idle (gpointer data)
 	GtkTextBuffer *buffer;
 	GtkTextMark *mark;
 
+	/* If the requested view is no longer the active one, drop the idle.
+	 * Hidden stack children never gain a size allocation, so continuing
+	 * would spin forever. */
+	if (!view || GTK_WIDGET (view) != log_view)
+	{
+		xtext_scroll_to_end_idle_finish ();
+		return G_SOURCE_REMOVE;
+	}
+
 	/* Wait until the widget has a valid allocation before scrolling,
 	 * otherwise the scrollbar's internal GtkGizmo may be snapshotted
 	 * before it has been allocated. */
-	if (gtk_widget_get_width (GTK_WIDGET (view)) <= 0)
+	if (!gtk_widget_get_mapped (GTK_WIDGET (view)) ||
+		gtk_widget_get_width (GTK_WIDGET (view)) <= 0)
 		return G_SOURCE_CONTINUE;
 
 	buffer = gtk_text_view_get_buffer (view);
 	mark = gtk_text_buffer_get_mark (buffer, "end");
+	if (mark)
+		gtk_text_view_scroll_mark_onscreen (view, mark);
 
-	gtk_text_view_scroll_mark_onscreen (view, mark);
-
-	/* run once */
+	xtext_scroll_to_end_idle_finish ();
 	return G_SOURCE_REMOVE;
 }
 
@@ -2225,8 +2254,17 @@ xtext_scroll_to_end (void)
 	if (!mark)
 		return;
 
+	if (xtext_scroll_to_end_idle_id != 0)
+	{
+		if (xtext_scroll_to_end_view == log_view)
+			return;
+
+		xtext_scroll_to_end_idle_cancel ();
+	}
+
 	/* Schedule restore in idle to avoid races with widget allocation. */
-	g_idle_add (scroll_to_end_idle, log_view);
+	xtext_scroll_to_end_view = log_view;
+	xtext_scroll_to_end_idle_id = g_idle_add (scroll_to_end_idle, log_view);
 }
 
 /* check if we are scrolled to the bottom */
@@ -2489,9 +2527,11 @@ fe_gtk4_xtext_init (void)
 	xtext_stamp_col_px = 0;
 	xtext_message_col_px = 0;
 	xtext_render_session = NULL;
+	xtext_scroll_to_end_idle_id = 0;
 	xtext_stack = NULL;
 	xtext_empty_scroll = NULL;
 	xtext_empty_view = NULL;
+	xtext_scroll_to_end_view = NULL;
 }
 
 void
@@ -2553,6 +2593,7 @@ fe_gtk4_xtext_cleanup (void)
 		g_source_remove (xtext_resize_idle_id);
 		xtext_resize_idle_id = 0;
 	}
+	xtext_scroll_to_end_idle_cancel ();
 	if (xtext_stack && xtext_resize_tick_id != 0)
 	{
 		gtk_widget_remove_tick_callback (xtext_stack, xtext_resize_tick_id);
@@ -2566,6 +2607,7 @@ fe_gtk4_xtext_cleanup (void)
 	xtext_stack = NULL;
 	xtext_empty_scroll = NULL;
 	xtext_empty_view = NULL;
+	xtext_scroll_to_end_view = NULL;
 	log_view = NULL;
 	log_buffer = NULL;
 }
@@ -2588,6 +2630,7 @@ fe_gtk4_xtext_create_widget (void)
 		g_source_remove (xtext_resize_idle_id);
 		xtext_resize_idle_id = 0;
 	}
+	xtext_scroll_to_end_idle_cancel ();
 	xtext_last_view_width = -1;
 
 	builder = fe_gtk4_builder_new_from_resource (XTEXT_UI_PATH);
