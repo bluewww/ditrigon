@@ -2763,13 +2763,24 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	if (log)
 		g_string_append (log, text);
 
-	/* For background sessions, only update the log - don't render to buffer yet.
-	 * This dramatically improves startup performance by deferring all rendering
-	 * until the tab is first viewed. The buffer will be populated on-demand
-	 * in xtext_show_session_rendered(). */
+	/* For background sessions, keep already-rendered buffers live so
+	 * GtkScrolledWindow can preserve precise scroll state across tab switches.
+	 * For unseen/stale sessions, keep deferring full render to first show. */
 	if (sess != current_tab)
 	{
-		session_buffer_set_dirty (sess, TRUE);
+		if (session_buffer_is_dirty (sess))
+			return;
+
+		buf = session_buffers ? g_hash_table_lookup (session_buffers, sess) : NULL;
+		if (!buf)
+		{
+			session_buffer_set_dirty (sess, TRUE);
+			return;
+		}
+
+		xtext_render_session = sess;
+		xtext_render_raw_append (buf, text);
+		xtext_render_session = NULL;
 		return;
 	}
 
