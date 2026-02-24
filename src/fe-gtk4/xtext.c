@@ -40,6 +40,18 @@ typedef struct
 	int stamp_col_px;
 } HcSessionTabMetrics;
 
+typedef struct
+{
+	GString *log;
+	GtkTextBuffer *buffer;
+	HcSessionWidget *widget;
+	gboolean buffer_dirty;
+	gboolean shown_once;
+	gboolean replay_marklast;
+	gboolean has_tab_metrics;
+	HcSessionTabMetrics tab_metrics;
+} HcSessionState;
+
 #define HC_STICKY_BOTTOM_EPSILON_PX 70.0
 #define HC_PREFIX_MAX_CHARS 32
 #define HC_PREFIX_MAX_WORDS 2
@@ -78,13 +90,7 @@ static const guint32 hc_irc_colors_32_98[] =
 	0xbcbcbc, 0xe2e2e2, 0xffffff
 };
 
-static GHashTable *session_logs;
-static GHashTable *session_buffers;
-static GHashTable *session_buffers_dirty;
-static GHashTable *session_widgets;
-static GHashTable *session_shown_once;
-static GHashTable *session_replay_marklast;
-static GHashTable *session_tab_metrics;
+static GHashTable *session_states;
 static GHashTable *color_tags;
 static GtkTextTagTable *shared_tag_table;
 static GtkTextTag *tag_stamp;
@@ -129,6 +135,7 @@ static gboolean xtext_irc_color_to_rgba (int color_index, GdkRGBA *rgba);
 static gboolean xtext_style_color_to_rgba (int style_color, GdkRGBA *rgba);
 static GtkTextBuffer *xtext_create_buffer_with_marks (void);
 static void xtext_setup_view_controllers (GtkWidget *view);
+static void session_widget_free (gpointer data);
 static HcSessionWidget *session_widget_ensure (session *sess);
 static void session_buffer_mark_all_dirty (void);
 static void session_tab_metrics_set (session *sess, int message_col_px, int stamp_col_px);
@@ -1150,119 +1157,161 @@ xtext_motion_leave_cb (GtkEventControllerMotion *controller, gpointer user_data)
 }
 
 static void
-session_log_free (gpointer data)
+session_state_free (gpointer data)
 {
-	if (data)
-		g_string_free ((GString *) data, TRUE);
+	HcSessionState *state;
+
+	state = data;
+	if (!state)
+		return;
+
+	if (state->buffer)
+		g_object_unref (state->buffer);
+	if (state->widget)
+		session_widget_free (state->widget);
+	if (state->log)
+		g_string_free (state->log, TRUE);
+
+	g_free (state);
 }
 
-static void
-session_tab_metrics_free (gpointer data)
+static gboolean
+session_state_is_valid (session *sess)
 {
-	g_free (data);
+	return (sess && is_session (sess)) ? TRUE : FALSE;
+}
+
+static HcSessionState *
+session_state_lookup (session *sess)
+{
+	if (!session_states || !sess)
+		return NULL;
+
+	return g_hash_table_lookup (session_states, sess);
+}
+
+static HcSessionState *
+session_state_ensure (session *sess)
+{
+	HcSessionState *state;
+
+	if (!session_states || !session_state_is_valid (sess))
+		return NULL;
+
+	state = g_hash_table_lookup (session_states, sess);
+	if (state)
+		return state;
+
+	state = g_new0 (HcSessionState, 1);
+	g_hash_table_insert (session_states, sess, state);
+
+	return state;
 }
 
 static void
 session_tab_metrics_set (session *sess, int message_col_px, int stamp_col_px)
 {
-	HcSessionTabMetrics *metrics;
+	HcSessionState *state;
 
-	if (!session_tab_metrics || !sess || !is_session (sess))
+	state = session_state_ensure (sess);
+	if (!state)
 		return;
 
-	metrics = g_hash_table_lookup (session_tab_metrics, sess);
-	if (!metrics)
-	{
-		metrics = g_new0 (HcSessionTabMetrics, 1);
-		g_hash_table_insert (session_tab_metrics, sess, metrics);
-	}
-
-	metrics->message_col_px = message_col_px;
-	metrics->stamp_col_px = stamp_col_px;
+	state->tab_metrics.message_col_px = message_col_px;
+	state->tab_metrics.stamp_col_px = stamp_col_px;
+	state->has_tab_metrics = TRUE;
 }
 
 static gboolean
 session_tab_metrics_get (session *sess, int *message_col_px, int *stamp_col_px)
 {
-	HcSessionTabMetrics *metrics;
+	HcSessionState *state;
 
-	if (!session_tab_metrics || !sess || !is_session (sess))
+	if (!session_state_is_valid (sess))
 		return FALSE;
 
-	metrics = g_hash_table_lookup (session_tab_metrics, sess);
-	if (!metrics)
+	state = session_state_lookup (sess);
+	if (!state || !state->has_tab_metrics)
 		return FALSE;
 
 	if (message_col_px)
-		*message_col_px = metrics->message_col_px;
+		*message_col_px = state->tab_metrics.message_col_px;
 	if (stamp_col_px)
-		*stamp_col_px = metrics->stamp_col_px;
+		*stamp_col_px = state->tab_metrics.stamp_col_px;
 	return TRUE;
 }
 
 static GString *
 session_log_ensure (session *sess)
 {
-	GString *log;
+	HcSessionState *state;
 
-	if (!session_logs || !sess || !is_session (sess))
+	state = session_state_ensure (sess);
+	if (!state)
 		return NULL;
 
-	log = g_hash_table_lookup (session_logs, sess);
-	if (log)
-		return log;
+	if (state->log)
+		return state->log;
 
-	log = g_string_new ("");
-	g_hash_table_insert (session_logs, sess, log);
-	return log;
-}
-
-static void
-session_buffer_free (gpointer data)
-{
-	if (data)
-		g_object_unref ((GtkTextBuffer *) data);
+	state->log = g_string_new ("");
+	return state->log;
 }
 
 static GtkTextBuffer *
 session_buffer_ensure (session *sess)
 {
+	HcSessionState *state;
 	GtkTextBuffer *buf;
 
-	if (!session_buffers || !shared_tag_table || !sess || !is_session (sess))
+	if (!shared_tag_table)
 		return NULL;
 
-	buf = g_hash_table_lookup (session_buffers, sess);
-	if (buf)
-		return buf;
+	state = session_state_ensure (sess);
+	if (!state)
+		return NULL;
+
+	if (state->buffer)
+		return state->buffer;
 
 	buf = xtext_create_buffer_with_marks ();
 	if (!buf)
 		return NULL;
 
-	g_hash_table_insert (session_buffers, sess, buf);
+	state->buffer = buf;
 	return buf;
 }
 
 static gboolean
 session_buffer_is_dirty (session *sess)
 {
-	if (!session_buffers_dirty || !sess || !is_session (sess))
+	HcSessionState *state;
+
+	if (!session_state_is_valid (sess))
 		return FALSE;
 
-	return g_hash_table_contains (session_buffers_dirty, sess);
+	state = session_state_lookup (sess);
+	return state ? state->buffer_dirty : FALSE;
 }
 
 static void
 session_buffer_set_dirty (session *sess, gboolean dirty)
 {
-	if (!session_buffers_dirty || !sess || !is_session (sess))
+	HcSessionState *state;
+
+	if (!session_state_is_valid (sess))
 		return;
 
 	if (dirty)
-		g_hash_table_insert (session_buffers_dirty, sess, GINT_TO_POINTER (TRUE));
-	else
-		g_hash_table_remove (session_buffers_dirty, sess);
+	{
+		state = session_state_ensure (sess);
+		if (state)
+			state->buffer_dirty = TRUE;
+		return;
+	}
+
+	state = session_state_lookup (sess);
+	if (state)
+		state->buffer_dirty = FALSE;
 }
 
 static void
@@ -1272,15 +1321,82 @@ session_buffer_mark_all_dirty (void)
 	gpointer key;
 	gpointer value;
 
-	if (!session_buffers_dirty || !session_buffers)
+	if (!session_states)
 		return;
 
-	g_hash_table_iter_init (&iter, session_buffers);
+	g_hash_table_iter_init (&iter, session_states);
 	while (g_hash_table_iter_next (&iter, &key, &value))
 	{
-		(void) value;
-		g_hash_table_insert (session_buffers_dirty, key, GINT_TO_POINTER (TRUE));
+		HcSessionState *state;
+
+		(void) key;
+		state = value;
+		if (!state || !state->buffer)
+			continue;
+
+		state->buffer_dirty = TRUE;
 	}
+}
+
+static void
+session_replay_marklast_set (session *sess, gboolean replay_marklast)
+{
+	HcSessionState *state;
+
+	if (replay_marklast)
+	{
+		state = session_state_ensure (sess);
+		if (state)
+			state->replay_marklast = TRUE;
+		return;
+	}
+
+	state = session_state_lookup (sess);
+	if (state)
+		state->replay_marklast = FALSE;
+}
+
+static gboolean
+session_replay_marklast_get (session *sess)
+{
+	HcSessionState *state;
+
+	if (!session_state_is_valid (sess))
+		return FALSE;
+
+	state = session_state_lookup (sess);
+	return state ? state->replay_marklast : FALSE;
+}
+
+static gboolean
+session_shown_once_get (session *sess)
+{
+	HcSessionState *state;
+
+	if (!session_state_is_valid (sess))
+		return FALSE;
+
+	state = session_state_lookup (sess);
+	return state ? state->shown_once : FALSE;
+}
+
+static void
+session_shown_once_set (session *sess, gboolean shown_once)
+{
+	HcSessionState *state;
+
+	state = session_state_ensure (sess);
+	if (state)
+		state->shown_once = shown_once;
+}
+
+static void
+session_remove (session *sess)
+{
+	if (!session_states || !sess)
+		return;
+
+	g_hash_table_remove (session_states, sess);
 }
 
 static GtkTextBuffer *
@@ -1355,16 +1471,21 @@ session_widget_free (gpointer data)
 static HcSessionWidget *
 session_widget_ensure (session *sess)
 {
+	HcSessionState *state;
 	HcSessionWidget *widget;
 	GtkBuilder *builder;
 	GtkWidget *scroll;
 	GtkWidget *view;
 	GtkTextBuffer *buf;
 
-	if (!session_widgets || !xtext_stack || !sess || !is_session (sess))
+	if (!xtext_stack)
 		return NULL;
 
-	widget = g_hash_table_lookup (session_widgets, sess);
+	state = session_state_ensure (sess);
+	if (!state)
+		return NULL;
+
+	widget = state->widget;
 	if (widget)
 		return widget;
 
@@ -1389,7 +1510,7 @@ session_widget_ensure (session *sess)
 		gtk_text_view_set_buffer (GTK_TEXT_VIEW (view), buf);
 
 	gtk_stack_add_child (GTK_STACK (xtext_stack), scroll);
-	g_hash_table_insert (session_widgets, sess, widget);
+	state->widget = widget;
 	return widget;
 }
 
@@ -2393,9 +2514,8 @@ scroll_to_end_idle (gpointer data)
 			GTK_WIDGET (view), buffer);
 		gtk_text_view_scroll_mark_onscreen (view, mark);
 
-		if (xtext_scroll_to_end_replay_session && session_replay_marklast)
-			g_hash_table_remove (session_replay_marklast,
-				xtext_scroll_to_end_replay_session);
+		if (xtext_scroll_to_end_replay_session)
+			session_replay_marklast_set (xtext_scroll_to_end_replay_session, FALSE);
 	}
 	else
 	{
@@ -2534,6 +2654,7 @@ xtext_should_stick_to_end (void)
 static void
 xtext_show_session_rendered (session *sess)
 {
+	HcSessionState *state;
 	HcSessionWidget *widget;
 	GtkTextBuffer *buf;
 	GString *log;
@@ -2579,9 +2700,9 @@ xtext_show_session_rendered (session *sess)
 	if (!widget || !buf)
 		return;
 
-	log = session_logs ? g_hash_table_lookup (session_logs, sess) : NULL;
-	first_show = session_shown_once ?
-		!g_hash_table_contains (session_shown_once, sess) : TRUE;
+	state = session_state_lookup (sess);
+	log = state ? state->log : NULL;
+	first_show = session_shown_once_get (sess) ? FALSE : TRUE;
 
 	log_view = widget->view;
 	log_buffer = buf;
@@ -2627,11 +2748,9 @@ xtext_show_session_rendered (session *sess)
 		}
 	}
 
-	if (session_shown_once)
-		g_hash_table_insert (session_shown_once, sess, GINT_TO_POINTER (TRUE));
+	session_shown_once_set (sess, TRUE);
 
-	replay_marklast_pending = session_replay_marklast &&
-		g_hash_table_contains (session_replay_marklast, sess);
+	replay_marklast_pending = session_replay_marklast_get (sess);
 	if (replay_marklast_pending)
 	{
 		xtext_scroll_debug_log_state ("show-session-replay-marklast", sess,
@@ -2700,15 +2819,19 @@ xtext_apply_font_pref (void)
 			prefs.hex_text_wordwrap ? GTK_WRAP_WORD_CHAR : GTK_WRAP_NONE);
 	}
 
-	if (session_widgets)
+	if (session_states)
 	{
-		g_hash_table_iter_init (&iter, session_widgets);
+		g_hash_table_iter_init (&iter, session_states);
 		while (g_hash_table_iter_next (&iter, &key, &value))
 		{
+			HcSessionState *state;
 			HcSessionWidget *widget;
 
 			(void) key;
-			widget = value;
+			state = value;
+			if (!state)
+				continue;
+			widget = state->widget;
 			if (!widget || !widget->view)
 				continue;
 			gtk_text_view_set_monospace (GTK_TEXT_VIEW (widget->view), desc ? FALSE : TRUE);
@@ -2784,24 +2907,9 @@ session_log_trim_tail_lines (GString *log, int lines)
 void
 fe_gtk4_xtext_init (void)
 {
-	if (!session_logs)
-		session_logs = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-			NULL, session_log_free);
-	if (!session_buffers)
-		session_buffers = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-			NULL, session_buffer_free);
-	if (!session_buffers_dirty)
-		session_buffers_dirty = g_hash_table_new (g_direct_hash, g_direct_equal);
-	if (!session_widgets)
-		session_widgets = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-			NULL, session_widget_free);
-	if (!session_shown_once)
-		session_shown_once = g_hash_table_new (g_direct_hash, g_direct_equal);
-	if (!session_replay_marklast)
-		session_replay_marklast = g_hash_table_new (g_direct_hash, g_direct_equal);
-	if (!session_tab_metrics)
-		session_tab_metrics = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-			NULL, session_tab_metrics_free);
+	if (!session_states)
+		session_states = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+			NULL, session_state_free);
 	if (!color_tags)
 		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
 	xtext_create_shared_tag_table ();
@@ -2821,40 +2929,10 @@ fe_gtk4_xtext_init (void)
 void
 fe_gtk4_xtext_cleanup (void)
 {
-	if (session_buffers)
+	if (session_states)
 	{
-		g_hash_table_unref (session_buffers);
-		session_buffers = NULL;
-	}
-	if (session_logs)
-	{
-		g_hash_table_unref (session_logs);
-		session_logs = NULL;
-	}
-	if (session_buffers_dirty)
-	{
-		g_hash_table_unref (session_buffers_dirty);
-		session_buffers_dirty = NULL;
-	}
-	if (session_widgets)
-	{
-		g_hash_table_unref (session_widgets);
-		session_widgets = NULL;
-	}
-	if (session_shown_once)
-	{
-		g_hash_table_unref (session_shown_once);
-		session_shown_once = NULL;
-	}
-	if (session_replay_marklast)
-	{
-		g_hash_table_unref (session_replay_marklast);
-		session_replay_marklast = NULL;
-	}
-	if (session_tab_metrics)
-	{
-		g_hash_table_unref (session_tab_metrics);
-		session_tab_metrics = NULL;
+		g_hash_table_unref (session_states);
+		session_states = NULL;
 	}
 	if (color_tags)
 	{
@@ -3010,6 +3088,7 @@ fe_gtk4_append_log_text (const char *text)
 void
 fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 {
+	HcSessionState *state;
 	GString *log;
 	GtkTextBuffer *buf;
 	HcSessionWidget *widget;
@@ -3036,7 +3115,8 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 		if (session_buffer_is_dirty (sess))
 			return;
 
-		buf = session_buffers ? g_hash_table_lookup (session_buffers, sess) : NULL;
+		state = session_state_lookup (sess);
+		buf = state ? state->buffer : NULL;
 		if (!buf)
 		{
 			session_buffer_set_dirty (sess, TRUE);
@@ -3118,8 +3198,7 @@ fe_gtk4_xtext_set_marker_last (session *sess)
 
 	xtext_scroll_debug_log_state ("set-marker-last", sess, log_view, log_buffer);
 
-	if (session_replay_marklast)
-		g_hash_table_insert (session_replay_marklast, sess, GINT_TO_POINTER (TRUE));
+	session_replay_marklast_set (sess, TRUE);
 
 	/* If the replayed session is currently visible, apply immediately. */
 	if (sess == current_tab && log_view)
@@ -3139,64 +3218,49 @@ fe_gtk4_xtext_show_session (session *sess)
 void
 fe_gtk4_xtext_remove_session (session *sess)
 {
+	HcSessionState *state;
+	HcSessionWidget *widget;
 	GtkTextBuffer *buf;
 
 	if (!sess)
 		return;
 
-	if (session_logs)
-		g_hash_table_remove (session_logs, sess);
+	state = session_state_lookup (sess);
+	if (!state)
+		return;
 
-	if (session_buffers_dirty)
-		g_hash_table_remove (session_buffers_dirty, sess);
-
-	if (session_shown_once)
-		g_hash_table_remove (session_shown_once, sess);
-
-	if (session_replay_marklast)
-		g_hash_table_remove (session_replay_marklast, sess);
-
-	if (session_tab_metrics)
-		g_hash_table_remove (session_tab_metrics, sess);
-
-	if (session_widgets)
+	widget = state->widget;
+	if (widget && widget->view == log_view)
 	{
-		HcSessionWidget *widget;
-
-		widget = g_hash_table_lookup (session_widgets, sess);
-		if (widget && widget->view == log_view)
-		{
-			log_view = xtext_empty_view;
-			log_buffer = xtext_empty_view ?
-				gtk_text_view_get_buffer (GTK_TEXT_VIEW (xtext_empty_view)) : NULL;
-			if (xtext_stack && xtext_empty_scroll)
-				gtk_stack_set_visible_child (GTK_STACK (xtext_stack), xtext_empty_scroll);
-			xtext_stamp_col_px = 0;
-			xtext_message_col_px = 0;
-		}
-		if (widget && widget->view)
-			fe_gtk4_menu_close_context_popovers (NULL);
-		g_hash_table_remove (session_widgets, sess);
+		log_view = xtext_empty_view;
+		log_buffer = xtext_empty_view ?
+			gtk_text_view_get_buffer (GTK_TEXT_VIEW (xtext_empty_view)) : NULL;
+		if (xtext_stack && xtext_empty_scroll)
+			gtk_stack_set_visible_child (GTK_STACK (xtext_stack), xtext_empty_scroll);
+		xtext_stamp_col_px = 0;
+		xtext_message_col_px = 0;
 	}
+	if (widget && widget->view)
+		fe_gtk4_menu_close_context_popovers (NULL);
 
-	if (session_buffers)
-	{
-		buf = g_hash_table_lookup (session_buffers, sess);
-		if (buf && buf == log_buffer)
-			log_buffer = NULL;
-		g_hash_table_remove (session_buffers, sess);
-	}
+	buf = state->buffer;
+	if (buf && buf == log_buffer)
+		log_buffer = NULL;
+
+	session_remove (sess);
 }
 
 const char *
 fe_gtk4_xtext_get_session_text (session *sess)
 {
+	HcSessionState *state;
 	GString *log;
 
-	if (!session_logs || !sess)
+	if (!session_states || !sess)
 		return "";
 
-	log = g_hash_table_lookup (session_logs, sess);
+	state = session_state_lookup (sess);
+	log = state ? state->log : NULL;
 	return log ? log->str : "";
 }
 
