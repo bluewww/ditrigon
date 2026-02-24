@@ -151,6 +151,10 @@ static void xtext_maybe_render_visible_session (session *sess, HcSessionState *s
 	GtkTextBuffer *buf, HcSessionWidget *widget, gboolean first_show);
 static void xtext_maybe_replay_marklast (session *sess, HcSessionState *state,
 	HcSessionWidget *widget, GtkTextBuffer *buf);
+static gboolean xtext_append_background_session (session *sess, HcSessionState *state,
+	const char *text);
+static void xtext_append_visible_session (session *sess, HcSessionState *state,
+	const char *text);
 static gboolean xtext_scroll_debug_enabled (void);
 static const char *xtext_scroll_debug_session_label (session *sess);
 static void xtext_scroll_debug_log_state (const char *event, session *sess,
@@ -3089,63 +3093,51 @@ fe_gtk4_append_log_text (const char *text)
 		xtext_scroll_to_end ();
 }
 
-void
-fe_gtk4_xtext_append_for_session (session *sess, const char *text)
+static gboolean
+xtext_append_background_session (session *sess, HcSessionState *state, const char *text)
 {
-	HcSessionState *state;
+	GtkTextBuffer *buf;
+	int added_col_px;
+	int added_stamp_px;
+	int cached_col_px;
+	int cached_stamp_px;
+
+	if (!sess || sess == current_tab)
+		return FALSE;
+
+	if (session_buffer_is_dirty (sess))
+		return TRUE;
+
+	buf = state ? state->buffer : NULL;
+	if (!buf)
+	{
+		session_buffer_set_dirty (sess, TRUE);
+		return TRUE;
+	}
+
+	added_col_px = xtext_compute_message_column_px (text, &added_stamp_px);
+	if (session_tab_metrics_get (sess, &cached_col_px, &cached_stamp_px))
+		session_tab_metrics_set (sess, MAX (added_col_px, cached_col_px),
+			MAX (added_stamp_px, cached_stamp_px));
+	else
+		session_tab_metrics_set (sess, added_col_px, added_stamp_px);
+
+	xtext_render_session = sess;
+	xtext_render_raw_append (buf, text);
+	xtext_render_session = NULL;
+
+	return TRUE;
+}
+
+static void
+xtext_append_visible_session (session *sess, HcSessionState *state, const char *text)
+{
 	GString *log;
 	GtkTextBuffer *buf;
 	HcSessionWidget *widget;
 	gboolean stick_to_end;
 
-	if (!text || !text[0])
-		return;
-
-	if (!sess || !is_session (sess))
-	{
-		fe_gtk4_append_log_text (text);
-		return;
-	}
-
-	log = session_log_ensure (sess);
-	if (log)
-		g_string_append (log, text);
-
-	/* For background sessions, keep already-rendered buffers live so
-	 * GtkScrolledWindow can preserve precise scroll state across tab switches.
-	 * For unseen/stale sessions, keep deferring full render to first show. */
-	if (sess != current_tab)
-	{
-		if (session_buffer_is_dirty (sess))
-			return;
-
-		state = session_state_lookup (sess);
-		buf = state ? state->buffer : NULL;
-		if (!buf)
-		{
-			session_buffer_set_dirty (sess, TRUE);
-			return;
-		}
-
-		{
-			int added_col_px;
-			int added_stamp_px;
-			int cached_col_px;
-			int cached_stamp_px;
-
-			added_col_px = xtext_compute_message_column_px (text, &added_stamp_px);
-			if (session_tab_metrics_get (sess, &cached_col_px, &cached_stamp_px))
-				session_tab_metrics_set (sess, MAX (added_col_px, cached_col_px),
-					MAX (added_stamp_px, cached_stamp_px));
-			else
-				session_tab_metrics_set (sess, added_col_px, added_stamp_px);
-		}
-
-		xtext_render_session = sess;
-		xtext_render_raw_append (buf, text);
-		xtext_render_session = NULL;
-		return;
-	}
+	log = state ? state->log : NULL;
 
 	/* Only render for the currently visible session */
 	widget = session_widget_ensure (sess);
@@ -3186,6 +3178,35 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 
 	if (stick_to_end)
 		xtext_scroll_to_end ();
+}
+
+void
+fe_gtk4_xtext_append_for_session (session *sess, const char *text)
+{
+	HcSessionState *state;
+	GString *log;
+
+	if (!text || !text[0])
+		return;
+
+	if (!sess || !is_session (sess))
+	{
+		fe_gtk4_append_log_text (text);
+		return;
+	}
+
+	log = session_log_ensure (sess);
+	if (log)
+		g_string_append (log, text);
+	state = session_state_lookup (sess);
+
+	/* For background sessions, keep already-rendered buffers live so
+	 * GtkScrolledWindow can preserve precise scroll state across tab switches.
+	 * For unseen/stale sessions, keep deferring full render to first show. */
+	if (xtext_append_background_session (sess, state, text))
+		return;
+
+	xtext_append_visible_session (sess, state, text);
 }
 
 void
