@@ -165,6 +165,7 @@ static gsize xtext_style_parse_color_control (const char *text, gsize len, gsize
 	HcTextStyle *style);
 static gsize xtext_style_skip_hex_color_control (const char *text, gsize len, gsize index,
 	HcTextStyle *style);
+static void xtext_reset_interaction_state_for_view_switch (void);
 
 static inline gboolean
 xtext_session_is_valid (const session *sess)
@@ -2630,6 +2631,17 @@ xtext_maybe_replay_marklast (session *sess, HcSessionState *state, HcSessionWidg
 }
 
 static void
+xtext_reset_interaction_state_for_view_switch (void)
+{
+	if (log_view)
+		gtk_widget_set_cursor_from_name (log_view, NULL);
+	xtext_link_hover_clear ();
+	xtext_search_mark = NULL;
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
+}
+
+static void
 xtext_show_session_rendered (session *sess)
 {
 	HcSessionState *state;
@@ -2641,12 +2653,7 @@ xtext_show_session_rendered (session *sess)
 		return;
 
 	/* Clear hover/search state — marks belong to the old buffer */
-	if (log_view)
-		gtk_widget_set_cursor_from_name (log_view, NULL);
-	xtext_link_hover_clear ();
-	xtext_search_mark = NULL;
-	xtext_hover_start_mark = NULL;
-	xtext_hover_end_mark = NULL;
+	xtext_reset_interaction_state_for_view_switch ();
 
 	if (!xtext_session_is_valid (sess))
 	{
