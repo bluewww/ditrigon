@@ -162,6 +162,12 @@ static const char *xtext_scroll_debug_session_label (session *sess);
 static void xtext_scroll_debug_log_state (const char *event, session *sess,
 	GtkWidget *view, GtkTextBuffer *buf);
 
+static inline gboolean
+xtext_session_is_valid (const session *sess)
+{
+	return (sess && is_session ((session *) sess)) ? TRUE : FALSE;
+}
+
 static gboolean
 xtext_scroll_debug_enabled (void)
 {
@@ -184,7 +190,7 @@ xtext_scroll_debug_enabled (void)
 static const char *
 xtext_scroll_debug_session_label (session *sess)
 {
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 		return "-";
 
 	if (sess->channel[0])
@@ -315,7 +321,7 @@ xtext_is_nick_trail_delim (gunichar ch)
 static gboolean
 xtext_session_has_nick (session *sess, const char *nick)
 {
-	if (!sess || !is_session (sess) || !nick || !nick[0])
+	if (!xtext_session_is_valid (sess) || !nick || !nick[0])
 		return FALSE;
 
 	if (userlist_find (sess, (char *) nick))
@@ -506,7 +512,7 @@ xtext_consider_session_nick_candidate (session *sess, const char *token,
 	const char *candidate_start;
 	int pass;
 
-	if (!sess || !is_session (sess) || !token || !token_end || !start_ptr || !end_ptr ||
+	if (!xtext_session_is_valid (sess) || !token || !token_end || !start_ptr || !end_ptr ||
 		end_ptr <= start_ptr || !best_start || !best_end || !best_nick ||
 		!best_score || !best_len)
 		return;
@@ -577,7 +583,7 @@ xtext_extract_nick_token (session *sess, const char *token, gsize *start_out, gs
 	if (nick_out)
 		*nick_out = NULL;
 
-	if (!sess || !is_session (sess) || !token || !token[0])
+	if (!xtext_session_is_valid (sess) || !token || !token[0])
 		return FALSE;
 
 	token_end = token + strlen (token);
@@ -673,7 +679,7 @@ xtext_prefix_has_nick (session *sess, const char *prefix, gsize len)
 	candidate = (candidate && candidate[1]) ? (candidate + 1) : trimmed;
 
 	nick = NULL;
-	has_nick = (sess && is_session (sess)) ?
+	has_nick = xtext_session_is_valid (sess) ?
 		xtext_extract_nick_token (sess, candidate, NULL, NULL, &nick) : FALSE;
 	if (!has_nick)
 		has_nick = xtext_extract_nick_token_relaxed (candidate, NULL, NULL, &nick);
@@ -1034,7 +1040,7 @@ xtext_primary_press_cb (GtkGestureClick *gesture, int n_press, double x, double 
 	xtext_primary_pending_clear ();
 
 	sess = current_tab;
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 		return;
 
 	xtext_classify_at_point (GTK_TEXT_VIEW (log_view), sess, x, y, &type, &target, NULL, NULL);
@@ -1082,7 +1088,7 @@ xtext_secondary_press_cb (GtkGestureClick *gesture, int n_press, double x, doubl
 	xtext_secondary_pending_clear ();
 
 	sess = current_tab;
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 		return;
 
 	xtext_classify_at_point (GTK_TEXT_VIEW (log_view), sess, x, y, &type, &target, NULL, NULL);
@@ -1114,7 +1120,7 @@ xtext_secondary_click_cb (GtkGestureClick *gesture, int n_press, double x, doubl
 		return;
 
 	sess = current_tab;
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 	{
 		xtext_secondary_pending_clear ();
 		return;
@@ -1150,7 +1156,7 @@ xtext_motion_cb (GtkEventControllerMotion *controller, double x, double y, gpoin
 		return;
 
 	sess = current_tab;
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 	{
 		gtk_widget_set_cursor_from_name (log_view, NULL);
 		xtext_link_hover_clear ();
@@ -1202,12 +1208,6 @@ session_state_free (gpointer data)
 	g_free (state);
 }
 
-static gboolean
-session_state_is_valid (session *sess)
-{
-	return (sess && is_session (sess)) ? TRUE : FALSE;
-}
-
 static HcSessionState *
 session_state_lookup (session *sess)
 {
@@ -1222,7 +1222,7 @@ session_state_ensure (session *sess)
 {
 	HcSessionState *state;
 
-	if (!session_states || !session_state_is_valid (sess))
+	if (!session_states || !xtext_session_is_valid (sess))
 		return NULL;
 
 	state = g_hash_table_lookup (session_states, sess);
@@ -1254,7 +1254,7 @@ session_tab_metrics_get (session *sess, int *message_col_px, int *stamp_col_px)
 {
 	HcSessionState *state;
 
-	if (!session_state_is_valid (sess))
+	if (!xtext_session_is_valid (sess))
 		return FALSE;
 
 	state = session_state_lookup (sess);
@@ -1313,7 +1313,7 @@ session_buffer_is_dirty (session *sess)
 {
 	HcSessionState *state;
 
-	if (!session_state_is_valid (sess))
+	if (!xtext_session_is_valid (sess))
 		return FALSE;
 
 	state = session_state_lookup (sess);
@@ -1325,7 +1325,7 @@ session_buffer_set_dirty (session *sess, gboolean dirty)
 {
 	HcSessionState *state;
 
-	if (!session_state_is_valid (sess))
+	if (!xtext_session_is_valid (sess))
 		return;
 
 	if (dirty)
@@ -2745,7 +2745,7 @@ xtext_show_session_rendered (session *sess)
 	xtext_hover_start_mark = NULL;
 	xtext_hover_end_mark = NULL;
 
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 	{
 		xtext_show_empty_view (sess);
 		return;
@@ -2773,7 +2773,7 @@ xtext_resize_refresh_idle_cb (gpointer user_data)
 	(void) user_data;
 	xtext_resize_idle_id = 0;
 
-	if (!xtext_stack || !current_tab || !is_session (current_tab))
+	if (!xtext_stack || !xtext_session_is_valid (current_tab))
 		return G_SOURCE_REMOVE;
 
 	/* GtkTextView wrapping updates with allocation changes. */
@@ -3189,7 +3189,7 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	if (!text || !text[0])
 		return;
 
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 	{
 		fe_gtk4_append_log_text (text);
 		return;
@@ -3218,7 +3218,7 @@ fe_gtk4_xtext_force_scroll_to_end (void)
 void
 fe_gtk4_xtext_set_marker_last (session *sess)
 {
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 		return;
 
 	xtext_scroll_debug_log_state ("set-marker-last", sess, log_view, log_buffer);
@@ -3299,7 +3299,7 @@ fe_gtk4_xtext_clear_session (session *sess, int lines)
 	if (!sess)
 		sess = current_tab;
 
-	if (!sess || !is_session (sess))
+	if (!xtext_session_is_valid (sess))
 	{
 		if (lines == 0 && log_buffer)
 			gtk_text_buffer_set_text (log_buffer, "", -1);
