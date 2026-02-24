@@ -156,6 +156,10 @@ static gboolean xtext_append_background_session (session *sess, HcSessionState *
 	const char *text);
 static void xtext_append_visible_session (session *sess, HcSessionState *state,
 	const char *text);
+static void xtext_render_line_columns (GtkTextBuffer *buf, GtkTextIter *iter,
+	const char *line, gsize len, HcLineColumns *cols);
+static void xtext_apply_hanging_tag_for_line (GtkTextBuffer *buf, GtkTextIter *iter,
+	GtkTextMark *line_start_mark, gboolean append_newline, gboolean has_columns);
 
 static inline gboolean
 xtext_session_is_valid (const session *sess)
@@ -2169,56 +2173,57 @@ xtext_render_formatted (GtkTextBuffer *buf, GtkTextIter *iter, const char *text,
 }
 
 static void
-xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsize len, gboolean append_newline)
+xtext_render_line_columns (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsize len,
+	HcLineColumns *cols)
 {
-	HcLineColumns cols;
 	session *render_sess;
 	GtkTextTag *prefix_tag;
-	GtkTextMark *line_start_mark;
+
+	if (!buf || !iter || !cols)
+		return;
+
+	xtext_split_line_columns (line, len, cols);
+	if (!cols->has_columns)
+	{
+		xtext_render_formatted (buf, iter, line, len, NULL);
+		return;
+	}
+
+	if (cols->stamp && cols->stamp_len > 0)
+		xtext_insert_plain_text (buf, iter, cols->stamp, cols->stamp_len, TRUE);
+
+	xtext_insert_plain_char (buf, iter, '\t');
+
+	if (cols->prefix_len > 0)
+	{
+		render_sess = xtext_render_session;
+		if (!xtext_session_is_valid (render_sess))
+			render_sess = current_tab;
+		prefix_tag = NULL;
+		if (tag_nick_column && xtext_prefix_has_nick (render_sess, cols->prefix, cols->prefix_len))
+			prefix_tag = tag_nick_column;
+		xtext_render_formatted (buf, iter, cols->prefix, cols->prefix_len, prefix_tag);
+	}
+
+	if (cols->body && cols->body_len > 0)
+	{
+		xtext_insert_plain_char (buf, iter, '\t');
+		xtext_render_formatted (buf, iter, cols->body, cols->body_len, NULL);
+	}
+}
+
+static void
+xtext_apply_hanging_tag_for_line (GtkTextBuffer *buf, GtkTextIter *iter, GtkTextMark *line_start_mark,
+	gboolean append_newline, gboolean has_columns)
+{
 	GtkTextMark *line_end_mark;
 	GtkTextIter tag_start;
 	GtkTextIter tag_end;
 
-	if (!buf || !iter)
+	if (!buf || !iter || !has_columns || !line_start_mark || !tag_message_hanging)
 		return;
 
-	line_start_mark = NULL;
 	line_end_mark = NULL;
-	if (tag_message_hanging)
-		line_start_mark = gtk_text_buffer_create_mark (buf, NULL, iter, TRUE);
-
-	xtext_split_line_columns (line, len, &cols);
-	if (cols.has_columns)
-	{
-		if (cols.stamp && cols.stamp_len > 0)
-			xtext_insert_plain_text (buf, iter, cols.stamp, cols.stamp_len, TRUE);
-
-		xtext_insert_plain_char (buf, iter, '\t');
-
-		if (cols.prefix_len > 0)
-		{
-			render_sess = xtext_render_session;
-			if (!render_sess || !is_session (render_sess))
-				render_sess = current_tab;
-			prefix_tag = NULL;
-			if (tag_nick_column && xtext_prefix_has_nick (render_sess, cols.prefix, cols.prefix_len))
-				prefix_tag = tag_nick_column;
-			xtext_render_formatted (buf, iter, cols.prefix, cols.prefix_len, prefix_tag);
-		}
-
-		if (cols.body && cols.body_len > 0)
-		{
-			xtext_insert_plain_char (buf, iter, '\t');
-			xtext_render_formatted (buf, iter, cols.body, cols.body_len, NULL);
-		}
-	}
-	else
-		xtext_render_formatted (buf, iter, line, len, NULL);
-
-	if (append_newline)
-		xtext_insert_plain_char (buf, iter, '\n');
-
-	if (cols.has_columns && line_start_mark && tag_message_hanging)
 	{
 		GtkTextIter end_iter;
 
@@ -2226,16 +2231,37 @@ xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsiz
 		if (append_newline)
 			gtk_text_iter_backward_char (&end_iter);
 		line_end_mark = gtk_text_buffer_create_mark (buf, NULL, &end_iter, FALSE);
-		gtk_text_buffer_get_iter_at_mark (buf, &tag_start, line_start_mark);
-		gtk_text_buffer_get_iter_at_mark (buf, &tag_end, line_end_mark);
-		if (gtk_text_iter_compare (&tag_start, &tag_end) < 0)
-			gtk_text_buffer_apply_tag (buf, tag_message_hanging, &tag_start, &tag_end);
 	}
 
+	gtk_text_buffer_get_iter_at_mark (buf, &tag_start, line_start_mark);
+	gtk_text_buffer_get_iter_at_mark (buf, &tag_end, line_end_mark);
+	if (gtk_text_iter_compare (&tag_start, &tag_end) < 0)
+		gtk_text_buffer_apply_tag (buf, tag_message_hanging, &tag_start, &tag_end);
+
+	gtk_text_buffer_delete_mark (buf, line_end_mark);
+}
+
+static void
+xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsize len, gboolean append_newline)
+{
+	HcLineColumns cols;
+	GtkTextMark *line_start_mark;
+
+	if (!buf || !iter)
+		return;
+
+	line_start_mark = NULL;
+	if (tag_message_hanging)
+		line_start_mark = gtk_text_buffer_create_mark (buf, NULL, iter, TRUE);
+
+	xtext_render_line_columns (buf, iter, line, len, &cols);
+
+	if (append_newline)
+		xtext_insert_plain_char (buf, iter, '\n');
+
+	xtext_apply_hanging_tag_for_line (buf, iter, line_start_mark, append_newline, cols.has_columns);
 	if (line_start_mark)
 		gtk_text_buffer_delete_mark (buf, line_start_mark);
-	if (line_end_mark)
-		gtk_text_buffer_delete_mark (buf, line_end_mark);
 }
 
 static void
