@@ -127,7 +127,6 @@ static session *xtext_scroll_to_end_replay_session;
 static int xtext_scroll_debug_enabled_cached = -1;
 
 static void xtext_render_raw_append (GtkTextBuffer *buf, const char *raw);
-static gboolean xtext_is_at_end (void);
 static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
 static void xtext_tabs_to_spaces (char *text);
 static void xtext_palette_color_to_rgba (int color_index, GdkRGBA *rgba);
@@ -141,7 +140,6 @@ static void session_buffer_mark_all_dirty (void);
 static void session_tab_metrics_set (session *sess, int message_col_px, int stamp_col_px);
 static gboolean session_tab_metrics_get (session *sess, int *message_col_px, int *stamp_col_px);
 static gboolean xtext_view_is_at_end (GtkWidget *view);
-static gboolean xtext_should_stick_to_end (void);
 static void xtext_scroll_to_end_idle_finish (void);
 static void xtext_scroll_to_end_idle_cancel (void);
 static void xtext_schedule_scroll_to_end (session *replay_sess);
@@ -165,7 +163,6 @@ static gsize xtext_style_parse_color_control (const char *text, gsize len, gsize
 	HcTextStyle *style);
 static gsize xtext_style_skip_hex_color_control (const char *text, gsize len, gsize index,
 	HcTextStyle *style);
-static void xtext_reset_interaction_state_for_view_switch (void);
 
 static inline gboolean
 xtext_session_is_valid (const session *sess)
@@ -841,12 +838,6 @@ xtext_type_is_interactive (int type)
 		type == WORD_CHANNEL);
 }
 
-static gboolean
-xtext_type_is_context_menu_target (int type)
-{
-	return xtext_type_is_interactive (type);
-}
-
 static void
 xtext_primary_pending_clear (void)
 {
@@ -998,7 +989,7 @@ xtext_secondary_press_cb (GtkGestureClick *gesture, int n_press, double x, doubl
 	if (!target)
 		return;
 
-	if (xtext_type_is_context_menu_target (type))
+	if (xtext_type_is_interactive (type))
 	{
 		xtext_secondary_pending_type = type;
 		xtext_secondary_pending_target = target;
@@ -2539,18 +2530,6 @@ xtext_view_is_at_end (GtkWidget *view)
 	return distance <= HC_STICKY_BOTTOM_EPSILON_PX;
 }
 
-static gboolean
-xtext_is_at_end (void)
-{
-	return xtext_view_is_at_end (log_view);
-}
-
-static gboolean
-xtext_should_stick_to_end (void)
-{
-	return xtext_is_at_end ();
-}
-
 static void
 xtext_show_empty_view (session *sess)
 {
@@ -2631,17 +2610,6 @@ xtext_maybe_replay_marklast (session *sess, HcSessionState *state, HcSessionWidg
 }
 
 static void
-xtext_reset_interaction_state_for_view_switch (void)
-{
-	if (log_view)
-		gtk_widget_set_cursor_from_name (log_view, NULL);
-	xtext_link_hover_clear ();
-	xtext_search_mark = NULL;
-	xtext_hover_start_mark = NULL;
-	xtext_hover_end_mark = NULL;
-}
-
-static void
 xtext_show_session_rendered (session *sess)
 {
 	HcSessionState *state;
@@ -2653,7 +2621,12 @@ xtext_show_session_rendered (session *sess)
 		return;
 
 	/* Clear hover/search state — marks belong to the old buffer */
-	xtext_reset_interaction_state_for_view_switch ();
+	if (log_view)
+		gtk_widget_set_cursor_from_name (log_view, NULL);
+	xtext_link_hover_clear ();
+	xtext_search_mark = NULL;
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
 
 	if (!xtext_session_is_valid (sess))
 	{
@@ -3016,7 +2989,7 @@ fe_gtk4_append_log_text (const char *text)
 		return;
 	}
 
-	stick_to_end = xtext_should_stick_to_end ();
+	stick_to_end = xtext_view_is_at_end (log_view);
 	xtext_render_session = (current_tab && is_session (current_tab)) ? current_tab : NULL;
 	xtext_render_raw_append (log_buffer, text);
 	xtext_render_session = NULL;
@@ -3078,7 +3051,7 @@ xtext_append_visible_session (session *sess, HcSessionState *state, const char *
 
 	log_view = widget->view;
 	log_buffer = buf;
-	stick_to_end = xtext_should_stick_to_end ();
+	stick_to_end = xtext_view_is_at_end (log_view);
 	xtext_render_session = sess;
 
 	if (session_buffer_is_dirty (sess))
