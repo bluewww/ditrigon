@@ -923,6 +923,21 @@ xtext_type_is_url_like (int type)
 	return (type == WORD_URL || type == WORD_HOST || type == WORD_HOST6 || type == WORD_EMAIL);
 }
 
+static gboolean
+xtext_type_is_interactive (int type)
+{
+	return (xtext_type_is_url_like (type) ||
+		type == WORD_NICK ||
+		type == WORD_DIALOG ||
+		type == WORD_CHANNEL);
+}
+
+static gboolean
+xtext_type_is_context_menu_target (int type)
+{
+	return xtext_type_is_interactive (type);
+}
+
 static void
 xtext_primary_pending_clear (void)
 {
@@ -1074,7 +1089,7 @@ xtext_secondary_press_cb (GtkGestureClick *gesture, int n_press, double x, doubl
 	if (!target)
 		return;
 
-	if (xtext_type_is_url_like (type) || type == WORD_NICK || type == WORD_DIALOG || type == WORD_CHANNEL)
+	if (xtext_type_is_context_menu_target (type))
 	{
 		xtext_secondary_pending_type = type;
 		xtext_secondary_pending_target = target;
@@ -1143,7 +1158,7 @@ xtext_motion_cb (GtkEventControllerMotion *controller, double x, double y, gpoin
 	}
 
 	xtext_classify_at_point (GTK_TEXT_VIEW (log_view), sess, x, y, &type, &target, &match_start, &match_end);
-	if (target && (xtext_type_is_url_like (type) || type == WORD_NICK || type == WORD_DIALOG || type == WORD_CHANNEL))
+	if (target && xtext_type_is_interactive (type))
 	{
 		gtk_widget_set_cursor_from_name (log_view, "pointer");
 		xtext_link_hover_set (&match_start, &match_end);
