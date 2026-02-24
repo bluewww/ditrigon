@@ -144,6 +144,8 @@ static gboolean xtext_view_is_at_end (GtkWidget *view);
 static gboolean xtext_should_stick_to_end (void);
 static void xtext_scroll_to_end_idle_finish (void);
 static void xtext_scroll_to_end_idle_cancel (void);
+static void xtext_schedule_scroll_to_end (session *replay_sess, const char *skip_no_view_event,
+	const char *skip_no_end_event, const char *coalesce_event, const char *scheduled_event);
 static void xtext_scroll_to_end_for_replay (session *sess);
 static void xtext_show_empty_view (session *sess);
 static void xtext_bind_visible_session (HcSessionWidget *widget, GtkTextBuffer *buf);
@@ -2514,13 +2516,14 @@ scroll_to_end_idle (gpointer data)
 }
 
 static void
-xtext_scroll_to_end (void)
+xtext_schedule_scroll_to_end (session *replay_sess, const char *skip_no_view_event,
+	const char *skip_no_end_event, const char *coalesce_event, const char *scheduled_event)
 {
 	GtkTextMark *mark;
 
 	if (!log_buffer || !log_view)
 	{
-		xtext_scroll_debug_log_state ("scroll-end-skip-no-view-or-buffer", current_tab,
+		xtext_scroll_debug_log_state (skip_no_view_event, current_tab,
 			log_view, log_buffer);
 		return;
 	}
@@ -2528,7 +2531,7 @@ xtext_scroll_to_end (void)
 	mark = gtk_text_buffer_get_mark (log_buffer, "end");
 	if (!mark)
 	{
-		xtext_scroll_debug_log_state ("scroll-end-skip-no-end-mark", current_tab,
+		xtext_scroll_debug_log_state (skip_no_end_event, current_tab,
 			log_view, log_buffer);
 		return;
 	}
@@ -2537,7 +2540,9 @@ xtext_scroll_to_end (void)
 	{
 		if (xtext_scroll_to_end_view == log_view)
 		{
-			xtext_scroll_debug_log_state ("scroll-end-coalesce-same-view", current_tab,
+			if (replay_sess && !xtext_scroll_to_end_replay_session)
+				xtext_scroll_to_end_replay_session = replay_sess;
+			xtext_scroll_debug_log_state (coalesce_event, current_tab,
 				log_view, log_buffer);
 			return;
 		}
@@ -2547,49 +2552,29 @@ xtext_scroll_to_end (void)
 
 	/* Schedule restore in idle to avoid races with widget allocation. */
 	xtext_scroll_to_end_view = log_view;
-	xtext_scroll_to_end_replay_session = NULL;
+	xtext_scroll_to_end_replay_session = replay_sess;
 	xtext_scroll_to_end_idle_id = g_idle_add (scroll_to_end_idle, log_view);
-	xtext_scroll_debug_log_state ("scroll-end-scheduled", current_tab, log_view, log_buffer);
+	xtext_scroll_debug_log_state (scheduled_event, current_tab, log_view, log_buffer);
+}
+
+static void
+xtext_scroll_to_end (void)
+{
+	xtext_schedule_scroll_to_end (NULL,
+		"scroll-end-skip-no-view-or-buffer",
+		"scroll-end-skip-no-end-mark",
+		"scroll-end-coalesce-same-view",
+		"scroll-end-scheduled");
 }
 
 static void
 xtext_scroll_to_end_for_replay (session *sess)
 {
-	GtkTextMark *mark;
-
-	if (!log_buffer || !log_view)
-	{
-		xtext_scroll_debug_log_state ("scroll-end-replay-skip-no-view-or-buffer", current_tab,
-			log_view, log_buffer);
-		return;
-	}
-
-	mark = gtk_text_buffer_get_mark (log_buffer, "end");
-	if (!mark)
-	{
-		xtext_scroll_debug_log_state ("scroll-end-replay-skip-no-end-mark", current_tab,
-			log_view, log_buffer);
-		return;
-	}
-
-	if (xtext_scroll_to_end_idle_id != 0)
-	{
-		if (xtext_scroll_to_end_view == log_view)
-		{
-			if (sess && !xtext_scroll_to_end_replay_session)
-				xtext_scroll_to_end_replay_session = sess;
-			xtext_scroll_debug_log_state ("scroll-end-replay-coalesce-same-view", current_tab,
-				log_view, log_buffer);
-			return;
-		}
-
-		xtext_scroll_to_end_idle_cancel ();
-	}
-
-	xtext_scroll_to_end_view = log_view;
-	xtext_scroll_to_end_replay_session = sess;
-	xtext_scroll_to_end_idle_id = g_idle_add (scroll_to_end_idle, log_view);
-	xtext_scroll_debug_log_state ("scroll-end-replay-scheduled", current_tab, log_view, log_buffer);
+	xtext_schedule_scroll_to_end (sess,
+		"scroll-end-replay-skip-no-view-or-buffer",
+		"scroll-end-replay-skip-no-end-mark",
+		"scroll-end-replay-coalesce-same-view",
+		"scroll-end-replay-scheduled");
 }
 
 /* check if we are scrolled to the bottom */
