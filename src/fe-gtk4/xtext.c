@@ -40,6 +40,11 @@ typedef struct
 #define HC_PREFIX_TWO_WORD_MAX_CHARS 16
 #define HC_SPACE_WIDTH_FALLBACK_PX 6
 #define HC_IRC_COLOR_COUNT 32
+#define HC_IRC_COLOR_EXT_MIN 32
+#define HC_IRC_COLOR_MAX 98
+#define HC_IRC_COLOR_DEFAULT 99
+#define HC_STYLE_COLOR_DEFAULT_FG 100
+#define HC_STYLE_COLOR_DEFAULT_BG 101
 #define HC_COLOR_KEY_MASK G_MAXUINT8
 #define HC_ASCII_PRINTABLE_MIN ((unsigned char) ' ')
 #define HC_UTF8_LEAD_MIN 128
@@ -53,6 +58,19 @@ typedef struct
 #define HC_IRC_CTRL_REVERSE ((unsigned char) '\x16')
 #define HC_IRC_CTRL_ITALIC ((unsigned char) '\x1d')
 #define HC_IRC_CTRL_UNDERLINE ((unsigned char) '\x1f')
+
+static const guint32 hc_irc_colors_32_98[] =
+{
+	0x007400, 0x007449, 0x007474, 0x004074, 0x000074, 0x4b0074, 0x740074, 0x740045,
+	0xb50000, 0xb56300, 0xb5b500, 0x7db500, 0x00b500, 0x00b571, 0x00b5b5, 0x0063b5,
+	0x0000b5, 0x7500b5, 0xb500b5, 0xb5006b, 0xff0000, 0xff8c00, 0xffff00, 0xb2ff00,
+	0x00ff00, 0x00ffa0, 0x00ffff, 0x008cff, 0x0000ff, 0xa500ff, 0xff00ff, 0xff0098,
+	0xff5959, 0xffb459, 0xffff71, 0xcfff60, 0x6fff6f, 0x65ffc9, 0x6dffff, 0x59b4ff,
+	0x5959ff, 0xc459ff, 0xff66ff, 0xff59bc, 0xff9c9c, 0xffd39c, 0xffff9c, 0xe2ff9c,
+	0x9cff9c, 0x9cffdb, 0x9cffff, 0x9cd3ff, 0x9c9cff, 0xdc9cff, 0xff9cff, 0xff94d3,
+	0x000000, 0x131313, 0x282828, 0x363636, 0x4d4d4d, 0x656565, 0x818181, 0x9f9f9f,
+	0xbcbcbc, 0xe2e2e2, 0xffffff
+};
 
 static GHashTable *session_logs;
 static GHashTable *session_buffers;
@@ -99,7 +117,9 @@ static void xtext_render_raw_append (GtkTextBuffer *buf, const char *raw);
 static gboolean xtext_is_at_end (void);
 static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
 static void xtext_tabs_to_spaces (char *text);
-static void xtext_color_to_rgba (int color_index, GdkRGBA *rgba);
+static void xtext_palette_color_to_rgba (int color_index, GdkRGBA *rgba);
+static gboolean xtext_irc_color_to_rgba (int color_index, GdkRGBA *rgba);
+static gboolean xtext_style_color_to_rgba (int style_color, GdkRGBA *rgba);
 static GtkTextBuffer *xtext_create_buffer_with_marks (void);
 static void xtext_setup_view_controllers (GtkWidget *view);
 static HcSessionWidget *session_widget_ensure (session *sess);
@@ -1365,13 +1385,13 @@ xtext_create_shared_tag_table (void)
 		NULL);
 	tag_font = xtext_create_tag_in_table (shared_tag_table, "hc-font", NULL);
 
-	xtext_color_to_rgba (COL_FG, &stamp_rgba);
+	xtext_palette_color_to_rgba (COL_FG, &stamp_rgba);
 	tag_stamp = xtext_create_tag_in_table (shared_tag_table, "hc-stamp",
 		"foreground-rgba", &stamp_rgba, NULL);
 }
 
 static void
-xtext_color_to_rgba (int color_index, GdkRGBA *rgba)
+xtext_palette_color_to_rgba (int color_index, GdkRGBA *rgba)
 {
 	int idx;
 
@@ -1379,12 +1399,60 @@ xtext_color_to_rgba (int color_index, GdkRGBA *rgba)
 	if (idx < 0)
 		idx = 0;
 	else if (idx > MAX_COL)
-		idx %= HC_IRC_COLOR_COUNT;
+		idx = MAX_COL;
 
 	rgba->red = ((double) colors[idx].red) / 65535.0;
 	rgba->green = ((double) colors[idx].green) / 65535.0;
 	rgba->blue = ((double) colors[idx].blue) / 65535.0;
 	rgba->alpha = 1.0;
+}
+
+static gboolean
+xtext_irc_color_to_rgba (int color_index, GdkRGBA *rgba)
+{
+	int idx;
+	guint32 rgb;
+
+	if (!rgba || color_index < 0 || color_index > HC_IRC_COLOR_MAX)
+		return FALSE;
+
+	if (color_index < HC_IRC_COLOR_COUNT)
+	{
+		xtext_palette_color_to_rgba (color_index, rgba);
+		return TRUE;
+	}
+
+	idx = color_index - HC_IRC_COLOR_EXT_MIN;
+	if (idx < 0 || idx >= (int) G_N_ELEMENTS (hc_irc_colors_32_98))
+		return FALSE;
+
+	rgb = hc_irc_colors_32_98[idx];
+	rgba->red = ((double) ((rgb >> 16) & 0xff)) / 255.0;
+	rgba->green = ((double) ((rgb >> 8) & 0xff)) / 255.0;
+	rgba->blue = ((double) (rgb & 0xff)) / 255.0;
+	rgba->alpha = 1.0;
+
+	return TRUE;
+}
+
+static gboolean
+xtext_style_color_to_rgba (int style_color, GdkRGBA *rgba)
+{
+	if (!rgba || style_color < 0)
+		return FALSE;
+
+	if (style_color == HC_STYLE_COLOR_DEFAULT_FG)
+	{
+		xtext_palette_color_to_rgba (COL_FG, rgba);
+		return TRUE;
+	}
+	if (style_color == HC_STYLE_COLOR_DEFAULT_BG)
+	{
+		xtext_palette_color_to_rgba (COL_BG, rgba);
+		return TRUE;
+	}
+
+	return xtext_irc_color_to_rgba (style_color, rgba);
 }
 
 static void
@@ -1411,17 +1479,6 @@ xtext_get_color_tag (int fg, int bg)
 	if (fg < 0 && bg < 0)
 		return NULL;
 
-	if (fg >= 0)
-	{
-		if (fg > MAX_COL)
-			fg %= HC_IRC_COLOR_COUNT;
-	}
-	if (bg >= 0)
-	{
-		if (bg > MAX_COL)
-			bg %= HC_IRC_COLOR_COUNT;
-	}
-
 	key = (((guint) (fg + 1)) & HC_COLOR_KEY_MASK) | ((((guint) (bg + 1)) & HC_COLOR_KEY_MASK) << 8);
 	tag = color_tags ? g_hash_table_lookup (color_tags, GUINT_TO_POINTER (key)) : NULL;
 	if (tag)
@@ -1433,14 +1490,14 @@ xtext_get_color_tag (int fg, int bg)
 	if (fg >= 0)
 	{
 		GdkRGBA rgba;
-		xtext_color_to_rgba (fg, &rgba);
-		g_object_set (tag, "foreground-rgba", &rgba, NULL);
+		if (xtext_style_color_to_rgba (fg, &rgba))
+			g_object_set (tag, "foreground-rgba", &rgba, NULL);
 	}
 	if (bg >= 0)
 	{
 		GdkRGBA rgba;
-		xtext_color_to_rgba (bg, &rgba);
-		g_object_set (tag, "background-rgba", &rgba, NULL);
+		if (xtext_style_color_to_rgba (bg, &rgba))
+			g_object_set (tag, "background-rgba", &rgba, NULL);
 	}
 
 	gtk_text_tag_table_add (shared_tag_table, tag);
@@ -1794,9 +1851,9 @@ xtext_insert_segment (GtkTextBuffer *buf, GtkTextIter *iter, const char *text, g
 		fg = bg;
 		bg = tmp;
 		if (fg < 0)
-			fg = COL_BG;
+			fg = HC_STYLE_COLOR_DEFAULT_BG;
 		if (bg < 0)
-			bg = COL_FG;
+			bg = HC_STYLE_COLOR_DEFAULT_FG;
 	}
 
 	color_tag = xtext_get_color_tag (fg, bg);
@@ -1897,7 +1954,7 @@ xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value)
 		return FALSE;
 
 	*index = i;
-	*value = number % HC_IRC_COLOR_COUNT;
+	*value = number;
 	return TRUE;
 }
 
@@ -1970,12 +2027,12 @@ xtext_render_formatted_stateful (GtkTextBuffer *buf, GtkTextIter *iter, const ch
 					break;
 				}
 
-				style.fg = fg;
+				style.fg = (fg == HC_IRC_COLOR_DEFAULT) ? HC_STYLE_COLOR_DEFAULT_FG : fg;
 				if (j < len && text[j] == ',')
 				{
 					j++;
 					if (xtext_parse_color_number (text, len, &j, &bg))
-						style.bg = bg;
+						style.bg = (bg == HC_IRC_COLOR_DEFAULT) ? HC_STYLE_COLOR_DEFAULT_BG : bg;
 					else
 						style.bg = -1;
 				}
