@@ -3117,6 +3117,10 @@ fe_gtk4_xtext_append_for_session (session *sess, const char *text)
 	HcSessionState *state;
 	GString *log;
 
+	/* Invariants:
+	 * - Raw log append always happens before any render append for the same line.
+	 * - A dirty buffer means re-render from the raw log on next show.
+	 * - Cached tab metrics are authoritative unless a dirty re-render occurs. */
 	if (!text || !text[0])
 		return;
 
