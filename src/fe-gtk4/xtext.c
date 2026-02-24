@@ -156,12 +156,12 @@ static void xtext_append_visible_session (session *sess, HcSessionState *state,
 	const char *text);
 static void xtext_render_line_columns (GtkTextBuffer *buf, GtkTextIter *iter,
 	const char *line, gsize len, HcLineColumns *cols);
-static void xtext_apply_hanging_tag_for_line (GtkTextBuffer *buf, GtkTextIter *iter,
+static void xtext_apply_line_hanging_tag (GtkTextBuffer *buf, GtkTextIter *iter,
 	GtkTextMark *line_start_mark, gboolean append_newline, gboolean has_columns);
-static void xtext_style_toggle_control (unsigned char ch, HcTextStyle *style);
-static gsize xtext_style_parse_color_control (const char *text, gsize len, gsize index,
+static void xtext_style_toggle (unsigned char ch, HcTextStyle *style);
+static gsize xtext_style_parse_color (const char *text, gsize len, gsize index,
 	HcTextStyle *style);
-static gsize xtext_style_skip_hex_color_control (const char *text, gsize len, gsize index,
+static gsize xtext_style_skip_hex_color (const char *text, gsize len, gsize index,
 	HcTextStyle *style);
 
 static inline gboolean
@@ -2004,7 +2004,7 @@ xtext_insert_plain_char (GtkTextBuffer *buf, GtkTextIter *iter, char ch)
 }
 
 static void
-xtext_style_toggle_control (unsigned char ch, HcTextStyle *style)
+xtext_style_toggle (unsigned char ch, HcTextStyle *style)
 {
 	if (!style)
 		return;
@@ -2032,7 +2032,7 @@ xtext_style_toggle_control (unsigned char ch, HcTextStyle *style)
 }
 
 static gsize
-xtext_style_parse_color_control (const char *text, gsize len, gsize index, HcTextStyle *style)
+xtext_style_parse_color (const char *text, gsize len, gsize index, HcTextStyle *style)
 {
 	int fg;
 	int bg;
@@ -2063,7 +2063,7 @@ xtext_style_parse_color_control (const char *text, gsize len, gsize index, HcTex
 }
 
 static gsize
-xtext_style_skip_hex_color_control (const char *text, gsize len, gsize index, HcTextStyle *style)
+xtext_style_skip_hex_color (const char *text, gsize len, gsize index, HcTextStyle *style)
 {
 	gsize j;
 
@@ -2136,7 +2136,7 @@ xtext_render_formatted_stateful (GtkTextBuffer *buf, GtkTextIter *iter, const ch
 		{
 			if (i > seg_start)
 				xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
-			xtext_style_toggle_control (ch, &style);
+			xtext_style_toggle (ch, &style);
 			i++;
 			seg_start = i;
 			continue;
@@ -2145,7 +2145,7 @@ xtext_render_formatted_stateful (GtkTextBuffer *buf, GtkTextIter *iter, const ch
 		{
 			if (i > seg_start)
 				xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
-			i = xtext_style_parse_color_control (text, len, i, &style);
+			i = xtext_style_parse_color (text, len, i, &style);
 			seg_start = i;
 			continue;
 		}
@@ -2154,7 +2154,7 @@ xtext_render_formatted_stateful (GtkTextBuffer *buf, GtkTextIter *iter, const ch
 			if (i > seg_start)
 				xtext_insert_segment (buf, iter, text + seg_start, i - seg_start, &style, layout_tag);
 			/* Hex color sequence (rare); strip it safely. */
-			i = xtext_style_skip_hex_color_control (text, len, i, &style);
+			i = xtext_style_skip_hex_color (text, len, i, &style);
 			seg_start = i;
 			continue;
 		}
@@ -2241,7 +2241,7 @@ xtext_render_line_columns (GtkTextBuffer *buf, GtkTextIter *iter, const char *li
 }
 
 static void
-xtext_apply_hanging_tag_for_line (GtkTextBuffer *buf, GtkTextIter *iter, GtkTextMark *line_start_mark,
+xtext_apply_line_hanging_tag (GtkTextBuffer *buf, GtkTextIter *iter, GtkTextMark *line_start_mark,
 	gboolean append_newline, gboolean has_columns)
 {
 	GtkTextMark *line_end_mark;
@@ -2287,7 +2287,7 @@ xtext_render_line (GtkTextBuffer *buf, GtkTextIter *iter, const char *line, gsiz
 	if (append_newline)
 		xtext_insert_plain_char (buf, iter, '\n');
 
-	xtext_apply_hanging_tag_for_line (buf, iter, line_start_mark, append_newline, cols.has_columns);
+	xtext_apply_line_hanging_tag (buf, iter, line_start_mark, append_newline, cols.has_columns);
 	if (line_start_mark)
 		gtk_text_buffer_delete_mark (buf, line_start_mark);
 }
