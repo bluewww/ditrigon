@@ -1265,6 +1265,9 @@ session_widget_free (gpointer data)
 	if (!widget)
 		return;
 
+	if (widget->view)
+		fe_gtk4_menu_close_context_popovers (NULL);
+
 	if (widget->scroll)
 	{
 		parent = gtk_widget_get_parent (widget->scroll);
@@ -3027,6 +3030,8 @@ fe_gtk4_xtext_remove_session (session *sess)
 			xtext_stamp_col_px = 0;
 			xtext_message_col_px = 0;
 		}
+		if (widget && widget->view)
+			fe_gtk4_menu_close_context_popovers (NULL);
 		g_hash_table_remove (session_widgets, sess);
 	}
 

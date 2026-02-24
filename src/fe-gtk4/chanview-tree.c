@@ -52,6 +52,28 @@ static gboolean tree_group_by_server (void);
 static const char *tree_server_state_text (server *serv);
 
 static void
+tree_detach_popover (GtkWidget *popover)
+{
+	GtkWidget *parent;
+
+	if (!popover)
+		return;
+
+	parent = gtk_widget_get_parent (popover);
+	if (!parent)
+		return;
+
+	if (GTK_IS_POPOVER (popover))
+		gtk_popover_popdown (GTK_POPOVER (popover));
+
+	if (GTK_IS_TEXT_VIEW (parent))
+		return;
+
+	if (gtk_widget_get_parent (popover))
+		gtk_widget_unparent (popover);
+}
+
+static void
 tree_load_css (void)
 {
 	GtkCssProvider *provider;
@@ -490,14 +512,17 @@ tree_set_context_target (GtkWidget *target_widget)
 static void
 tree_ctx_close_cb (GSimpleAction *action, GVariant *param, gpointer userdata)
 {
+	session *sess;
+
 	(void) action;
 	(void) param;
 	(void) userdata;
 
-	if (tree_ctx_sess && is_session (tree_ctx_sess))
-		fe_close_window (tree_ctx_sess);
+	sess = tree_ctx_sess;
 	if (tree_ctx_popover)
 		gtk_popover_popdown (GTK_POPOVER (tree_ctx_popover));
+	if (sess && is_session (sess))
+		fe_close_window (sess);
 }
 
 static void
@@ -708,7 +733,7 @@ tree_show_context_menu (GtkWidget *parent, double x, double y, session *sess, Gt
 	/* Clean up previous popover if still around */
 	if (tree_ctx_popover)
 	{
-		gtk_widget_unparent (tree_ctx_popover);
+		tree_detach_popover (tree_ctx_popover);
 		tree_ctx_popover = NULL;
 	}
 
@@ -1566,7 +1591,7 @@ fe_gtk4_chanview_tree_cleanup (void)
 
 	if (tree_ctx_popover)
 	{
-		gtk_widget_unparent (tree_ctx_popover);
+		tree_detach_popover (tree_ctx_popover);
 		tree_ctx_popover = NULL;
 	}
 	tree_clear_context_target ();

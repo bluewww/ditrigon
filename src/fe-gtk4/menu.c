@@ -237,9 +237,92 @@ menu_target_session (void)
 }
 
 static GtkWidget *active_nick_popover;
+static GtkWidget *active_url_popover;
+static GtkWidget *active_chan_popover;
 static session *nick_ctx_sess;
 static char *nick_ctx_nick;
 static char *nick_ctx_allnicks;
+
+static void
+menu_detach_popover (GtkWidget *popover)
+{
+	GtkWidget *parent;
+
+	if (!popover)
+		return;
+
+	parent = gtk_widget_get_parent (popover);
+	if (!parent)
+		return;
+
+	if (GTK_IS_POPOVER (popover))
+		gtk_popover_popdown (GTK_POPOVER (popover));
+
+	/* GtkTextView may already be in a remove/dispose transition; forcing
+	 * remove/unparent here races that path and can trigger warnings. */
+	if (GTK_IS_TEXT_VIEW (parent))
+		return;
+
+	if (gtk_widget_get_parent (popover))
+		gtk_widget_unparent (popover);
+}
+
+static GtkWidget *
+menu_resolve_popover_parent (GtkWidget *anchor, double *x, double *y)
+{
+	GtkWidget *popover_parent;
+	graphene_point_t src_point;
+	graphene_point_t dst_point;
+
+	if (!anchor)
+		return NULL;
+
+	if (!GTK_IS_TEXT_VIEW (anchor))
+		return anchor;
+
+	popover_parent = gtk_widget_get_parent (anchor);
+	if (!popover_parent)
+		return anchor;
+
+	if (x && y)
+	{
+		src_point.x = (float) *x;
+		src_point.y = (float) *y;
+		if (gtk_widget_compute_point (anchor, popover_parent, &src_point, &dst_point))
+		{
+			*x = dst_point.x;
+			*y = dst_point.y;
+		}
+	}
+
+	return popover_parent;
+}
+
+static void
+menu_close_active_popover (GtkWidget **slot, GtkWidget *parent)
+{
+	GtkWidget *popover;
+	GtkWidget *popover_parent;
+
+	if (!slot || !*slot)
+		return;
+
+	popover = *slot;
+	popover_parent = gtk_widget_get_parent (popover);
+	if (parent && popover_parent != parent)
+		return;
+
+	menu_detach_popover (popover);
+	*slot = NULL;
+}
+
+void
+fe_gtk4_menu_close_context_popovers (GtkWidget *parent)
+{
+	menu_close_active_popover (&active_nick_popover, parent);
+	menu_close_active_popover (&active_url_popover, parent);
+	menu_close_active_popover (&active_chan_popover, parent);
+}
 
 static void
 nick_menu_exec_command (session *sess, const char *cmd)
@@ -435,11 +518,7 @@ nick_menu_resolve_icon_name (const char *icon)
 static void
 nick_menu_close_active (void)
 {
-	if (active_nick_popover)
-	{
-		gtk_widget_unparent (active_nick_popover);
-		active_nick_popover = NULL;
-	}
+	menu_close_active_popover (&active_nick_popover, NULL);
 }
 
 static void
@@ -559,11 +638,20 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	GPtrArray *item_counts;
 	GSList *list;
 	GtkWidget *info_widget;
+	GtkWidget *popover_parent;
 	GdkRectangle rect;
 	char *header_label;
+	double menu_x;
+	double menu_y;
 	int item_idx;
 
 	if (!parent || !sess || !nick || !nick[0] || !is_session (sess))
+		return;
+
+	menu_x = x;
+	menu_y = y;
+	popover_parent = menu_resolve_popover_parent (parent, &menu_x, &menu_y);
+	if (!popover_parent)
 		return;
 
 	nick_menu_close_active ();
@@ -739,11 +827,11 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	g_ptr_array_free (item_counts, TRUE);
 
 	/* Create the popover */
-	gtk_widget_insert_action_group (parent, "nick", G_ACTION_GROUP (group));
+	gtk_widget_insert_action_group (popover_parent, "nick", G_ACTION_GROUP (group));
 	active_nick_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
 	g_object_add_weak_pointer (G_OBJECT (active_nick_popover),
 		(gpointer *) &active_nick_popover);
-	gtk_widget_set_parent (active_nick_popover, parent);
+	gtk_widget_set_parent (active_nick_popover, popover_parent);
 	g_object_set_data_full (G_OBJECT (active_nick_popover), "nick-actions",
 		g_object_ref (group), g_object_unref);
 
@@ -766,8 +854,8 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 		g_object_unref (info_widget);
 	}
 
-	rect.x = (int) x;
-	rect.y = (int) y;
+	rect.x = (int) menu_x;
+	rect.y = (int) menu_y;
 	rect.width = 1;
 	rect.height = 1;
 	gtk_popover_set_pointing_to (GTK_POPOVER (active_nick_popover), &rect);
@@ -783,18 +871,13 @@ fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess
 	g_object_unref (group);
 }
 
-static GtkWidget *active_url_popover;
 static session *url_ctx_sess;
 static char *url_ctx_url;
 
 static void
 url_menu_close_active (void)
 {
-	if (active_url_popover)
-	{
-		gtk_widget_unparent (active_url_popover);
-		active_url_popover = NULL;
-	}
+	menu_close_active_popover (&active_url_popover, NULL);
 }
 
 static void
@@ -878,9 +961,18 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	GSimpleAction *action;
 	GMenu *menu;
 	GMenu *section;
+	GtkWidget *popover_parent;
 	GdkRectangle rect;
+	double menu_x;
+	double menu_y;
 
 	if (!parent || !url || !url[0])
+		return;
+
+	menu_x = x;
+	menu_y = y;
+	popover_parent = menu_resolve_popover_parent (parent, &menu_x, &menu_y);
+	if (!popover_parent)
 		return;
 
 	url_menu_close_active ();
@@ -920,16 +1012,16 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
 	g_object_unref (section);
 
-	gtk_widget_insert_action_group (parent, "url", G_ACTION_GROUP (group));
+	gtk_widget_insert_action_group (popover_parent, "url", G_ACTION_GROUP (group));
 	active_url_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
 	g_object_add_weak_pointer (G_OBJECT (active_url_popover),
 		(gpointer *) &active_url_popover);
-	gtk_widget_set_parent (active_url_popover, parent);
+	gtk_widget_set_parent (active_url_popover, popover_parent);
 	g_object_set_data_full (G_OBJECT (active_url_popover), "url-actions",
 		g_object_ref (group), g_object_unref);
 
-	rect.x = (int) x;
-	rect.y = (int) y;
+	rect.x = (int) menu_x;
+	rect.y = (int) menu_y;
 	rect.width = 1;
 	rect.height = 1;
 	gtk_popover_set_pointing_to (GTK_POPOVER (active_url_popover), &rect);
@@ -947,18 +1039,13 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 
 /* ---- Channel context menu ---- */
 
-static GtkWidget *active_chan_popover;
 static session *chan_ctx_sess;
 static char *chan_ctx_channel;
 
 static void
 chan_menu_close_active (void)
 {
-	if (active_chan_popover)
-	{
-		gtk_widget_unparent (active_chan_popover);
-		active_chan_popover = NULL;
-	}
+	menu_close_active_popover (&active_chan_popover, NULL);
 }
 
 static void
@@ -1006,9 +1093,18 @@ fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess
 	GSimpleAction *action;
 	GMenu *menu;
 	GMenu *section;
+	GtkWidget *popover_parent;
 	GdkRectangle rect;
+	double menu_x;
+	double menu_y;
 
 	if (!parent || !channel || !channel[0])
+		return;
+
+	menu_x = x;
+	menu_y = y;
+	popover_parent = menu_resolve_popover_parent (parent, &menu_x, &menu_y);
+	if (!popover_parent)
 		return;
 
 	chan_menu_close_active ();
@@ -1036,16 +1132,16 @@ fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess
 	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
 	g_object_unref (section);
 
-	gtk_widget_insert_action_group (parent, "chan", G_ACTION_GROUP (group));
+	gtk_widget_insert_action_group (popover_parent, "chan", G_ACTION_GROUP (group));
 	active_chan_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
 	g_object_add_weak_pointer (G_OBJECT (active_chan_popover),
 		(gpointer *) &active_chan_popover);
-	gtk_widget_set_parent (active_chan_popover, parent);
+	gtk_widget_set_parent (active_chan_popover, popover_parent);
 	g_object_set_data_full (G_OBJECT (active_chan_popover), "chan-actions",
 		g_object_ref (group), g_object_unref);
 
-	rect.x = (int) x;
-	rect.y = (int) y;
+	rect.x = (int) menu_x;
+	rect.y = (int) menu_y;
 	rect.width = 1;
 	rect.height = 1;
 	gtk_popover_set_pointing_to (GTK_POPOVER (active_chan_popover), &rect);
@@ -2452,6 +2548,10 @@ fe_gtk4_menu_init (void)
 void
 fe_gtk4_menu_cleanup (void)
 {
+	nick_menu_close_active ();
+	url_menu_close_active ();
+	chan_menu_close_active ();
+
 	if (dynamic_menu_items)
 	{
 		g_hash_table_unref (dynamic_menu_items);

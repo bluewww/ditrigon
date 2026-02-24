@@ -106,6 +106,7 @@ void fe_gtk4_menu_cleanup (void);
 void fe_gtk4_menu_register_actions (void);
 void fe_gtk4_rebuild_menu_bar (void);
 void fe_gtk4_menu_sync_actions (void);
+void fe_gtk4_menu_close_context_popovers (GtkWidget *parent);
 void fe_gtk4_menu_show_nickmenu (GtkWidget *parent, double x, double y, session *sess, const char *nick);
 void fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess, const char *url);
 void fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess, const char *channel);
