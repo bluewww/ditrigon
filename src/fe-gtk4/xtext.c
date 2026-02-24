@@ -145,6 +145,12 @@ static gboolean xtext_should_stick_to_end (void);
 static void xtext_scroll_to_end_idle_finish (void);
 static void xtext_scroll_to_end_idle_cancel (void);
 static void xtext_scroll_to_end_for_replay (session *sess);
+static void xtext_show_empty_view (session *sess);
+static void xtext_bind_visible_session (HcSessionWidget *widget, GtkTextBuffer *buf);
+static void xtext_maybe_render_visible_session (session *sess, HcSessionState *state,
+	GtkTextBuffer *buf, HcSessionWidget *widget, gboolean first_show);
+static void xtext_maybe_replay_marklast (session *sess, HcSessionState *state,
+	HcSessionWidget *widget, GtkTextBuffer *buf);
 static gboolean xtext_scroll_debug_enabled (void);
 static const char *xtext_scroll_debug_session_label (session *sess);
 static void xtext_scroll_debug_log_state (const char *event, session *sess,
@@ -1354,30 +1360,6 @@ session_replay_marklast_set (session *sess, gboolean replay_marklast)
 	state = session_state_lookup (sess);
 	if (state)
 		state->replay_marklast = FALSE;
-}
-
-static gboolean
-session_replay_marklast_get (session *sess)
-{
-	HcSessionState *state;
-
-	if (!session_state_is_valid (sess))
-		return FALSE;
-
-	state = session_state_lookup (sess);
-	return state ? state->replay_marklast : FALSE;
-}
-
-static gboolean
-session_shown_once_get (session *sess)
-{
-	HcSessionState *state;
-
-	if (!session_state_is_valid (sess))
-		return FALSE;
-
-	state = session_state_lookup (sess);
-	return state ? state->shown_once : FALSE;
 }
 
 static void
@@ -2652,62 +2634,47 @@ xtext_should_stick_to_end (void)
 }
 
 static void
-xtext_show_session_rendered (session *sess)
+xtext_show_empty_view (session *sess)
 {
-	HcSessionState *state;
-	HcSessionWidget *widget;
-	GtkTextBuffer *buf;
-	GString *log;
-	GtkTextIter start;
-	GtkTextIter end;
-	gboolean is_empty;
-	gboolean buffer_dirty;
-	gboolean replay_marklast_pending;
-	gboolean first_render;
-	gboolean first_show;
-	int col_px;
-	int stamp_px;
-
-	if (!xtext_stack)
-		return;
-
-	/* Clear hover/search state — marks belong to the old buffer */
-	if (log_view)
-		gtk_widget_set_cursor_from_name (log_view, NULL);
-	xtext_link_hover_clear ();
-	xtext_search_mark = NULL;
-	xtext_hover_start_mark = NULL;
-	xtext_hover_end_mark = NULL;
-
-	if (!sess || !is_session (sess))
+	if (xtext_empty_scroll)
+		gtk_stack_set_visible_child (GTK_STACK (xtext_stack), xtext_empty_scroll);
+	if (xtext_empty_view)
 	{
-		if (xtext_empty_scroll)
-			gtk_stack_set_visible_child (GTK_STACK (xtext_stack), xtext_empty_scroll);
-		if (xtext_empty_view)
-		{
-			log_view = xtext_empty_view;
-			log_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (xtext_empty_view));
-			gtk_text_view_set_tabs (GTK_TEXT_VIEW (xtext_empty_view), NULL);
-		}
-		xtext_stamp_col_px = 0;
-		xtext_message_col_px = 0;
-		xtext_scroll_debug_log_state ("show-session-empty", sess, log_view, log_buffer);
-		return;
+		log_view = xtext_empty_view;
+		log_buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (xtext_empty_view));
+		gtk_text_view_set_tabs (GTK_TEXT_VIEW (xtext_empty_view), NULL);
 	}
+	xtext_stamp_col_px = 0;
+	xtext_message_col_px = 0;
+	xtext_scroll_debug_log_state ("show-session-empty", sess, log_view, log_buffer);
+}
 
-	widget = session_widget_ensure (sess);
-	buf = session_buffer_ensure (sess);
-	if (!widget || !buf)
-		return;
-
-	state = session_state_lookup (sess);
-	log = state ? state->log : NULL;
-	first_show = session_shown_once_get (sess) ? FALSE : TRUE;
-
+static void
+xtext_bind_visible_session (HcSessionWidget *widget, GtkTextBuffer *buf)
+{
 	log_view = widget->view;
 	log_buffer = buf;
 	gtk_text_view_set_buffer (GTK_TEXT_VIEW (widget->view), log_buffer);
 	gtk_stack_set_visible_child (GTK_STACK (xtext_stack), widget->scroll);
+}
+
+static void
+xtext_maybe_render_visible_session (session *sess, HcSessionState *state, GtkTextBuffer *buf,
+	HcSessionWidget *widget, gboolean first_show)
+{
+	GtkTextIter start;
+	GtkTextIter end;
+	GString *log;
+	gboolean is_empty;
+	gboolean buffer_dirty;
+	gboolean first_render;
+	int col_px;
+	int stamp_px;
+
+	if (!sess || !buf || !widget)
+		return;
+
+	log = state ? state->log : NULL;
 
 	/* Check if buffer needs rendering */
 	gtk_text_buffer_get_bounds (buf, &start, &end);
@@ -2724,12 +2691,6 @@ xtext_show_session_rendered (session *sess)
 		xtext_render_raw_all (buf, (log && log->len > 0) ? log->str : "");
 		xtext_render_session = NULL;
 		session_buffer_set_dirty (sess, FALSE);
-		if (first_show)
-		{
-			xtext_scroll_debug_log_state ("show-session-first-show-scroll-end",
-				sess, widget->view, buf);
-			xtext_scroll_to_end ();
-		}
 	}
 	else
 	{
@@ -2740,23 +2701,66 @@ xtext_show_session_rendered (session *sess)
 			session_tab_metrics_set (sess, col_px, stamp_px);
 		}
 		xtext_set_message_tab_stop (col_px, stamp_px);
-		if (first_show)
-		{
-			xtext_scroll_debug_log_state ("show-session-first-show-scroll-end",
-				sess, widget->view, buf);
-			xtext_scroll_to_end ();
-		}
 	}
+
+	if (!first_show)
+		return;
+
+	xtext_scroll_debug_log_state ("show-session-first-show-scroll-end",
+		sess, widget->view, buf);
+	xtext_scroll_to_end ();
+}
+
+static void
+xtext_maybe_replay_marklast (session *sess, HcSessionState *state, HcSessionWidget *widget,
+	GtkTextBuffer *buf)
+{
+	if (!state || !state->replay_marklast)
+		return;
+
+	xtext_scroll_debug_log_state ("show-session-replay-marklast", sess, widget->view, buf);
+	xtext_scroll_to_end_for_replay (sess);
+}
+
+static void
+xtext_show_session_rendered (session *sess)
+{
+	HcSessionState *state;
+	HcSessionWidget *widget;
+	GtkTextBuffer *buf;
+	gboolean first_show;
+
+	if (!xtext_stack)
+		return;
+
+	/* Clear hover/search state — marks belong to the old buffer */
+	if (log_view)
+		gtk_widget_set_cursor_from_name (log_view, NULL);
+	xtext_link_hover_clear ();
+	xtext_search_mark = NULL;
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
+
+	if (!sess || !is_session (sess))
+	{
+		xtext_show_empty_view (sess);
+		return;
+	}
+
+	widget = session_widget_ensure (sess);
+	buf = session_buffer_ensure (sess);
+	if (!widget || !buf)
+		return;
+
+	state = session_state_lookup (sess);
+	first_show = state ? !state->shown_once : TRUE;
+
+	xtext_bind_visible_session (widget, buf);
+	xtext_maybe_render_visible_session (sess, state, buf, widget, first_show);
 
 	session_shown_once_set (sess, TRUE);
-
-	replay_marklast_pending = session_replay_marklast_get (sess);
-	if (replay_marklast_pending)
-	{
-		xtext_scroll_debug_log_state ("show-session-replay-marklast", sess,
-			widget->view, buf);
-		xtext_scroll_to_end_for_replay (sess);
-	}
+	state = session_state_lookup (sess);
+	xtext_maybe_replay_marklast (sess, state, widget, buf);
 }
 
 static gboolean
