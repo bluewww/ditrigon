@@ -2912,15 +2912,79 @@ session_log_trim_tail_lines (GString *log, int lines)
 	g_string_truncate (log, cut);
 }
 
-void
-fe_gtk4_xtext_init (void)
+static void
+xtext_clear_session_maps (void)
 {
-	if (!session_states)
-		session_states = g_hash_table_new_full (g_direct_hash, g_direct_equal,
-			NULL, session_state_free);
-	if (!color_tags)
-		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
-	xtext_create_shared_tag_table ();
+	g_clear_pointer (&session_states, g_hash_table_unref);
+	g_clear_pointer (&color_tags, g_hash_table_unref);
+}
+
+static void
+xtext_clear_tag_resources (void)
+{
+	g_clear_object (&shared_tag_table);
+	g_clear_pointer (&xtext_font_desc, pango_font_description_free);
+
+	tag_stamp = NULL;
+	tag_bold = NULL;
+	tag_italic = NULL;
+	tag_underline = NULL;
+	tag_link_hover = NULL;
+	tag_nick_column = NULL;
+	tag_message_hanging = NULL;
+	tag_font = NULL;
+}
+
+static void
+xtext_clear_runtime_marks_and_pending (void)
+{
+	log_buffer = NULL;
+	xtext_search_mark = NULL;
+	xtext_hover_start_mark = NULL;
+	xtext_hover_end_mark = NULL;
+	xtext_primary_pending_clear ();
+	xtext_secondary_pending_clear ();
+	g_clear_pointer (&xtext_search_text, g_free);
+}
+
+static void
+xtext_cleanup_runtime_sources (void)
+{
+	if (xtext_resize_idle_id != 0)
+	{
+		g_source_remove (xtext_resize_idle_id);
+		xtext_resize_idle_id = 0;
+	}
+
+	xtext_scroll_to_end_idle_cancel ();
+	xtext_scroll_to_end_replay_session = NULL;
+
+	if (xtext_stack && xtext_resize_tick_id != 0)
+	{
+		gtk_widget_remove_tick_callback (xtext_stack, xtext_resize_tick_id);
+		xtext_resize_tick_id = 0;
+	}
+}
+
+static void
+xtext_reset_runtime_state (void)
+{
+	xtext_space_width_px = 0;
+	xtext_stamp_col_px = 0;
+	xtext_message_col_px = 0;
+	xtext_last_view_width = -1;
+	xtext_render_session = NULL;
+	xtext_stack = NULL;
+	xtext_empty_scroll = NULL;
+	xtext_empty_view = NULL;
+	xtext_scroll_to_end_view = NULL;
+	log_view = NULL;
+	log_buffer = NULL;
+}
+
+static void
+xtext_init_runtime_state (void)
+{
 	if (xtext_space_width_px <= 0)
 		xtext_space_width_px = HC_SPACE_WIDTH_FALLBACK_PX;
 	xtext_stamp_col_px = 0;
@@ -2935,68 +2999,25 @@ fe_gtk4_xtext_init (void)
 }
 
 void
+fe_gtk4_xtext_init (void)
+{
+	if (!session_states)
+		session_states = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+			NULL, session_state_free);
+	if (!color_tags)
+		color_tags = g_hash_table_new (g_direct_hash, g_direct_equal);
+	xtext_create_shared_tag_table ();
+	xtext_init_runtime_state ();
+}
+
+void
 fe_gtk4_xtext_cleanup (void)
 {
-	if (session_states)
-	{
-		g_hash_table_unref (session_states);
-		session_states = NULL;
-	}
-	if (color_tags)
-	{
-		g_hash_table_unref (color_tags);
-		color_tags = NULL;
-	}
-	if (shared_tag_table)
-	{
-		g_object_unref (shared_tag_table);
-		shared_tag_table = NULL;
-	}
-	if (xtext_font_desc)
-	{
-		pango_font_description_free (xtext_font_desc);
-		xtext_font_desc = NULL;
-	}
-
-	tag_stamp = NULL;
-	tag_bold = NULL;
-	tag_italic = NULL;
-	tag_underline = NULL;
-	tag_link_hover = NULL;
-	tag_nick_column = NULL;
-	tag_message_hanging = NULL;
-	tag_font = NULL;
-	log_buffer = NULL;
-	xtext_search_mark = NULL;
-	xtext_hover_start_mark = NULL;
-	xtext_hover_end_mark = NULL;
-	xtext_primary_pending_clear ();
-	xtext_secondary_pending_clear ();
-	g_free (xtext_search_text);
-	xtext_search_text = NULL;
-	if (xtext_resize_idle_id != 0)
-	{
-		g_source_remove (xtext_resize_idle_id);
-		xtext_resize_idle_id = 0;
-	}
-	xtext_scroll_to_end_idle_cancel ();
-	xtext_scroll_to_end_replay_session = NULL;
-	if (xtext_stack && xtext_resize_tick_id != 0)
-	{
-		gtk_widget_remove_tick_callback (xtext_stack, xtext_resize_tick_id);
-		xtext_resize_tick_id = 0;
-	}
-	xtext_space_width_px = 0;
-	xtext_stamp_col_px = 0;
-	xtext_message_col_px = 0;
-	xtext_last_view_width = -1;
-	xtext_render_session = NULL;
-	xtext_stack = NULL;
-	xtext_empty_scroll = NULL;
-	xtext_empty_view = NULL;
-	xtext_scroll_to_end_view = NULL;
-	log_view = NULL;
-	log_buffer = NULL;
+	xtext_clear_session_maps ();
+	xtext_clear_tag_resources ();
+	xtext_clear_runtime_marks_and_pending ();
+	xtext_cleanup_runtime_sources ();
+	xtext_reset_runtime_state ();
 }
 
 GtkWidget *
