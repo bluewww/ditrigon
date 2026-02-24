@@ -124,7 +124,6 @@ static GtkWidget *xtext_empty_scroll;
 static GtkWidget *xtext_empty_view;
 static GtkWidget *xtext_scroll_to_end_view;
 static session *xtext_scroll_to_end_replay_session;
-static int xtext_scroll_debug_enabled_cached = -1;
 
 static void xtext_render_raw_append (GtkTextBuffer *buf, const char *raw);
 static gboolean xtext_parse_color_number (const char *text, gsize len, gsize *index, int *value);
