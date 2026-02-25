@@ -808,17 +808,17 @@ userlist_update_info_label (session *sess)
 	if (userlist_filter_active ())
 	{
 		g_snprintf (tbuf, sizeof (tbuf),
-			_("Users: %d/%d, <span foreground=\"#157915\">%d@</span>,"
-			  "<span foreground=\"#856117\">%d%%</span>,"
-			  "<span foreground=\"#451984\">%d+</span>"),
+			_("Users: %d/%d, <span foreground=\"#2ec27e\">%d@</span>, "
+			  "<span foreground=\"#f6d32d\">%d%%</span>, "
+			  "<span foreground=\"#813d9c\">%d+</span>"),
 			shown, sess->total, sess->ops, sess->hops, sess->voices);
 	}
 	else
 	{
 		g_snprintf (tbuf, sizeof (tbuf),
-			_("Users: %d, <span foreground=\"#157915\">%d@</span>,"
-			  "<span foreground=\"#856117\">%d%%</span>,"
-			  "<span foreground=\"#451984\">%d+</span>"),
+			_("Users: %d, <span foreground=\"#2ec27e\">%d@</span>, "
+			  "<span foreground=\"#f6d32d\">%d%%</span>, "
+			  "<span foreground=\"#813d9c\">%d+</span>"),
 			sess->total, sess->ops, sess->hops, sess->voices);
 	}
 	tbuf[sizeof (tbuf) - 1] = 0;
