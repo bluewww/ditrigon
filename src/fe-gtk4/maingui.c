@@ -706,6 +706,7 @@ fe_gtk4_maingui_set_left_sidebar_visible (gboolean visible)
 	AdwNavigationSplitView *split;
 
 	left_sidebar_visible = visible ? TRUE : FALSE;
+	prefs.hex_gui_sidebar_hide = left_sidebar_visible ? 0 : 1;
 
 	if (!content_paned || !maingui_uses_navigation_split ())
 	{
@@ -917,6 +918,7 @@ void
 fe_gtk4_maingui_init (void)
 {
 	pane_positions_ready = FALSE;
+	left_sidebar_visible = prefs.hex_gui_sidebar_hide ? FALSE : TRUE;
 	if (!disconnect_preserve_servers)
 		disconnect_preserve_servers = g_hash_table_new (g_direct_hash, g_direct_equal);
 	fe_gtk4_chanview_init ();
@@ -948,7 +950,7 @@ fe_gtk4_maingui_cleanup (void)
 	userlist_split_anim_start_us = 0;
 	userlist_split_anim_from = 0;
 	userlist_split_anim_to = 0;
-	left_sidebar_visible = TRUE;
+	left_sidebar_visible = prefs.hex_gui_sidebar_hide ? FALSE : TRUE;
 	g_clear_pointer (&disconnect_preserve_servers, g_hash_table_unref);
 }
 
@@ -1140,6 +1142,8 @@ fe_gtk4_create_main_window (void)
 
 	if (main_window)
 		return;
+
+	left_sidebar_visible = prefs.hex_gui_sidebar_hide ? FALSE : TRUE;
 
 	main_window = fe_gtk4_adw_window_new ();
 	gtk_window_set_title (GTK_WINDOW (main_window), PACKAGE_NAME);

@@ -399,6 +399,7 @@ const struct prefs vars[] =
 	{"gui_pane_right_size_min", P_OFFINT (hex_gui_pane_right_size_min), TYPE_INT},
 	{"gui_quit_dialog", P_OFFINT (hex_gui_quit_dialog), TYPE_BOOL},
 	{"gui_search_pos", P_OFFINT (hex_gui_search_pos), TYPE_INT},
+	{"gui_sidebar_hide", P_OFFINT (hex_gui_sidebar_hide), TYPE_BOOL},
 	/* {"gui_single", P_OFFINT (hex_gui_single), TYPE_BOOL}, */
 	{"gui_slist_fav", P_OFFINT (hex_gui_slist_fav), TYPE_BOOL},
 	{"gui_slist_select", P_OFFINT (hex_gui_slist_select), TYPE_INT},
