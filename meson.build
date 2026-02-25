@@ -1,5 +1,5 @@
 project('ditrigon', 'c',
-  version: '1.5.2',
+  version: '1.5.3',
   meson_version: '>= 0.50.0',
   default_options: [
     'c_std=gnu99',
