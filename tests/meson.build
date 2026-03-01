@@ -111,6 +111,19 @@ else
       timeout: 90,
     )
 
+    dcc_accept_unsolicited_script = files('dcc_accept_unsolicited_security_poc.py')
+    test('DCC Accept Unsolicited Regression', python3,
+      args: [dcc_accept_unsolicited_script, ditrigon_gtk4_exe],
+      depends: [ditrigon_gtk4_exe],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['security-poc'],
+      is_parallel: false,
+      timeout: 90,
+    )
+
     dcc_accept_nick_spoof_script = files('dcc_accept_nick_spoof_security_poc.py')
     test('DCC Accept Nick Spoof Regression', python3,
       args: [dcc_accept_nick_spoof_script, ditrigon_gtk4_exe],

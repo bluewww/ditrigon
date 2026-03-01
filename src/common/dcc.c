@@ -2781,8 +2781,9 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 		}
 
 		dcc = find_dcc_from_port_and_nick (sess->server, nick, port, TYPE_RECV);
-		if (dcc && dcc->dccstat == STAT_QUEUED)
+		if (dcc && dcc->dccstat == STAT_QUEUED && dcc->resume_sent)
 		{
+			dcc->resume_sent = 0;
 			dcc_connect (dcc);
 		}
 		return;
