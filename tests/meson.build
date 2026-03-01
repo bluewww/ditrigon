@@ -149,5 +149,18 @@ else
       is_parallel: false,
       timeout: 90,
     )
+
+    dcc_send_listener_hostname_hijack_script = files('dcc_send_listener_hostname_hijack_security_poc.py')
+    test('DCC Send Listener Hostname Hijack Regression', python3,
+      args: [dcc_send_listener_hostname_hijack_script, ditrigon_gtk4_exe],
+      depends: [ditrigon_gtk4_exe],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['security-poc'],
+      is_parallel: false,
+      timeout: 90,
+    )
   endif
 endif
