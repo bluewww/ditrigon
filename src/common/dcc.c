@@ -151,6 +151,28 @@ parse_u64_field (const char *text, guint64 *value)
 	return TRUE;
 }
 
+static gboolean
+dcc_get_known_peer_addr (struct DCC *dcc, guint32 *addr_out)
+{
+	struct User *user;
+	const char *host;
+	const char *at;
+	struct in_addr parsed_addr;
+
+	user = userlist_find_global (dcc->serv, dcc->nick);
+	if (user == NULL || user->hostname == NULL || *user->hostname == '\0')
+		return FALSE;
+
+	at = strrchr (user->hostname, '@');
+	host = (at != NULL && at[1] != '\0') ? at + 1 : user->hostname;
+
+	if (inet_aton (host, &parsed_addr) == 0)
+		return FALSE;
+
+	*addr_out = ntohl (parsed_addr.s_addr);
+	return TRUE;
+}
+
 static int new_id(void)
 {
 	static int id = 0;
@@ -1634,20 +1656,44 @@ dcc_accept (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 {
 	char host[128];
 	struct sockaddr_in CAddr;
+	guint32 expected_addr = 0;
+	gboolean enforce_peer_addr = FALSE;
 	int sok;
 	socklen_t len;
 
-	len = sizeof (CAddr);
-	sok = accept (dcc->sok, (struct sockaddr *) &CAddr, &len);
+	if (!dcc->pasvid && (dcc->type == TYPE_SEND || dcc->type == TYPE_CHATSEND))
+		enforce_peer_addr = dcc_get_known_peer_addr (dcc, &expected_addr);
+
+	while (1)
+	{
+		len = sizeof (CAddr);
+		sok = accept (dcc->sok, (struct sockaddr *) &CAddr, &len);
+		if (sok < 0)
+		{
+			if (would_block ())
+				return TRUE;
+
+			fe_input_remove (dcc->iotag);
+			dcc->iotag = 0;
+			closesocket (dcc->sok);
+			dcc->sok = -1;
+			dcc_close (dcc, STAT_FAILED, FALSE);
+			return TRUE;
+		}
+
+		if (enforce_peer_addr && ntohl (CAddr.sin_addr.s_addr) != expected_addr)
+		{
+			closesocket (sok);
+			continue;
+		}
+
+		break;
+	}
+
 	fe_input_remove (dcc->iotag);
 	dcc->iotag = 0;
 	closesocket (dcc->sok);
-	if (sok < 0)
-	{
-		dcc->sok = -1;
-		dcc_close (dcc, STAT_FAILED, FALSE);
-		return TRUE;
-	}
+
 	set_nonblocking (sok);
 	dcc->sok = sok;
 	dcc->addr = ntohl (CAddr.sin_addr.s_addr);
