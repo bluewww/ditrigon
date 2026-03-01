@@ -225,7 +225,7 @@ test_scram_server_first_rejects_invalid_salt_base64 (void)
 }
 
 static void
-test_scram_server_final_accepts_trailing_junk (void)
+test_scram_server_final_rejects_trailing_junk (void)
 {
 	scram_session *session;
 	char *client_first;
@@ -267,7 +267,8 @@ test_scram_server_final_accepts_trailing_junk (void)
 	output_len = 0;
 
 	status = scram_process (session, server_final, &output, &output_len);
-	g_assert_cmpint (status, ==, SCRAM_SUCCESS);
+	g_assert_cmpint (status, ==, SCRAM_ERROR);
+	g_assert_null (output);
 
 	g_free (client_first);
 	g_free (server_first);
@@ -290,8 +291,8 @@ main (int argc, char **argv)
 						  test_scram_server_final_rejects_invalid_prefix);
 	g_test_add_func ("/security/scram/server-first-rejects-invalid-salt-base64",
 						  test_scram_server_first_rejects_invalid_salt_base64);
-	g_test_add_func ("/security/scram/server-final-accepts-trailing-junk",
-						  test_scram_server_final_accepts_trailing_junk);
+	g_test_add_func ("/security/scram/server-final-rejects-trailing-junk",
+						  test_scram_server_final_rejects_trailing_junk);
 
 	return g_test_run ();
 }
