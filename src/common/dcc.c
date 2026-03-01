@@ -1984,14 +1984,16 @@ dcc_send (struct session *sess, char *to, char *filename, gint64 maxcps, int pas
 }
 
 static struct DCC *
-find_dcc_from_id (int id, int type)
+find_dcc_from_id (server *serv, const char *nick, int id, int type)
 {
 	struct DCC *dcc;
 	GSList *list = dcc_list;
 	while (list)
 	{
 		dcc = (struct DCC *) list->data;
-		if (dcc->pasvid == id &&
+		if (dcc->serv == serv &&
+			 !rfc_casecmp (dcc->nick, nick) &&
+			 dcc->pasvid == id &&
 			 dcc->dccstat == STAT_QUEUED && dcc->type == type)
 		return dcc;
 		list = list->next;
@@ -2622,7 +2624,7 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 
 		if (psend)
 		{
-			dcc = find_dcc_from_id (pasvid, TYPE_CHATSEND);
+			dcc = find_dcc_from_id (sess->server, nick, pasvid, TYPE_CHATSEND);
 			if (dcc)
 			{
 				dcc->addr = addr;
@@ -2662,7 +2664,7 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 				dcc_malformed (sess, nick, word_eol[4] + 2);
 				return;
 			}
-			dcc = find_dcc_from_id(pasvid, TYPE_SEND);
+			dcc = find_dcc_from_id (sess->server, nick, pasvid, TYPE_SEND);
 		} else
 		{
 			dcc = find_dcc_from_port (port, TYPE_SEND);
@@ -2774,7 +2776,7 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			 * Connecting to the destination and finally
 			 * sending file.
 			 */
-			dcc = find_dcc_from_id (pasvid, TYPE_SEND);
+			dcc = find_dcc_from_id (sess->server, nick, pasvid, TYPE_SEND);
 			if (dcc)
 			{
 				dcc->addr = addr;
