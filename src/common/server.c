@@ -65,6 +65,7 @@ static GSList *away_list = NULL;
 GSList *serv_list = NULL;
 
 static void auto_reconnect (server *serv, int send_quit, int err);
+static gboolean should_auto_reconnect_on_fail (void);
 static void server_disconnect (session * sess, int sendquit, int err);
 static int server_cleanup (server * serv);
 static void server_connect (server *serv, char *hostname, int port, int no_login);
@@ -536,7 +537,7 @@ ssl_do_connect (server * serv)
 
 			server_cleanup (serv);
 
-			if (prefs.hex_net_auto_reconnectonfail)
+			if (should_auto_reconnect_on_fail ())
 				auto_reconnect (serv, FALSE, -1);
 
 			return (0);				  /* remove it (0) */
@@ -673,7 +674,7 @@ conn_fail:
 							 NULL, NULL, 0);
 			server_cleanup (serv); /* ->connecting = FALSE */
 
-			if (prefs.hex_net_auto_reconnectonfail)
+			if (should_auto_reconnect_on_fail ())
 				auto_reconnect (serv, FALSE, -1);
 
 			return (0);				  /* remove it (0) */
@@ -742,6 +743,12 @@ auto_reconnect (server *serv, int send_quit, int err)
 
 	serv->recondelay_tag = fe_timeout_add (del, timeout_auto_reconnect, serv);
 	fe_server_event (serv, FE_SE_RECONDELAY, del);
+}
+
+static gboolean
+should_auto_reconnect_on_fail (void)
+{
+	return prefs.hex_net_auto_reconnect || prefs.hex_net_auto_reconnectonfail;
 }
 
 static void
@@ -818,7 +825,7 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 			closesocket (serv->proxy_sok6);
 		EMIT_SIGNAL (XP_TE_UKNHOST, sess, NULL, NULL, NULL, NULL, 0);
 		if (!servlist_cycle (serv))
-			if (prefs.hex_net_auto_reconnectonfail)
+			if (should_auto_reconnect_on_fail ())
 				auto_reconnect (serv, FALSE, -1);
 		break;
 	case '2':						  /* connection failed */
@@ -834,7 +841,7 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 		EMIT_SIGNAL (XP_TE_CONNFAIL, sess, errorstring (atoi (tbuf)), NULL,
 						 NULL, NULL, 0);
 		if (!servlist_cycle (serv))
-			if (prefs.hex_net_auto_reconnectonfail)
+			if (should_auto_reconnect_on_fail ())
 				auto_reconnect (serv, FALSE, -1);
 		break;
 	case '3':						  /* gethostbyname finished */
