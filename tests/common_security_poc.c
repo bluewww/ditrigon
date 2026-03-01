@@ -111,7 +111,7 @@ start_scram_session (char **client_first)
 }
 
 static void
-test_scram_iteration_suffix_is_accepted (void)
+test_scram_iteration_suffix_is_rejected (void)
 {
 	scram_session *session;
 	char *client_first;
@@ -130,9 +130,9 @@ test_scram_iteration_suffix_is_accepted (void)
 	server_first = g_strdup_printf ("r=%sserver,s=c2FsdA==,i=1x", nonce_pos);
 	status = scram_process (session, server_first, &output, &output_len);
 
-	g_assert_cmpint (status, ==, SCRAM_IN_PROGRESS);
-	g_assert_nonnull (output);
-	g_assert_null (session->error);
+	g_assert_cmpint (status, ==, SCRAM_ERROR);
+	g_assert_nonnull (session->error);
+	g_assert_null (output);
 
 	g_free (client_first);
 	g_free (server_first);
@@ -200,8 +200,8 @@ main (int argc, char **argv)
 
 	g_test_add_func ("/security/ssl/san-cn-fallback-rejects-mismatch",
 						  test_ssl_san_cn_fallback_rejects_mismatch);
-	g_test_add_func ("/security/scram/iteration-suffix-is-accepted",
-						  test_scram_iteration_suffix_is_accepted);
+	g_test_add_func ("/security/scram/iteration-suffix-is-rejected",
+						  test_scram_iteration_suffix_is_rejected);
 	g_test_add_func ("/security/scram/server-final-prefix-bug",
 						  test_scram_server_final_prefix_bug);
 

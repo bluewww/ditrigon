@@ -23,8 +23,10 @@
 #include "scram.h"
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
+#include <errno.h>
 
 #define NONCE_LENGTH 18
+#define SCRAM_MAX_ITERATION_COUNT 1000000U
 #define CLIENT_KEY "Client Key"
 #define SERVER_KEY "Server Key"
 
@@ -143,6 +145,7 @@ process_server_first (scram_session *session, const char *data, char **output,
 	unsigned int i, param_count, iteration_count, client_key_len, stored_key_len;
 	gsize salt_len = 0;
 	size_t client_nonce_len;
+	gboolean invalid_iteration = FALSE;
 
 	params = g_strsplit (data, ",", -1);
 	param_count = g_strv_length (params);
@@ -172,14 +175,27 @@ process_server_first (scram_session *session, const char *data, char **output,
 		}
 		else if (!strncmp (params[i], "i=", 2))
 		{
-			iteration_count = strtoul (params[i] + 2, NULL, 10);
+			char *end = NULL;
+			unsigned long parsed;
+
+			errno = 0;
+			parsed = strtoul (params[i] + 2, &end, 10);
+			if (end == params[i] + 2 || *end != '\0' || errno == ERANGE ||
+				 parsed == 0 || parsed > SCRAM_MAX_ITERATION_COUNT)
+			{
+				invalid_iteration = TRUE;
+			}
+			else
+			{
+				iteration_count = (unsigned int)parsed;
+			}
 		}
 	}
 
 	g_strfreev (params);
 
 	if (server_nonce_b64 == NULL || *server_nonce_b64 == '\0' || salt == NULL ||
-		*salt == '\0' || iteration_count == 0)
+		*salt == '\0' || iteration_count == 0 || invalid_iteration)
 	{
 		session->error = g_strdup_printf ("Invalid server-first-message: %s", data);
 		g_free (server_nonce_b64);
@@ -194,6 +210,8 @@ process_server_first (scram_session *session, const char *data, char **output,
 		strncmp (server_nonce_b64, session->client_nonce_b64, client_nonce_len))
 	{
 		session->error = g_strdup_printf ("Invalid server nonce: %s", server_nonce_b64);
+		g_free (server_nonce_b64);
+		g_free (salt);
 		return SCRAM_ERROR;
 	}
 
@@ -202,9 +220,17 @@ process_server_first (scram_session *session, const char *data, char **output,
 	// SaltedPassword := Hi(Normalize(password), salt, i)
 	session->salted_password = g_malloc (session->digest_size);
 
-	PKCS5_PBKDF2_HMAC (session->password, strlen (session->password), (unsigned char *) salt,
-					   salt_len, iteration_count, session->digest, session->digest_size,
-					   session->salted_password);
+	if (!PKCS5_PBKDF2_HMAC (session->password, strlen (session->password), (unsigned char *) salt,
+							salt_len, iteration_count, session->digest, session->digest_size,
+							session->salted_password))
+	{
+		session->error = g_strdup ("Could not derive SCRAM salted password");
+		g_free (server_nonce_b64);
+		g_free (salt);
+		g_free (session->salted_password);
+		session->salted_password = NULL;
+		return SCRAM_ERROR;
+	}
 
 	// AuthMessage := client-first-message-bare + "," +
 	//                server-first-message + "," +
