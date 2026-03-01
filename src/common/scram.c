@@ -36,6 +36,46 @@
 #define EVP_MD_CTX_free(ctx) EVP_MD_CTX_destroy(ctx)
 #endif
 
+static gboolean
+is_base64_data_char (char c)
+{
+	return ((c >= 'A' && c <= 'Z') ||
+			 (c >= 'a' && c <= 'z') ||
+			 (c >= '0' && c <= '9') ||
+			 c == '+' || c == '/');
+}
+
+static gboolean
+is_valid_scram_base64 (const char *text)
+{
+	gsize i, len, padding_start = G_MAXSIZE;
+
+	if (text == NULL || *text == '\0')
+		return FALSE;
+
+	len = strlen (text);
+	for (i = 0; i < len; i++)
+	{
+		if (text[i] == '=')
+		{
+			if (padding_start == G_MAXSIZE)
+				padding_start = i;
+			continue;
+		}
+
+		if (padding_start != G_MAXSIZE || !is_base64_data_char (text[i]))
+			return FALSE;
+	}
+
+	if (padding_start == G_MAXSIZE)
+		return (len % 4) != 1;
+
+	if ((len % 4) != 0 || padding_start < len - 2)
+		return FALSE;
+
+	return TRUE;
+}
+
 scram_session
 *scram_session_create (const char *digest, const char *username, const char *password)
 {
@@ -141,6 +181,7 @@ process_server_first (scram_session *session, const char *data, char **output,
 {
 	char **params, *client_final_message_without_proof, *salt, *server_nonce_b64,
 			*client_proof_b64;
+	unsigned char *decoded_salt;
 	unsigned char *client_key, stored_key[EVP_MAX_MD_SIZE], *client_signature, *client_proof;
 	unsigned int i, param_count, iteration_count, client_key_len, stored_key_len;
 	gsize salt_len = 0;
@@ -203,6 +244,14 @@ process_server_first (scram_session *session, const char *data, char **output,
 		return SCRAM_ERROR;
 	}
 
+	if (!is_valid_scram_base64 (salt))
+	{
+		session->error = g_strdup_printf ("Invalid server-first-message: %s", data);
+		g_free (server_nonce_b64);
+		g_free (salt);
+		return SCRAM_ERROR;
+	}
+
 	client_nonce_len = strlen (session->client_nonce_b64);
 
 	// The server can append his nonce to the client's nonce
@@ -215,18 +264,26 @@ process_server_first (scram_session *session, const char *data, char **output,
 		return SCRAM_ERROR;
 	}
 
-	g_base64_decode_inplace ((gchar *) salt, &salt_len);
+	decoded_salt = g_base64_decode (salt, &salt_len);
+	if (decoded_salt == NULL)
+	{
+		session->error = g_strdup_printf ("Invalid server-first-message: %s", data);
+		g_free (server_nonce_b64);
+		g_free (salt);
+		return SCRAM_ERROR;
+	}
 
 	// SaltedPassword := Hi(Normalize(password), salt, i)
 	session->salted_password = g_malloc (session->digest_size);
 
-	if (!PKCS5_PBKDF2_HMAC (session->password, strlen (session->password), (unsigned char *) salt,
+	if (!PKCS5_PBKDF2_HMAC (session->password, strlen (session->password), decoded_salt,
 							salt_len, iteration_count, session->digest, session->digest_size,
 							session->salted_password))
 	{
 		session->error = g_strdup ("Could not derive SCRAM salted password");
 		g_free (server_nonce_b64);
 		g_free (salt);
+		g_free (decoded_salt);
 		g_free (session->salted_password);
 		session->salted_password = NULL;
 		return SCRAM_ERROR;
@@ -276,6 +333,7 @@ process_server_first (scram_session *session, const char *data, char **output,
 
 	g_free (server_nonce_b64);
 	g_free (salt);
+	g_free (decoded_salt);
 	g_free (client_final_message_without_proof);
 	g_free (client_key);
 	g_free (client_signature);
