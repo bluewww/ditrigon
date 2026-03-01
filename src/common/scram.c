@@ -347,7 +347,8 @@ process_server_first (scram_session *session, const char *data, char **output,
 static scram_status
 process_server_final (scram_session *session, const char *data)
 {
-	char *verifier;
+	const char *verifier_b64;
+	unsigned char *verifier;
 	unsigned char *server_key, *server_signature;
 	unsigned int server_key_len = 0, server_signature_len = 0;
 	gsize verifier_len = 0;
@@ -357,8 +358,13 @@ process_server_final (scram_session *session, const char *data)
 		return SCRAM_ERROR;
 	}
 
-	verifier = g_strdup (data + 2);
-	g_base64_decode_inplace (verifier, &verifier_len);
+	verifier_b64 = data + 2;
+	if (!is_valid_scram_base64 (verifier_b64))
+		return SCRAM_ERROR;
+
+	verifier = g_base64_decode (verifier_b64, &verifier_len);
+	if (verifier == NULL)
+		return SCRAM_ERROR;
 
 	// ServerKey := HMAC(SaltedPassword, "Server Key")
 	server_key = g_malloc0 (session->digest_size);
