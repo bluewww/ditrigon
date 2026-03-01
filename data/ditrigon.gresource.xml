@@ -46,6 +46,7 @@
 		<file>ui/gtk4/maingui/xtext-scroll.ui</file>
 		<file>ui/gtk4/maingui/legacy-content-paned.ui</file>
 		<file>ui/gtk4/maingui/adw-nav-split.ui</file>
+		<file>ui/gtk4/menus/static-menus.ui</file>
 		<file>ui/gtk4/styles/maingui.css</file>
 		<file>ui/gtk4/styles/chanview-tree.css</file>
 		<file>ui/gtk4/styles/userlist.css</file>

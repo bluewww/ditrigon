@@ -4,6 +4,8 @@
 #include "fe-gtk4.h"
 #include <adwaita.h>
 
+#define ADW_MENU_UI_PATH "/org/ditrigon/ui/gtk4/menus/static-menus.ui"
+
 static GtkWidget *adw_toolbar_view;
 static GtkWidget *adw_menu_button;
 static GtkWidget *adw_sidebar_button;
@@ -22,11 +24,26 @@ adw_new_item_clicked_cb (AdwSplitButton *button, gpointer userdata)
 	fe_serverlist_open (sess);
 }
 
+static GMenuModel *
+adw_load_menu_model (const char *id)
+{
+	GtkBuilder *builder;
+	GObject *obj;
+
+	builder = fe_gtk4_builder_new_from_resource (ADW_MENU_UI_PATH);
+	obj = gtk_builder_get_object (builder, id);
+	if (!obj || !G_IS_MENU_MODEL (obj))
+		g_error ("Required menu model '%s' not found", id);
+	g_object_ref (obj);
+	g_object_unref (builder);
+	return G_MENU_MODEL (obj);
+}
+
 GtkWidget *
 fe_gtk4_adw_new_item_button (void)
 {
 	GtkWidget *button;
-	GMenu *menu;
+	GMenuModel *menu_model;
 
 	button = adw_split_button_new ();
 	adw_split_button_set_icon_name (ADW_SPLIT_BUTTON (button), "list-add-symbolic");
@@ -34,11 +51,9 @@ fe_gtk4_adw_new_item_button (void)
 	adw_split_button_set_dropdown_tooltip (ADW_SPLIT_BUTTON (button), _("More New Options"));
 	g_signal_connect (button, "clicked", G_CALLBACK (adw_new_item_clicked_cb), NULL);
 
-	menu = g_menu_new ();
-	g_menu_append (menu, _("Connect to a Network..."), "win.network-list");
-	g_menu_append (menu, _("Join a Channel..."), "win.server-join");
-	adw_split_button_set_menu_model (ADW_SPLIT_BUTTON (button), G_MENU_MODEL (menu));
-	g_object_unref (menu);
+	menu_model = adw_load_menu_model ("new_item_menu");
+	adw_split_button_set_menu_model (ADW_SPLIT_BUTTON (button), menu_model);
+	g_object_unref (menu_model);
 
 	return button;
 }

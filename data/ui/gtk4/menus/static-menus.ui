@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gio" version="2.0"/>
+
+  <menu id="new_item_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Connect to a Network...</attribute>
+        <attribute name="action">win.network-list</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Join a Channel...</attribute>
+        <attribute name="action">win.server-join</attribute>
+      </item>
+    </section>
+  </menu>
+
+  <menu id="url_context_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Open Link</attribute>
+        <attribute name="action">url.open</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Copy Selected Link</attribute>
+        <attribute name="action">url.copy</attribute>
+      </item>
+    </section>
+  </menu>
+
+  <menu id="chan_context_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Join Channel</attribute>
+        <attribute name="action">chan.join</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Copy Channel Name</attribute>
+        <attribute name="action">chan.copy</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>

@@ -6,6 +6,8 @@
 #include "../common/url.h"
 #include "../common/userlist.h"
 
+#define MENU_UI_PATH "/org/ditrigon/ui/gtk4/menus/static-menus.ui"
+
 #define usercommands_help  _("User Commands - Special codes:\n\n" \
 	"%c  =  current channel\n" \
 	"%e  =  current network name\n" \
@@ -521,6 +523,21 @@ nick_menu_close_active (void)
 	menu_close_active_popover (&active_nick_popover, NULL);
 }
 
+static GMenuModel *
+menu_load_model (const char *id)
+{
+	GtkBuilder *builder;
+	GObject *obj;
+
+	builder = fe_gtk4_builder_new_from_resource (MENU_UI_PATH);
+	obj = gtk_builder_get_object (builder, id);
+	if (!obj || !G_IS_MENU_MODEL (obj))
+		g_error ("Required menu model '%s' not found", id);
+	g_object_ref (obj);
+	g_object_unref (builder);
+	return G_MENU_MODEL (obj);
+}
+
 static void
 nick_menu_append_info_row (GtkWidget *grid, int row, const char *title, const char *value)
 {
@@ -960,8 +977,7 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 {
 	GSimpleActionGroup *group;
 	GSimpleAction *action;
-	GMenu *menu;
-	GMenu *section;
+	GMenuModel *menu_model;
 	GtkWidget *popover_parent;
 	GdkRectangle rect;
 	double menu_x;
@@ -1004,17 +1020,10 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
 	g_object_unref (action);
 
-	menu = g_menu_new ();
-	section = g_menu_new ();
-	g_menu_append (section, _("Open Link"), "url.open");
-	/* g_menu_append (section, _("Open Link in Browser"), "url.open-browser"); */
-	/* g_menu_append (section, _("Open Link in New Window"), "url.open-new-window"); */
-	g_menu_append (section, _("Copy Selected Link"), "url.copy");
-	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
-	g_object_unref (section);
+	menu_model = menu_load_model ("url_context_menu");
 
 	gtk_widget_insert_action_group (popover_parent, "url", G_ACTION_GROUP (group));
-	active_url_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	active_url_popover = gtk_popover_menu_new_from_model (menu_model);
 	g_object_add_weak_pointer (G_OBJECT (active_url_popover),
 		(gpointer *) &active_url_popover);
 	gtk_widget_set_parent (active_url_popover, popover_parent);
@@ -1034,7 +1043,7 @@ fe_gtk4_menu_show_urlmenu (GtkWidget *parent, double x, double y, session *sess,
 
 	gtk_popover_popup (GTK_POPOVER (active_url_popover));
 
-	g_object_unref (menu);
+	g_object_unref (menu_model);
 	g_object_unref (group);
 }
 
@@ -1092,8 +1101,7 @@ fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess
 {
 	GSimpleActionGroup *group;
 	GSimpleAction *action;
-	GMenu *menu;
-	GMenu *section;
+	GMenuModel *menu_model;
 	GtkWidget *popover_parent;
 	GdkRectangle rect;
 	double menu_x;
@@ -1126,15 +1134,10 @@ fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess
 	g_action_map_add_action (G_ACTION_MAP (group), G_ACTION (action));
 	g_object_unref (action);
 
-	menu = g_menu_new ();
-	section = g_menu_new ();
-	g_menu_append (section, _("Join Channel"), "chan.join");
-	g_menu_append (section, _("Copy Channel Name"), "chan.copy");
-	g_menu_append_section (menu, NULL, G_MENU_MODEL (section));
-	g_object_unref (section);
+	menu_model = menu_load_model ("chan_context_menu");
 
 	gtk_widget_insert_action_group (popover_parent, "chan", G_ACTION_GROUP (group));
-	active_chan_popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
+	active_chan_popover = gtk_popover_menu_new_from_model (menu_model);
 	g_object_add_weak_pointer (G_OBJECT (active_chan_popover),
 		(gpointer *) &active_chan_popover);
 	gtk_widget_set_parent (active_chan_popover, popover_parent);
@@ -1152,7 +1155,7 @@ fe_gtk4_menu_show_chanmenu (GtkWidget *parent, double x, double y, session *sess
 
 	gtk_popover_popup (GTK_POPOVER (active_chan_popover));
 
-	g_object_unref (menu);
+	g_object_unref (menu_model);
 	g_object_unref (group);
 }
 
