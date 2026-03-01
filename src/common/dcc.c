@@ -2063,6 +2063,25 @@ find_dcc_from_port (int port, int type)
 	return NULL;
 }
 
+static struct DCC *
+find_dcc_from_port_and_nick (server *serv, const char *nick, int port, int type)
+{
+	struct DCC *dcc;
+	GSList *list = dcc_list;
+	while (list)
+	{
+		dcc = (struct DCC *) list->data;
+		if (dcc->serv == serv &&
+			 dcc->port == port &&
+			 !rfc_casecmp (dcc->nick, nick) &&
+			 dcc->dccstat == STAT_QUEUED &&
+			 dcc->type == type)
+			return dcc;
+		list = list->next;
+	}
+	return NULL;
+}
+
 struct DCC *
 find_dcc (char *nick, char *file, int type)
 {
@@ -2761,7 +2780,7 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			return;
 		}
 
-		dcc = find_dcc_from_port (port, TYPE_RECV);
+		dcc = find_dcc_from_port_and_nick (sess->server, nick, port, TYPE_RECV);
 		if (dcc && dcc->dccstat == STAT_QUEUED)
 		{
 			dcc_connect (dcc);
