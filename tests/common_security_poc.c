@@ -141,7 +141,7 @@ test_scram_iteration_suffix_is_rejected (void)
 }
 
 static void
-test_scram_server_final_prefix_bug (void)
+test_scram_server_final_rejects_invalid_prefix (void)
 {
 	scram_session *session;
 	char *client_first;
@@ -183,7 +183,8 @@ test_scram_server_final_prefix_bug (void)
 	output_len = 0;
 
 	status = scram_process (session, server_final, &output, &output_len);
-	g_assert_cmpint (status, ==, SCRAM_SUCCESS);
+	g_assert_cmpint (status, ==, SCRAM_ERROR);
+	g_assert_null (output);
 
 	g_free (client_first);
 	g_free (server_first);
@@ -202,8 +203,8 @@ main (int argc, char **argv)
 						  test_ssl_san_cn_fallback_rejects_mismatch);
 	g_test_add_func ("/security/scram/iteration-suffix-is-rejected",
 						  test_scram_iteration_suffix_is_rejected);
-	g_test_add_func ("/security/scram/server-final-prefix-bug",
-						  test_scram_server_final_prefix_bug);
+	g_test_add_func ("/security/scram/server-final-rejects-invalid-prefix",
+						  test_scram_server_final_rejects_invalid_prefix);
 
 	return g_test_run ();
 }
