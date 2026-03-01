@@ -2048,22 +2048,6 @@ find_dcc_from_id (server *serv, const char *nick, int id, int type)
 }
 
 static struct DCC *
-find_dcc_from_port (int port, int type)
-{
-	struct DCC *dcc;
-	GSList *list = dcc_list;
-	while (list)
-	{
-		dcc = (struct DCC *) list->data;
-		if (dcc->port == port &&
-			 dcc->dccstat == STAT_QUEUED && dcc->type == type)
-			return dcc;
-		list = list->next;
-	}
-	return NULL;
-}
-
-static struct DCC *
 find_dcc_from_port_and_nick (server *serv, const char *nick, int port, int type)
 {
 	struct DCC *dcc;
@@ -2732,7 +2716,7 @@ handle_dcc (struct session *sess, char *nick, char *word[], char *word_eol[],
 			dcc = find_dcc_from_id (sess->server, nick, pasvid, TYPE_SEND);
 		} else
 		{
-			dcc = find_dcc_from_port (port, TYPE_SEND);
+			dcc = find_dcc_from_port_and_nick (sess->server, nick, port, TYPE_SEND);
 		}
 		if (!dcc)
 			dcc = find_dcc (nick, word[6], TYPE_SEND);
