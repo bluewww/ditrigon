@@ -102,8 +102,6 @@ ignore_refresh_rows (void)
 		struct ignore *ig;
 		GtkWidget *row;
 		GtkWidget *box;
-		GtkWidget *title;
-		GtkWidget *subtitle;
 		char *flags;
 
 		ig = list->data;
@@ -112,21 +110,7 @@ ignore_refresh_rows (void)
 
 		flags = ignore_flags_text ((int) ig->type);
 
-		title = gtk_label_new (ig->mask);
-		gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
-
-		subtitle = gtk_label_new (flags);
-		gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
-		gtk_label_set_wrap (GTK_LABEL (subtitle), TRUE);
-		gtk_widget_add_css_class (subtitle, "dim-label");
-
-		box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-		gtk_widget_set_margin_start (box, 10);
-		gtk_widget_set_margin_end (box, 10);
-		gtk_widget_set_margin_top (box, 6);
-		gtk_widget_set_margin_bottom (box, 6);
-		gtk_box_append (GTK_BOX (box), title);
-		gtk_box_append (GTK_BOX (box), subtitle);
+		box = fe_gtk4_two_line_row_new (ig->mask, flags, NULL, NULL);
 
 		row = gtk_list_box_row_new ();
 		gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), box);

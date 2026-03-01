@@ -3,6 +3,8 @@
 
 #include "fe-gtk4.h"
 
+#define TWO_LINE_ROW_UI_PATH "/org/ditrigon/ui/gtk4/rows/two-line-list-row.ui"
+
 GtkBuilder *
 fe_gtk4_builder_new_from_resource (const char *resource_path)
 {
@@ -48,6 +50,40 @@ fe_gtk4_builder_get_widget (GtkBuilder *builder, const char *id, GType expected_
 	}
 
 	return GTK_WIDGET (obj);
+}
+
+GtkWidget *
+fe_gtk4_two_line_row_new (const char *title_text,
+	const char *subtitle_text,
+	GtkWidget **title_label,
+	GtkWidget **subtitle_label)
+{
+	GtkBuilder *builder;
+	GtkWidget *box;
+	GtkWidget *title;
+	GtkWidget *subtitle;
+
+	if (title_label)
+		*title_label = NULL;
+	if (subtitle_label)
+		*subtitle_label = NULL;
+
+	builder = fe_gtk4_builder_new_from_resource (TWO_LINE_ROW_UI_PATH);
+	box = fe_gtk4_builder_get_widget (builder, "two_line_row_box", GTK_TYPE_BOX);
+	title = fe_gtk4_builder_get_widget (builder, "two_line_row_title", GTK_TYPE_LABEL);
+	subtitle = fe_gtk4_builder_get_widget (builder, "two_line_row_subtitle", GTK_TYPE_LABEL);
+	g_object_ref_sink (box);
+	g_object_unref (builder);
+
+	gtk_label_set_text (GTK_LABEL (title), title_text ? title_text : "");
+	gtk_label_set_text (GTK_LABEL (subtitle), subtitle_text ? subtitle_text : "");
+
+	if (title_label)
+		*title_label = title;
+	if (subtitle_label)
+		*subtitle_label = subtitle;
+
+	return box;
 }
 
 typedef struct

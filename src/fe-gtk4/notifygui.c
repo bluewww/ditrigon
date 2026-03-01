@@ -87,16 +87,11 @@ notify_row_add (const char *name,
 {
 	GtkWidget *row;
 	GtkWidget *box;
-	GtkWidget *title;
-	GtkWidget *subtitle;
 	char *subtitle_text;
 	char *seen_text;
 
 	if (!notify_view.list || !name)
 		return;
-
-	title = gtk_label_new (name);
-	gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
 
 	seen_text = notify_time_ago (seen);
 	subtitle_text = g_strdup_printf ("%s%s%s%s%s",
@@ -106,18 +101,7 @@ notify_row_add (const char *name,
 		seen_text && seen_text[0] ? " - " : "",
 		seen_text ? seen_text : "");
 
-	subtitle = gtk_label_new (subtitle_text);
-	gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
-	gtk_label_set_wrap (GTK_LABEL (subtitle), TRUE);
-	gtk_widget_add_css_class (subtitle, "dim-label");
-
-	box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-	gtk_widget_set_margin_start (box, 10);
-	gtk_widget_set_margin_end (box, 10);
-	gtk_widget_set_margin_top (box, 6);
-	gtk_widget_set_margin_bottom (box, 6);
-	gtk_box_append (GTK_BOX (box), title);
-	gtk_box_append (GTK_BOX (box), subtitle);
+	box = fe_gtk4_two_line_row_new (name, subtitle_text, NULL, NULL);
 
 	row = gtk_list_box_row_new ();
 	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), box);

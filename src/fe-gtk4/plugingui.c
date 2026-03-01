@@ -73,8 +73,6 @@ plugingui_add_row (hexchat_plugin *pl)
 {
 	GtkWidget *row;
 	GtkWidget *box;
-	GtkWidget *title;
-	GtkWidget *subtitle;
 	char *title_text;
 	char *subtitle_text;
 	const char *name;
@@ -93,20 +91,7 @@ plugingui_add_row (hexchat_plugin *pl)
 	title_text = g_strdup_printf ("%s (%s)", name, version);
 	subtitle_text = g_strdup_printf ("%s - %s", file, desc);
 
-	title = gtk_label_new (title_text);
-	gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
-	subtitle = gtk_label_new (subtitle_text);
-	gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
-	gtk_label_set_wrap (GTK_LABEL (subtitle), TRUE);
-	gtk_widget_add_css_class (subtitle, "dim-label");
-
-	box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-	gtk_widget_set_margin_start (box, 10);
-	gtk_widget_set_margin_end (box, 10);
-	gtk_widget_set_margin_top (box, 6);
-	gtk_widget_set_margin_bottom (box, 6);
-	gtk_box_append (GTK_BOX (box), title);
-	gtk_box_append (GTK_BOX (box), subtitle);
+	box = fe_gtk4_two_line_row_new (title_text, subtitle_text, NULL, NULL);
 
 	row = gtk_list_box_row_new ();
 	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), box);

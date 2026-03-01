@@ -318,8 +318,6 @@ fe_add_ban_list (struct session *sess, char *mask, char *who, char *when, int rp
 {
 	GtkWidget *row;
 	GtkWidget *box;
-	GtkWidget *title;
-	GtkWidget *subtitle;
 	HcBanRowData *row_data;
 	char *subtitle_text;
 
@@ -331,25 +329,11 @@ fe_add_ban_list (struct session *sess, char *mask, char *who, char *when, int rp
 	row_data->mode = ban_mode_from_rpl (rplcode);
 	row_data->rplcode = rplcode;
 
-	title = gtk_label_new (mask);
-	gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
-
 	subtitle_text = g_strdup_printf ("%s - %s - %s",
 		ban_kind_from_rpl (rplcode),
 		(who && who[0]) ? who : _("unknown"),
 		(when && when[0]) ? when : _("unknown"));
-	subtitle = gtk_label_new (subtitle_text);
-	gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
-	gtk_label_set_wrap (GTK_LABEL (subtitle), TRUE);
-	gtk_widget_add_css_class (subtitle, "dim-label");
-
-	box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-	gtk_widget_set_margin_start (box, 10);
-	gtk_widget_set_margin_end (box, 10);
-	gtk_widget_set_margin_top (box, 6);
-	gtk_widget_set_margin_bottom (box, 6);
-	gtk_box_append (GTK_BOX (box), title);
-	gtk_box_append (GTK_BOX (box), subtitle);
+	box = fe_gtk4_two_line_row_new (mask, subtitle_text, NULL, NULL);
 
 	row = gtk_list_box_row_new ();
 	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), box);
