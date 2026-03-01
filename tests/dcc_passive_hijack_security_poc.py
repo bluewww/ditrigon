@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Security proof for passive DCC hijack by ID-only matching.
+Regression test for passive DCC hijack by ID-only matching.
 
-Trigger:
+Flow:
 - queue a passive send to nick "victim"
 - observe the generated passive DCC id (pasvid)
 - spoof a third-step DCC SEND from a different nick using that same id
-- verify the client connects to the spoofed endpoint
+- assert the client does NOT connect to the spoofed endpoint
 """
 
 from __future__ import annotations
@@ -268,15 +268,15 @@ def main() -> int:
         print("sanitizer finding")
         print(output[-2000:])
         bad = True
-    if not listener.result.connected:
-        print("spoof target did not receive client connection (%s)" % (listener.result.error or "unknown"))
+    if listener.result.connected:
+        print("client connected to spoof target; passive DCC sender binding bypassed")
         bad = True
 
     if bad:
-        print("DCC_PASSIVE_HIJACK_SECURITY_POC=FAIL")
+        print("DCC_PASSIVE_HIJACK_REGRESSION=FAIL")
         return 1
 
-    print("DCC_PASSIVE_HIJACK_SECURITY_POC=TRIGGERED")
+    print("DCC_PASSIVE_HIJACK_REGRESSION=OK")
     return 0
 
 

@@ -86,7 +86,7 @@ else
     )
 
     dcc_passive_hijack_script = files('dcc_passive_hijack_security_poc.py')
-    test('DCC Passive Hijack Security PoC', python3,
+    test('DCC Passive Hijack Regression', python3,
       args: [dcc_passive_hijack_script, ditrigon_gtk4_exe],
       depends: [ditrigon_gtk4_exe],
       env: [
