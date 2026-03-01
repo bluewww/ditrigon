@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+
+  <object class="GtkTreeExpander" id="chanview_tree_expander">
+    <property name="indent-for-depth">False</property>
+    <property name="indent-for-icon">False</property>
+    <property name="hide-expander">True</property>
+    <property name="child">
+      <object class="GtkBox" id="chanview_tree_row">
+        <property name="orientation">horizontal</property>
+        <property name="spacing">4</property>
+        <property name="hexpand">True</property>
+        <style>
+          <class name="hc-tree-row"/>
+        </style>
+        <child>
+          <object class="GtkImage" id="chanview_tree_icon">
+            <property name="icon-name">chat-message-new-symbolic</property>
+            <property name="width-request">16</property>
+            <property name="height-request">16</property>
+            <property name="valign">center</property>
+            <style>
+              <class name="hc-tree-icon"/>
+            </style>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox" id="chanview_tree_label_box">
+            <property name="orientation">vertical</property>
+            <property name="spacing">0</property>
+            <property name="hexpand">True</property>
+            <property name="halign">fill</property>
+            <property name="valign">center</property>
+            <child>
+              <object class="GtkLabel" id="chanview_tree_label">
+                <property name="label"></property>
+                <property name="hexpand">True</property>
+                <property name="halign">fill</property>
+                <property name="xalign">0.0</property>
+                <property name="single-line-mode">True</property>
+                <property name="ellipsize">end</property>
+                <style>
+                  <class name="hc-tree-label"/>
+                </style>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="chanview_tree_subtitle">
+                <property name="label"></property>
+                <property name="halign">fill</property>
+                <property name="xalign">0.0</property>
+                <property name="single-line-mode">True</property>
+                <property name="ellipsize">end</property>
+                <property name="visible">False</property>
+                <style>
+                  <class name="hc-tree-subtitle"/>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkLabel" id="chanview_tree_badge">
+            <property name="label"></property>
+            <property name="valign">center</property>
+            <property name="visible">False</property>
+            <style>
+              <class name="hc-tree-badge"/>
+            </style>
+          </object>
+        </child>
+      </object>
+    </property>
+  </object>
+</interface>

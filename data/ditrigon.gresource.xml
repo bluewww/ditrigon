@@ -50,6 +50,7 @@
 		<file>ui/gtk4/menus/static-menus.ui</file>
 		<file>ui/gtk4/rows/two-line-list-row.ui</file>
 		<file>ui/gtk4/rows/userlist-row.ui</file>
+		<file>ui/gtk4/rows/chanview-tree-row.ui</file>
 		<file>ui/gtk4/styles/maingui.css</file>
 		<file>ui/gtk4/styles/chanview-tree.css</file>
 		<file>ui/gtk4/styles/userlist.css</file>

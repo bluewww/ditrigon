@@ -5,6 +5,8 @@
 #include "../common/chanopt.h"
 #include "../common/text.h"
 
+#define CHANVIEW_TREE_ROW_UI_PATH "/org/ditrigon/ui/gtk4/rows/chanview-tree-row.ui"
+
 typedef struct _HcChanNode
 {
 	GObject parent_instance;
@@ -1368,10 +1370,10 @@ tree_label_notify_cb (HcChanNode *node, GParamSpec *pspec, gpointer user_data)
 static void
 tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
+	GtkBuilder *builder;
 	GtkWidget *expander;
 	GtkWidget *row_box;
 	GtkWidget *icon;
-	GtkWidget *label_box;
 	GtkWidget *label;
 	GtkWidget *subtitle;
 	GtkWidget *badge;
@@ -1380,50 +1382,15 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 	(void) factory;
 	(void) user_data;
 
-	expander = gtk_tree_expander_new ();
-	gtk_tree_expander_set_indent_for_depth (GTK_TREE_EXPANDER (expander), FALSE);
-	gtk_tree_expander_set_indent_for_icon (GTK_TREE_EXPANDER (expander), FALSE);
-	gtk_tree_expander_set_hide_expander (GTK_TREE_EXPANDER (expander), TRUE);
-	row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
-	gtk_widget_add_css_class (row_box, "hc-tree-row");
-	gtk_widget_set_hexpand (row_box, TRUE);
-
-	icon = gtk_image_new_from_icon_name ("chat-message-new-symbolic");
-	gtk_widget_set_size_request (icon, 16, 16);
-	gtk_widget_add_css_class (icon, "hc-tree-icon");
-	gtk_widget_set_valign (icon, GTK_ALIGN_CENTER);
-	gtk_box_append (GTK_BOX (row_box), icon);
-
-	label_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_set_hexpand (label_box, TRUE);
-	gtk_widget_set_halign (label_box, GTK_ALIGN_FILL);
-	gtk_widget_set_valign (label_box, GTK_ALIGN_CENTER);
-	gtk_box_append (GTK_BOX (row_box), label_box);
-
-	label = gtk_label_new ("");
-	gtk_widget_add_css_class (label, "hc-tree-label");
-	gtk_widget_set_hexpand (label, TRUE);
-	gtk_widget_set_halign (label, GTK_ALIGN_FILL);
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-	gtk_label_set_single_line_mode (GTK_LABEL (label), TRUE);
-	gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
-	gtk_box_append (GTK_BOX (label_box), label);
-
-	subtitle = gtk_label_new ("");
-	gtk_widget_add_css_class (subtitle, "hc-tree-subtitle");
-	gtk_widget_add_css_class (subtitle, "dim-label");
-	gtk_widget_set_halign (subtitle, GTK_ALIGN_FILL);
-	gtk_label_set_xalign (GTK_LABEL (subtitle), 0.0f);
-	gtk_label_set_single_line_mode (GTK_LABEL (subtitle), TRUE);
-	gtk_label_set_ellipsize (GTK_LABEL (subtitle), PANGO_ELLIPSIZE_END);
-	gtk_widget_set_visible (subtitle, FALSE);
-	gtk_box_append (GTK_BOX (label_box), subtitle);
-
-	badge = gtk_label_new (NULL);
-	gtk_widget_add_css_class (badge, "hc-tree-badge");
-	gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
-	gtk_widget_set_visible (badge, FALSE);
-	gtk_box_append (GTK_BOX (row_box), badge);
+	builder = fe_gtk4_builder_new_from_resource (CHANVIEW_TREE_ROW_UI_PATH);
+	expander = fe_gtk4_builder_get_widget (builder, "chanview_tree_expander", GTK_TYPE_TREE_EXPANDER);
+	row_box = fe_gtk4_builder_get_widget (builder, "chanview_tree_row", GTK_TYPE_BOX);
+	icon = fe_gtk4_builder_get_widget (builder, "chanview_tree_icon", GTK_TYPE_IMAGE);
+	label = fe_gtk4_builder_get_widget (builder, "chanview_tree_label", GTK_TYPE_LABEL);
+	subtitle = fe_gtk4_builder_get_widget (builder, "chanview_tree_subtitle", GTK_TYPE_LABEL);
+	badge = fe_gtk4_builder_get_widget (builder, "chanview_tree_badge", GTK_TYPE_LABEL);
+	g_object_ref_sink (expander);
+	g_object_unref (builder);
 
 	gesture = gtk_gesture_click_new ();
 	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), GDK_BUTTON_SECONDARY);
@@ -1431,7 +1398,6 @@ tree_factory_setup_cb (GtkSignalListItemFactory *factory, GtkListItem *list_item
 		G_CALLBACK (tree_row_right_click_cb), list_item);
 	gtk_widget_add_controller (row_box, GTK_EVENT_CONTROLLER (gesture));
 
-	gtk_tree_expander_set_child (GTK_TREE_EXPANDER (expander), row_box);
 	gtk_list_item_set_child (list_item, expander);
 
 	g_object_set_data (G_OBJECT (list_item), "hc-tree-row-box", row_box);
