@@ -3,6 +3,29 @@ if not get_option('gtk4-frontend')
 elif host_machine.system() == 'darwin'
   warning('fuzz-tests are only supported on Linux; skipping parser fuzz smoke test')
 else
+  if libssl_dep.found()
+    security_poc_exe = executable('common-security-poc',
+      ['common_security_poc.c', '../src/common/ssl.c', '../src/common/scram.c'],
+      include_directories: [
+        config_h_include,
+        include_directories('../src/common'),
+      ],
+      dependencies: [
+        glib_dep,
+        libgio_dep,
+        libssl_dep,
+      ],
+      c_args: ['-DHAVE_CONFIG_H'],
+      build_by_default: false,
+    )
+
+    test('Common Security PoC', security_poc_exe,
+      suite: ['security-poc'],
+      is_parallel: false,
+      timeout: 30,
+    )
+  endif
+
   python3 = find_program('python3', required: false)
   xvfb_run = find_program('xvfb-run', required: false)
 
@@ -58,6 +81,19 @@ else
         'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
       ],
       suite: ['fuzz'],
+      is_parallel: false,
+      timeout: 90,
+    )
+
+    dcc_passive_hijack_script = files('dcc_passive_hijack_security_poc.py')
+    test('DCC Passive Hijack Security PoC', python3,
+      args: [dcc_passive_hijack_script, ditrigon_gtk4_exe],
+      depends: [ditrigon_gtk4_exe],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['security-poc'],
       is_parallel: false,
       timeout: 90,
     )
