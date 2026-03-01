@@ -151,26 +151,42 @@ parse_u64_field (const char *text, guint64 *value)
 	return TRUE;
 }
 
-static gboolean
+typedef enum
+{
+	DCC_PEER_ADDR_MISSING = 0,
+	DCC_PEER_ADDR_KNOWN,
+	DCC_PEER_ADDR_UNRESOLVABLE
+} dcc_peer_addr_state;
+
+static dcc_peer_addr_state
 dcc_get_known_peer_addr (struct DCC *dcc, guint32 *addr_out)
 {
 	struct User *user;
+	struct hostent *h;
 	const char *host;
 	const char *at;
 	struct in_addr parsed_addr;
 
 	user = userlist_find_global (dcc->serv, dcc->nick);
 	if (user == NULL || user->hostname == NULL || *user->hostname == '\0')
-		return FALSE;
+		return DCC_PEER_ADDR_MISSING;
 
 	at = strrchr (user->hostname, '@');
 	host = (at != NULL && at[1] != '\0') ? at + 1 : user->hostname;
 
-	if (inet_aton (host, &parsed_addr) == 0)
-		return FALSE;
+	if (inet_aton (host, &parsed_addr) != 0)
+	{
+		*addr_out = ntohl (parsed_addr.s_addr);
+		return DCC_PEER_ADDR_KNOWN;
+	}
 
+	h = gethostbyname (host);
+	if (h == NULL || h->h_length != 4 || h->h_addr_list[0] == NULL)
+		return DCC_PEER_ADDR_UNRESOLVABLE;
+
+	memcpy (&parsed_addr.s_addr, h->h_addr_list[0], 4);
 	*addr_out = ntohl (parsed_addr.s_addr);
-	return TRUE;
+	return DCC_PEER_ADDR_KNOWN;
 }
 
 static int new_id(void)
@@ -1656,13 +1672,27 @@ dcc_accept (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 {
 	char host[128];
 	struct sockaddr_in CAddr;
+	dcc_peer_addr_state peer_addr_state = DCC_PEER_ADDR_MISSING;
 	guint32 expected_addr = 0;
 	gboolean enforce_peer_addr = FALSE;
 	int sok;
 	socklen_t len;
 
 	if (!dcc->pasvid && (dcc->type == TYPE_SEND || dcc->type == TYPE_CHATSEND))
-		enforce_peer_addr = dcc_get_known_peer_addr (dcc, &expected_addr);
+	{
+		peer_addr_state = dcc_get_known_peer_addr (dcc, &expected_addr);
+		if (peer_addr_state == DCC_PEER_ADDR_KNOWN)
+			enforce_peer_addr = TRUE;
+		else if (peer_addr_state == DCC_PEER_ADDR_UNRESOLVABLE)
+		{
+			fe_input_remove (dcc->iotag);
+			dcc->iotag = 0;
+			closesocket (dcc->sok);
+			dcc->sok = -1;
+			dcc_close (dcc, STAT_FAILED, FALSE);
+			return TRUE;
+		}
+	}
 
 	while (1)
 	{
