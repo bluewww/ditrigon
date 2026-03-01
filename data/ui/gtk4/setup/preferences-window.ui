@@ -1,12 +1,14 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
-  <requires lib="gtk" version="4.0"/>
+  <!-- interface-name preferences-window.ui -->
   <requires lib="Adw" version="1.0"/>
-
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.5"/>
   <object class="AdwPreferencesDialog" id="setup_prefs_window">
-    <property name="title" translatable="yes">Preferences</property>
-    <property name="content-width">920</property>
     <property name="content-height">680</property>
+    <property name="content-width">920</property>
     <property name="search-enabled">True</property>
+    <property name="title" translatable="yes">Preferences</property>
   </object>
 </interface>

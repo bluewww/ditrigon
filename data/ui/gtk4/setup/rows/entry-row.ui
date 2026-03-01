@@ -1,7 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
-  <requires lib="gtk" version="4.0"/>
+  <!-- interface-name entry-row.ui -->
   <requires lib="Adw" version="1.0"/>
-
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.2"/>
   <object class="AdwEntryRow" id="setup_entry_row"/>
 </interface>

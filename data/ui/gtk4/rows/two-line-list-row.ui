@@ -1,14 +1,15 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name two-line-list-row.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkBox" id="two_line_row_box">
+    <property name="margin-bottom">6</property>
+    <property name="margin-end">10</property>
+    <property name="margin-start">10</property>
+    <property name="margin-top">6</property>
     <property name="orientation">vertical</property>
     <property name="spacing">2</property>
-    <property name="margin-start">10</property>
-    <property name="margin-end">10</property>
-    <property name="margin-top">6</property>
-    <property name="margin-bottom">6</property>
     <child>
       <object class="GtkLabel" id="two_line_row_title">
         <property name="xalign">0</property>
@@ -16,8 +17,8 @@
     </child>
     <child>
       <object class="GtkLabel" id="two_line_row_subtitle">
-        <property name="xalign">0</property>
         <property name="wrap">True</property>
+        <property name="xalign">0</property>
         <style>
           <class name="dim-label"/>
         </style>

@@ -1,18 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name text-editor-window.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkWindow" id="text_editor_window">
-    <property name="default-width">760</property>
-    <property name="default-height">520</property>
     <property name="child">
       <object class="GtkBox" id="text_editor_root">
+        <property name="margin-bottom">12</property>
+        <property name="margin-end">12</property>
+        <property name="margin-start">12</property>
+        <property name="margin-top">12</property>
         <property name="orientation">vertical</property>
         <property name="spacing">8</property>
-        <property name="margin-start">12</property>
-        <property name="margin-end">12</property>
-        <property name="margin-top">12</property>
-        <property name="margin-bottom">12</property>
         <child>
           <object class="GtkLabel" id="text_editor_hint">
             <property name="xalign">0.0</property>
@@ -23,20 +22,20 @@
         </child>
         <child>
           <object class="GtkScrolledWindow" id="text_editor_scroll">
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <property name="child">
               <object class="GtkTextView" id="text_editor_view">
                 <property name="monospace">True</property>
               </object>
             </property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
           </object>
         </child>
         <child>
           <object class="GtkBox" id="text_editor_buttons">
+            <property name="halign">end</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
-            <property name="halign">end</property>
             <child>
               <object class="GtkButton" id="text_editor_reload_button"/>
             </child>
@@ -50,5 +49,7 @@
         </child>
       </object>
     </property>
+    <property name="default-height">520</property>
+    <property name="default-width">760</property>
   </object>
 </interface>

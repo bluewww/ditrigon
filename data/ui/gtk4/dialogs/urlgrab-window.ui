@@ -1,19 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name urlgrab-window.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkWindow" id="urlgrab_window">
-    <property name="default-width">640</property>
-    <property name="default-height">420</property>
-    <property name="title" translatable="yes">URL Grabber</property>
     <property name="child">
       <object class="GtkBox" id="urlgrab_root">
+        <property name="margin-bottom">12</property>
+        <property name="margin-end">12</property>
+        <property name="margin-start">12</property>
+        <property name="margin-top">12</property>
         <property name="orientation">vertical</property>
         <property name="spacing">8</property>
-        <property name="margin-start">12</property>
-        <property name="margin-end">12</property>
-        <property name="margin-top">12</property>
-        <property name="margin-bottom">12</property>
         <child>
           <object class="GtkLabel" id="urlgrab_hint">
             <property name="label" translatable="yes">Double-click a URL to open it.</property>
@@ -25,20 +23,20 @@
         </child>
         <child>
           <object class="GtkScrolledWindow" id="urlgrab_scroll">
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <property name="child">
               <object class="GtkListBox" id="urlgrab_list">
                 <property name="selection-mode">single</property>
               </object>
             </property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
           </object>
         </child>
         <child>
           <object class="GtkBox" id="urlgrab_buttons">
+            <property name="halign">end</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
-            <property name="halign">end</property>
             <child>
               <object class="GtkButton" id="urlgrab_open_button">
                 <property name="label" translatable="yes">Open</property>
@@ -68,5 +66,8 @@
         </child>
       </object>
     </property>
+    <property name="default-height">420</property>
+    <property name="default-width">640</property>
+    <property name="title" translatable="yes">URL Grabber</property>
   </object>
 </interface>

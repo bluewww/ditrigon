@@ -1,18 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name editlist-window.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkWindow" id="editlist_window">
-    <property name="default-width">760</property>
-    <property name="default-height">420</property>
     <property name="child">
       <object class="GtkBox" id="editlist_root">
+        <property name="margin-bottom">12</property>
+        <property name="margin-end">12</property>
+        <property name="margin-start">12</property>
+        <property name="margin-top">12</property>
         <property name="orientation">vertical</property>
         <property name="spacing">8</property>
-        <property name="margin-start">12</property>
-        <property name="margin-end">12</property>
-        <property name="margin-top">12</property>
-        <property name="margin-bottom">12</property>
         <child>
           <object class="GtkLabel" id="editlist_header">
             <property name="xalign">0</property>
@@ -23,20 +22,20 @@
         </child>
         <child>
           <object class="GtkScrolledWindow" id="editlist_scroll">
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <property name="child">
               <object class="GtkListBox" id="editlist_list">
                 <property name="selection-mode">single</property>
               </object>
             </property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
           </object>
         </child>
         <child>
           <object class="GtkLabel" id="editlist_help_label">
-            <property name="xalign">0</property>
             <property name="visible">False</property>
             <property name="wrap">True</property>
+            <property name="xalign">0</property>
             <style>
               <class name="dim-label"/>
             </style>
@@ -44,9 +43,9 @@
         </child>
         <child>
           <object class="GtkBox" id="editlist_buttons">
+            <property name="halign">end</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
-            <property name="halign">end</property>
             <child>
               <object class="GtkButton" id="editlist_add_button"/>
             </child>
@@ -69,5 +68,7 @@
         </child>
       </object>
     </property>
+    <property name="default-height">420</property>
+    <property name="default-width">760</property>
   </object>
 </interface>

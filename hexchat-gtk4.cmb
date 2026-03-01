@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<!DOCTYPE cambalache-project SYSTEM "cambalache-project.dtd">
+<!-- Created with Cambalache 0.96.3 -->
+<cambalache-project version="0.96.0" target_tk="gtk-4.0">
+  <css filename="data/ui/gtk4/styles/chanview-tree.css"/>
+  <css filename="data/ui/gtk4/styles/maingui.css"/>
+  <css filename="data/ui/gtk4/styles/userlist.css"/>
+  <ui filename="data/ui/gtk4/dialogs/servlist-edit-window.ui" sha256="695eeb73485386e214291671c9ef28a563831be09ec24d3202732481038ad7c5"/>
+  <ui filename="data/ui/gtk4/dialogs/servlist-window.ui" sha256="19de66fcfcaffef4e963e119340c551caec52eac22b9c81b7af43974be7dbf4f"/>
+  <ui filename="data/ui/gtk4/dialogs/text-editor-window.ui" sha256="94d433379fe98906f515b05a1f73e85a7170a3d989028462573beb6cc91e30a4"/>
+  <ui filename="data/ui/gtk4/dialogs/ascii-window.ui" sha256="9b15046cb977bd18d592e940ed27d277f85586b6cdb8af1daaa2ef2356356bed"/>
+  <ui filename="data/ui/gtk4/dialogs/banlist-window.ui" sha256="174daf537c4d28ad0ba599360d8b63a5c0a4f895fc0b78518e5f4eecf624abe9"/>
+  <ui filename="data/ui/gtk4/dialogs/chanlist-window.ui" sha256="517c87d96b5a8f4e14c871932e5c9c0829e5126eb77cb4cec513baa4452f62c8"/>
+  <ui filename="data/ui/gtk4/dialogs/dcc-chat-window.ui" sha256="2514b7e685d40be8146ddcd063055eb8f32c621636fdd5899b14e56530f36089"/>
+  <ui filename="data/ui/gtk4/dialogs/dcc-file-window.ui" sha256="4372eca83c2178b76f2e5c203b3a9f944c4e4c464c678be967fd6a91c0c74b56"/>
+  <ui filename="data/ui/gtk4/dialogs/editlist-window.ui" sha256="d8623afef67320c6ee422c4aaf95766e5e9cc3ff309d9491c37ee89907adb1bf"/>
+  <ui filename="data/ui/gtk4/dialogs/ignore-window.ui" sha256="5e3ea131fdcc367f77d36a888682a7a73041a16d9afaa6994d1f683203461367"/>
+  <ui filename="data/ui/gtk4/dialogs/joind-window.ui" sha256="96e536478914ba0eb8cd36830e88624f88ee76d8d78bd2b724cbd9c2e60e4b73"/>
+  <ui filename="data/ui/gtk4/dialogs/notify-add-dialog.ui" sha256="29698e23f5963d95b2ec2321f152c747d78ef5727c64cc9f502a2766d7025804"/>
+  <ui filename="data/ui/gtk4/dialogs/notify-window.ui" sha256="ccf0603d1bf5a07e10c78f2c305d764f6e64a88635327b2770443bc93f06c240"/>
+  <ui filename="data/ui/gtk4/dialogs/plugin-window.ui" sha256="73891c9e4171bda2a10435e6fd69b2314b694d5d6caf22aefd7db01635acc8d3"/>
+  <ui filename="data/ui/gtk4/dialogs/rawlog-window.ui" sha256="bff1a678fe1445a65866afd0879878ca7cc419f9511bd9422cba22cf17cba878"/>
+  <ui filename="data/ui/gtk4/dialogs/urlgrab-window.ui" sha256="b17f835785caa25cf59f061cd299e999669f7300e21d98a42c429672e5c054d8"/>
+  <ui filename="data/ui/gtk4/maingui/adw-nav-split.ui" sha256="fbd311dd3bc9d0f15ff761b5b513bb2908868c6ffc95e1e7f32dc67b0717b5d5"/>
+  <ui filename="data/ui/gtk4/maingui/chat-layout.ui" sha256="d7506c8f66b97ceafa847e5413c735a9381967bde2be8ca91702bcf28ca5162b"/>
+  <ui filename="data/ui/gtk4/maingui/legacy-content-paned.ui" sha256="b8879d13680ebbd5ad512ebffec4607eff1b16dca21ab962def573611a7b0900"/>
+  <ui filename="data/ui/gtk4/maingui/main-box.ui" sha256="76f4e1250dc72a3c9c719449d9b8b26d03b1297a03ce671746e4d8ecc4c12409"/>
+  <ui filename="data/ui/gtk4/maingui/userlist-shell.ui" sha256="15f433e73c0e12b70ebb85ccc05023188980159240d5bb918ef36b3e389201be"/>
+  <ui filename="data/ui/gtk4/maingui/xtext-scroll.ui" sha256="059e26caab80198e8baeeaba1f303d5f6993c3264ad3d6f36669ca84b9fb30cb"/>
+  <ui filename="data/ui/gtk4/menus/static-menus.ui" sha256="6b50695066b2fd74493333f3c4033101c2acc052b179047be80c4240235b9d7a"/>
+  <ui filename="data/ui/gtk4/rows/chanview-tree-row.ui" sha256="0b38346ece186d1c81c99127216edff84cea524a8ef1c12ca7f5e7273276649e"/>
+  <ui filename="data/ui/gtk4/rows/two-line-list-row.ui" sha256="f19433f4a1afe346c463635c4b7c71320738f1641cbdeb86430371d7e3b3324c"/>
+  <ui filename="data/ui/gtk4/rows/userlist-row.ui" sha256="c226f4969fc89d0f591f63c99029a4e97a155ecf99d4dd1020474deb321fb5d3"/>
+  <ui filename="data/ui/gtk4/setup/group.ui" sha256="fb4e733310a1cd341ccd3c343426991a6ae3fef2a47cdf1ab3ae0143e2e5254e"/>
+  <ui filename="data/ui/gtk4/setup/page.ui" sha256="d2d8b5a1c4826038bbf3c35568bb8d0226756f34534ee2e26581d9e43a73c8d2"/>
+  <ui filename="data/ui/gtk4/setup/preferences-window.ui" sha256="8bf022948c00e0f649438f8b6f6d40bcb39ad9bf465e029b0993436410fad84a"/>
+  <ui filename="data/ui/gtk4/setup/rows/action-row.ui" sha256="ffdc5bbbb34b954bd537e2b6e831f6fce9182231c771acddb131bfc886b1e4d0"/>
+  <ui filename="data/ui/gtk4/setup/rows/combo-row.ui" sha256="85ae594f636bc817cf667a7cfd6d5bd9a3e90d2ae63ff6463dca0c94d1ba6838"/>
+  <ui filename="data/ui/gtk4/setup/rows/entry-row.ui" sha256="0dfeb20100497eeb2038355d014197040aeae8b77ea7b93949d227bc81dab1aa"/>
+  <ui filename="data/ui/gtk4/setup/rows/switch-row.ui" sha256="379891b638338a33ff26dbfda65d386f811188de6b0d148aa5fad3a5ded111af"/>
+</cambalache-project>

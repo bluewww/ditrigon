@@ -1,37 +1,34 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name joind-window.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkWindow" id="joind_window">
-    <property name="default-width">560</property>
-    <property name="default-height">280</property>
-    <property name="resizable">False</property>
-    <property name="modal">True</property>
     <property name="child">
       <object class="GtkBox" id="joind_root">
+        <property name="margin-bottom">14</property>
+        <property name="margin-end">14</property>
+        <property name="margin-start">14</property>
+        <property name="margin-top">14</property>
         <property name="orientation">vertical</property>
         <property name="spacing">10</property>
-        <property name="margin-start">14</property>
-        <property name="margin-end">14</property>
-        <property name="margin-top">14</property>
-        <property name="margin-bottom">14</property>
         <child>
           <object class="GtkLabel" id="joind_title">
             <property name="label" translatable="yes">&lt;b&gt;Connection successful.&lt;/b&gt;</property>
-            <property name="xalign">0</property>
             <property name="use-markup">True</property>
+            <property name="xalign">0</property>
           </object>
         </child>
         <child>
           <object class="GtkLabel" id="joind_desc">
             <property name="label" translatable="yes">No auto-join channel is configured for this network. What would you like to do next?</property>
-            <property name="xalign">0</property>
             <property name="wrap">True</property>
+            <property name="xalign">0</property>
           </object>
         </child>
         <child>
           <object class="GtkCheckButton" id="joind_radio_nothing">
-            <property name="label" translatable="yes">Nothing, I&apos;ll join later.</property>
+            <property name="label" translatable="yes">Nothing, I'll join later.</property>
           </object>
         </child>
         <child>
@@ -62,9 +59,9 @@
         </child>
         <child>
           <object class="GtkBox" id="joind_buttons">
+            <property name="halign">end</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
-            <property name="halign">end</property>
             <child>
               <object class="GtkButton" id="joind_cancel_button">
                 <property name="label" translatable="yes">Cancel</property>
@@ -79,5 +76,9 @@
         </child>
       </object>
     </property>
+    <property name="default-height">280</property>
+    <property name="default-width">560</property>
+    <property name="modal">True</property>
+    <property name="resizable">False</property>
   </object>
 </interface>

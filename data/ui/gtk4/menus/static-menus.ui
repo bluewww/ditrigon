@@ -1,42 +1,41 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name static-menus.ui -->
   <requires lib="gio" version="2.0"/>
-
   <menu id="new_item_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">Connect to a Network...</attribute>
         <attribute name="action">win.network-list</attribute>
+        <attribute name="label" translatable="yes">Connect to a Network...</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">Join a Channel...</attribute>
         <attribute name="action">win.server-join</attribute>
+        <attribute name="label" translatable="yes">Join a Channel...</attribute>
       </item>
     </section>
   </menu>
-
   <menu id="url_context_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">Open Link</attribute>
         <attribute name="action">url.open</attribute>
+        <attribute name="label" translatable="yes">Open Link</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">Copy Selected Link</attribute>
         <attribute name="action">url.copy</attribute>
+        <attribute name="label" translatable="yes">Copy Selected Link</attribute>
       </item>
     </section>
   </menu>
-
   <menu id="chan_context_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">Join Channel</attribute>
         <attribute name="action">chan.join</attribute>
+        <attribute name="label" translatable="yes">Join Channel</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">Copy Channel Name</attribute>
         <attribute name="action">chan.copy</attribute>
+        <attribute name="label" translatable="yes">Copy Channel Name</attribute>
       </item>
     </section>
   </menu>

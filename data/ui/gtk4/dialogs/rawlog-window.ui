@@ -1,36 +1,35 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name rawlog-window.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkWindow" id="rawlog_window">
-    <property name="default-width">720</property>
-    <property name="default-height">420</property>
     <property name="child">
       <object class="GtkBox" id="rawlog_root">
+        <property name="margin-bottom">12</property>
+        <property name="margin-end">12</property>
+        <property name="margin-start">12</property>
+        <property name="margin-top">12</property>
         <property name="orientation">vertical</property>
         <property name="spacing">8</property>
-        <property name="margin-start">12</property>
-        <property name="margin-end">12</property>
-        <property name="margin-top">12</property>
-        <property name="margin-bottom">12</property>
         <child>
           <object class="GtkScrolledWindow" id="rawlog_scroll">
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <property name="child">
               <object class="GtkTextView" id="rawlog_text_view">
-                <property name="editable">False</property>
                 <property name="cursor-visible">False</property>
+                <property name="editable">False</property>
                 <property name="monospace">True</property>
               </object>
             </property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
           </object>
         </child>
         <child>
           <object class="GtkBox" id="rawlog_buttons">
+            <property name="halign">end</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
-            <property name="halign">end</property>
             <child>
               <object class="GtkButton" id="rawlog_clear_button"/>
             </child>
@@ -44,5 +43,7 @@
         </child>
       </object>
     </property>
+    <property name="default-height">420</property>
+    <property name="default-width">720</property>
   </object>
 </interface>

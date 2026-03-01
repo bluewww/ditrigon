@@ -1,35 +1,33 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.3 -->
 <interface>
+  <!-- interface-name dcc-file-window.ui -->
   <requires lib="gtk" version="4.0"/>
-
   <object class="GtkWindow" id="dcc_file_window">
-    <property name="default-width">760</property>
-    <property name="default-height">420</property>
-    <property name="title" translatable="yes">Uploads and Downloads</property>
     <property name="child">
       <object class="GtkBox" id="dcc_file_root">
+        <property name="margin-bottom">12</property>
+        <property name="margin-end">12</property>
+        <property name="margin-start">12</property>
+        <property name="margin-top">12</property>
         <property name="orientation">vertical</property>
         <property name="spacing">8</property>
-        <property name="margin-start">12</property>
-        <property name="margin-end">12</property>
-        <property name="margin-top">12</property>
-        <property name="margin-bottom">12</property>
         <child>
           <object class="GtkScrolledWindow" id="dcc_file_scroll">
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
             <property name="child">
               <object class="GtkListBox" id="dcc_file_list">
                 <property name="selection-mode">multiple</property>
               </object>
             </property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
           </object>
         </child>
         <child>
           <object class="GtkBox" id="dcc_file_buttons">
+            <property name="halign">end</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
-            <property name="halign">end</property>
             <child>
               <object class="GtkButton" id="dcc_file_accept_button">
                 <property name="label" translatable="yes">Accept</property>
@@ -64,5 +62,8 @@
         </child>
       </object>
     </property>
+    <property name="default-height">420</property>
+    <property name="default-width">760</property>
+    <property name="title" translatable="yes">Uploads and Downloads</property>
   </object>
 </interface>
