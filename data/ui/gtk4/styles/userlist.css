@@ -1,0 +1,52 @@
+.hc-user-row {
+  min-height: 30px;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.hc-user-host {
+  font-size: 0.83em;
+}
+
+.hc-user-role-badge {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 700;
+}
+
+.hc-user-role-op-badge {
+  background-color: alpha(#26a269, 0.28);
+  color: #2ec27e;
+}
+
+.hc-user-role-halfop-badge {
+  background-color: alpha(#e5a50a, 0.28);
+  color: #f6d32d;
+}
+
+.hc-user-role-voice-badge {
+  background-color: alpha(#813d9c, 0.28);
+  color: #813d9c;
+}
+
+.hc-user-role-op {
+  color: #2ec27e;
+}
+
+.hc-user-role-halfop {
+  color: #f6d32d;
+}
+
+.hc-user-role-voice {
+  color: #813d9c;
+}
+
+.hc-userlist-empty label {
+  font-size: 0.8em;
+}
+
+.hc-userlist-empty image {
+  -gtk-icon-size: 52px;
+}

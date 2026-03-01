@@ -272,7 +272,6 @@ static void
 maingui_install_css (void)
 {
 	GdkDisplay *display;
-	const char *css;
 
 	if (maingui_css_provider)
 		return;
@@ -281,78 +280,9 @@ maingui_install_css (void)
 	if (!display)
 		return;
 
-	css =
-		"paned.hc-soft-paned > separator {\n"
-		"  background-color: alpha(currentColor, 0.04);\n"
-		"  border: none;\n"
-		"  box-shadow: none;\n"
-		"  min-width: 3px;\n"
-		"  background-image: none;\n"
-		"}\n"
-		".hc-input-row {\n"
-		"  background-color: @view_bg_color;\n"
-		"  padding: 4px 6px 6px 6px;\n"
-		"  border-top: 1px solid alpha(currentColor, 0.04);\n"
-		"}\n"
-		".hc-input-composer {\n"
-		"  border-radius: 10px;\n"
-		"  border: 1px solid alpha(currentColor, 0.06);\n"
-		"  padding: 2px 6px;\n"
-		"  background-color: alpha(currentColor, 0.07);\n"
-		"}\n"
-		".hc-input-composer:focus-within {\n"
-		"  background-color: alpha(currentColor, 0.09);\n"
-		"  border-color: alpha(currentColor, 0.12);\n"
-		"  box-shadow: none;\n"
-		"}\n"
-		".hc-input-nick {\n"
-		"  border-radius: 10px;\n"
-		"  padding: 0 7px;\n"
-		"  min-height: 28px;\n"
-		"  font-weight: 700;\n"
-		"}\n"
-		".hc-input-nick:hover {\n"
-		"  background-color: alpha(currentColor, 0.08);\n"
-		"}\n"
-		".hc-command-entry {\n"
-		"  min-height: 28px;\n"
-		"  box-shadow: none;\n"
-		"  outline: none;\n"
-		"}\n"
-		".hc-command-entry:focus,\n"
-		".hc-command-entry:focus-within {\n"
-		"  box-shadow: none;\n"
-		"  outline: none;\n"
-		"}\n"
-		".hc-command-entry > text {\n"
-		"  background-color: transparent;\n"
-		"  box-shadow: none;\n"
-		"  outline: none;\n"
-		"}\n"
-		".hc-command-entry:focus > text,\n"
-		".hc-command-entry:focus-within > text {\n"
-		"  box-shadow: none;\n"
-		"  outline: none;\n"
-		"}\n"
-		".hc-input-send {\n"
-		"  min-width: 28px;\n"
-		"  min-height: 28px;\n"
-		"}\n"
-		".hc-input-send:not(:disabled) {\n"
-		"  background-color: alpha(@accent_bg_color, 0.24);\n"
-		"  color: @accent_fg_color;\n"
-		"}\n"
-		".hc-input-send:disabled {\n"
-		"  background-color: transparent;\n"
-		"  color: alpha(currentColor, 0.45);\n"
-		"}\n"
-		".hc-nick-context-popover scrolledwindow {\n"
-		"  min-width: 340px;\n"
-		"  min-height: 415px;\n"
-		"}\n";
-
 	maingui_css_provider = gtk_css_provider_new ();
-	gtk_css_provider_load_from_string (maingui_css_provider, css);
+	gtk_css_provider_load_from_resource (maingui_css_provider,
+		"/org/ditrigon/ui/gtk4/styles/maingui.css");
 	gtk_style_context_add_provider_for_display (display,
 		GTK_STYLE_PROVIDER (maingui_css_provider),
 		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

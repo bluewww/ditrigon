@@ -163,7 +163,6 @@ static void
 userlist_install_css (void)
 {
 	GdkDisplay *display;
-	const char *css;
 
 	if (userlist_css_provider)
 		return;
@@ -172,21 +171,9 @@ userlist_install_css (void)
 	if (!display)
 		return;
 
-	css =
-		".hc-user-row { min-height: 30px; padding: 2px 4px; border-radius: 8px; }\n"
-		".hc-user-host { font-size: 0.83em; }\n"
-		".hc-user-role-badge { min-width: 18px; padding: 0 6px; border-radius: 999px; font-size: 0.78em; font-weight: 700; }\n"
-		".hc-user-role-op-badge { background-color: alpha(#26a269, 0.28); color: #2ec27e; }\n"
-		".hc-user-role-halfop-badge { background-color: alpha(#e5a50a, 0.28); color: #f6d32d; }\n"
-		".hc-user-role-voice-badge { background-color: alpha(#813d9c, 0.28); color: #813d9c; }\n"
-		".hc-user-role-op { color: #2ec27e; }\n"
-		".hc-user-role-halfop { color: #f6d32d; }\n"
-		".hc-user-role-voice { color: #813d9c; }\n"
-		".hc-userlist-empty label { font-size: 0.8em; }\n"
-		".hc-userlist-empty image { -gtk-icon-size: 52px; }\n";
-
 	userlist_css_provider = gtk_css_provider_new ();
-	gtk_css_provider_load_from_string (userlist_css_provider, css);
+	gtk_css_provider_load_from_resource (userlist_css_provider,
+		"/org/ditrigon/ui/gtk4/styles/userlist.css");
 	gtk_style_context_add_provider_for_display (display,
 		GTK_STYLE_PROVIDER (userlist_css_provider),
 		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

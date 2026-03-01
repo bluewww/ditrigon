@@ -1,0 +1,81 @@
+paned.hc-soft-paned > separator {
+  background-color: alpha(currentColor, 0.04);
+  border: none;
+  box-shadow: none;
+  min-width: 3px;
+  background-image: none;
+}
+
+.hc-input-row {
+  background-color: @view_bg_color;
+  padding: 4px 6px 6px 6px;
+  border-top: 1px solid alpha(currentColor, 0.04);
+}
+
+.hc-input-composer {
+  border-radius: 10px;
+  border: 1px solid alpha(currentColor, 0.06);
+  padding: 2px 6px;
+  background-color: alpha(currentColor, 0.07);
+}
+
+.hc-input-composer:focus-within {
+  background-color: alpha(currentColor, 0.09);
+  border-color: alpha(currentColor, 0.12);
+  box-shadow: none;
+}
+
+.hc-input-nick {
+  border-radius: 10px;
+  padding: 0 7px;
+  min-height: 28px;
+  font-weight: 700;
+}
+
+.hc-input-nick:hover {
+  background-color: alpha(currentColor, 0.08);
+}
+
+.hc-command-entry {
+  min-height: 28px;
+  box-shadow: none;
+  outline: none;
+}
+
+.hc-command-entry:focus,
+.hc-command-entry:focus-within {
+  box-shadow: none;
+  outline: none;
+}
+
+.hc-command-entry > text {
+  background-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.hc-command-entry:focus > text,
+.hc-command-entry:focus-within > text {
+  box-shadow: none;
+  outline: none;
+}
+
+.hc-input-send {
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.hc-input-send:not(:disabled) {
+  background-color: alpha(@accent_bg_color, 0.24);
+  color: @accent_fg_color;
+}
+
+.hc-input-send:disabled {
+  background-color: transparent;
+  color: alpha(currentColor, 0.45);
+}
+
+.hc-nick-context-popover scrolledwindow {
+  min-width: 340px;
+  min-height: 415px;
+}

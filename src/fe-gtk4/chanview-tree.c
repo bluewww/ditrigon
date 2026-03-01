@@ -87,25 +87,8 @@ tree_load_css (void)
 		return;
 
 	provider = gtk_css_provider_new ();
-	gtk_css_provider_load_from_string (provider,
-		".hc-tree-row { border-radius: 8px; min-height: 28px; padding: 1px 2px; }"
-		".hc-tree-context-target { border-radius: 8px; background-color: alpha(@accent_bg_color, 0.16); box-shadow: inset 0 0 0 1px alpha(@accent_bg_color, 0.36); }"
-		".hc-tree-context-popover scrolledwindow { min-width: 200px; min-height: 350px; }"
-		".hc-tree-label { padding: 1px 0; }"
-		".hc-tree-subtitle { padding: 0; font-size: 0.82em; }"
-		".hc-tree-icon { opacity: 0.72; }"
-		".hc-tree-section { border-radius: 0; min-height: 22px; padding: 10px 4px 2px 4px; border-top: 1px solid alpha(@theme_fg_color, 0.15); }"
-		".hc-tree-section-first { border-top: none; }"
-		".hc-tree-section-label { color: alpha(@theme_fg_color, 0.70); font-size: 0.83em; font-weight: 700; }"
-		".hc-tree-badge { min-width: 16px; padding: 0 6px; border-radius: 999px; margin: 0 4px 0 4px; font-size: 0.85em; font-weight: 700; }"
-		".hc-tree-server { color: alpha(@theme_fg_color, 0.90); font-weight: 600; }"
-		".hc-tree-data { color: @theme_fg_color; font-weight: 600; }"
-		".hc-tree-msg { color: @theme_fg_color; font-weight: 600; }"
-		".hc-tree-hilight { color: @theme_fg_color; font-weight: 700; }"
-		".hc-tree-badge-data { background-color: alpha(@theme_fg_color, 0.18); color: @theme_fg_color; }"
-		".hc-tree-badge-msg { background-color: alpha(@accent_bg_color, 0.25); color: @accent_fg_color; }"
-		".hc-tree-badge-hilight { background-color: #e01b24; color: #ffffff; }"
-		".hc-tree-disconnected { color: alpha(@theme_fg_color, 0.62); }");
+	gtk_css_provider_load_from_resource (provider,
+		"/org/ditrigon/ui/gtk4/styles/chanview-tree.css");
 	gtk_style_context_add_provider_for_display (display,
 		GTK_STYLE_PROVIDER (provider),
 		GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
