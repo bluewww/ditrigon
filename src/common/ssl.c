@@ -415,7 +415,7 @@ _SSL_check_subject_altname (X509 *cert, const char *host)
 	GSocketFamily family;
 	int type = GEN_DNS;
 	int count, i;
-	int rv = -1;
+	int rv = -3;
 
 	altname_stack = X509_get_ext_d2i (cert, NID_subject_alt_name, NULL, NULL);
 	if (altname_stack == NULL)
@@ -556,7 +556,7 @@ _SSL_check_hostname (X509 *cert, const char *host)
 	int rv;
 
 	rv = _SSL_check_subject_altname (cert, host);
-	if (rv == 0 || rv == -2)
+	if (rv == 0 || rv == -2 || rv == -3)
 		return rv;
 
 	return _SSL_check_common_name (cert, host);

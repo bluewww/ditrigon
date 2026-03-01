@@ -78,7 +78,7 @@ build_cert_with_cn_and_san (const char *common_name, const char *san_value)
 }
 
 static void
-test_ssl_san_cn_fallback_accepts_mismatch (void)
+test_ssl_san_cn_fallback_rejects_mismatch (void)
 {
 	X509 *cert = build_cert_with_cn_and_san ("victim.example", "DNS:attacker.example");
 	int rv;
@@ -86,7 +86,7 @@ test_ssl_san_cn_fallback_accepts_mismatch (void)
 	g_assert_nonnull (cert);
 
 	rv = _SSL_check_hostname (cert, "victim.example");
-	g_assert_cmpint (rv, ==, 0);
+	g_assert_cmpint (rv, !=, 0);
 
 	X509_free (cert);
 }
@@ -198,8 +198,8 @@ main (int argc, char **argv)
 {
 	g_test_init (&argc, &argv, NULL);
 
-	g_test_add_func ("/security/ssl/san-cn-fallback-accepts-mismatch",
-						  test_ssl_san_cn_fallback_accepts_mismatch);
+	g_test_add_func ("/security/ssl/san-cn-fallback-rejects-mismatch",
+						  test_ssl_san_cn_fallback_rejects_mismatch);
 	g_test_add_func ("/security/scram/iteration-suffix-is-accepted",
 						  test_scram_iteration_suffix_is_accepted);
 	g_test_add_func ("/security/scram/server-final-prefix-bug",
