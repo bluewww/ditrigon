@@ -1027,7 +1027,7 @@ copy_file (char *dl_src, char *dl_dest, int permissions)
 	int tmp_src, tmp_dest;
 	gboolean ok = FALSE;
 	char dl_tmp[4096];
-	int return_tmp, return_tmp2;
+	ssize_t return_tmp;
 
 	if ((tmp_src = g_open (dl_src, O_RDONLY | OFLAGS, 0600)) == -1)
 	{
@@ -1049,6 +1049,9 @@ copy_file (char *dl_src, char *dl_dest, int permissions)
 	{
 		return_tmp = read (tmp_src, dl_tmp, sizeof (dl_tmp));
 
+		if (return_tmp < 0 && errno == EINTR)
+			continue;
+
 		if (!return_tmp)
 		{
 			ok = TRUE;
@@ -1063,9 +1066,7 @@ copy_file (char *dl_src, char *dl_dest, int permissions)
 			break;
 		}
 
-		return_tmp2 = write (tmp_dest, dl_tmp, return_tmp);
-
-		if (return_tmp2 < 0)
+		if (!write_all (tmp_dest, dl_tmp, (size_t)return_tmp))
 		{
 			fprintf (stderr, "download_move_to_completed_dir(): "
 				"error writing while moving file to save directory (%s)",
