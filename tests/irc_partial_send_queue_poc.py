@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-PoC test for Track A: IRC queue drops bytes on short send.
+Regression test for Track A: queued IRC lines must survive short sends.
 
-This test is intentionally written as a pre-fix PoC:
-- it is successful when the bug is triggered
-- it should fail once Track A is fixed, then be flipped into a regression test
+The test forces one short write for an outbound PONG using LD_PRELOAD and
+expects the client to eventually deliver the full line.
 """
 
 from __future__ import annotations
@@ -232,15 +231,15 @@ def main() -> int:
     if bad:
         print("client output tail:")
         print(output[-4000:])
-        print("IRC_PARTIAL_SEND_QUEUE_POC=INCONCLUSIVE")
+        print("IRC_PARTIAL_SEND_QUEUE_REGRESSION=INCONCLUSIVE")
         return 1
 
-    if server.result.saw_full_expected_pong:
-        print("IRC_PARTIAL_SEND_QUEUE_POC=NOT_TRIGGERED")
-        print("full PONG observed despite forced short send")
+    if not server.result.saw_full_expected_pong:
+        print("IRC_PARTIAL_SEND_QUEUE_REGRESSION=FAIL")
+        print("full PONG was not observed after forced short send")
         return 1
 
-    print("IRC_PARTIAL_SEND_QUEUE_POC=TRIGGERED")
+    print("IRC_PARTIAL_SEND_QUEUE_REGRESSION=OK")
     return 0
 
 

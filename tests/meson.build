@@ -177,7 +177,7 @@ else
     )
 
     irc_partial_send_queue_poc_script = files('irc_partial_send_queue_poc.py')
-    test('IRC Partial Send Queue PoC', python3,
+    test('IRC Partial Send Queue Regression', python3,
       args: [
         irc_partial_send_queue_poc_script,
         ditrigon_gtk4_exe,
@@ -188,7 +188,7 @@ else
         'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:verify_asan_link_order=0',
         'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
       ],
-      suite: ['error-poc'],
+      suite: ['regression'],
       is_parallel: false,
       timeout: 90,
     )
