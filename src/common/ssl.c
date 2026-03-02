@@ -244,6 +244,10 @@ _SSL_send (SSL * ssl, char *buf, int len)
 
 	switch (SSL_get_error (ssl, num))
 	{
+	case SSL_ERROR_WANT_READ:
+	case SSL_ERROR_WANT_WRITE:
+		errno = EAGAIN;
+		break;
 	case SSL_ERROR_SSL:			  /* setup errno! */
 		/* ??? */
 		__SSL_fill_err_buf ("SSL_write");
@@ -272,6 +276,10 @@ _SSL_recv (SSL * ssl, char *buf, int len)
 
 	switch (SSL_get_error (ssl, num))
 	{
+	case SSL_ERROR_WANT_READ:
+	case SSL_ERROR_WANT_WRITE:
+		errno = EAGAIN;
+		break;
 	case SSL_ERROR_SSL:
 		/* ??? */
 		__SSL_fill_err_buf ("SSL_read");
