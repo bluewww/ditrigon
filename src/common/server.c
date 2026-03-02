@@ -212,6 +212,186 @@ server_send_real (server *serv, char *buf, int len)
 	return tcp_send_real (serv->ssl, serv->sok, serv->write_converter, buf, len);
 }
 
+typedef struct irc_outbound_queue_entry
+{
+	int priority;
+	char *raw_buf;
+	int raw_len;
+	char *wire_buf;
+	gsize wire_len;
+	gsize wire_off;
+	gboolean throttle_charged;
+	gboolean rawlog_emitted;
+} irc_outbound_queue_entry;
+
+enum
+{
+	OUTBOUND_PRI_LOW = 0,
+	OUTBOUND_PRI_MED = 1,
+	OUTBOUND_PRI_HIGH = 2,
+	OUTBOUND_PRI_INFLIGHT = 3
+};
+
+static void
+server_outbound_queue_entry_free (irc_outbound_queue_entry *entry)
+{
+	if (!entry)
+		return;
+
+	g_free (entry->raw_buf);
+	g_free (entry->wire_buf);
+	g_free (entry);
+}
+
+static void
+server_outbound_queue_free (GSList **queue)
+{
+	GSList *list = *queue;
+
+	while (list)
+	{
+		GSList *next = list->next;
+		server_outbound_queue_entry_free ((irc_outbound_queue_entry *) list->data);
+		g_slist_free_1 (list);
+		list = next;
+	}
+
+	*queue = NULL;
+}
+
+static int
+server_outbound_queue_priority (const char *raw_buf)
+{
+	if (g_ascii_strncasecmp (raw_buf, "PRIVMSG", 7) == 0 ||
+		 g_ascii_strncasecmp (raw_buf, "NOTICE", 6) == 0)
+	{
+		return OUTBOUND_PRI_MED;
+	}
+
+	if (g_ascii_strncasecmp (raw_buf, "WHO ", 4) == 0)
+		return OUTBOUND_PRI_LOW;
+
+	if (g_ascii_strncasecmp (raw_buf, "MODE ", 5) == 0)
+	{
+		const char *mode_str;
+		const char *mode_str_end;
+		const char *loc;
+
+		/* skip spaces before channel/nickname */
+		for (mode_str = raw_buf + 5; *mode_str == ' '; ++mode_str);
+
+		/* skip over channel/nickname */
+		mode_str = strchr (mode_str, ' ');
+		if (mode_str)
+		{
+			/* skip spaces before mode string */
+			for (; *mode_str == ' '; ++mode_str);
+
+			/* find spaces after end of mode string */
+			mode_str_end = strchr (mode_str, ' ');
+
+			/* look for +/- within the mode string */
+			loc = strchr (mode_str, '-');
+			if (loc && (!mode_str_end || loc < mode_str_end))
+				return OUTBOUND_PRI_HIGH;
+
+			loc = strchr (mode_str, '+');
+			if (loc && (!mode_str_end || loc < mode_str_end))
+				return OUTBOUND_PRI_HIGH;
+		}
+		return OUTBOUND_PRI_LOW;
+	}
+
+	return OUTBOUND_PRI_HIGH;
+}
+
+static int
+server_outbound_queue_throttle_cost (const irc_outbound_queue_entry *entry)
+{
+	const char *p;
+	int i;
+
+	for (p = entry->raw_buf, i = entry->raw_len; i && *p != ' '; p++, i--);
+
+	return 2 + i / 120;
+}
+
+static irc_outbound_queue_entry *
+server_outbound_queue_entry_new (server *serv, const char *buf, int len)
+{
+	irc_outbound_queue_entry *entry;
+
+	entry = g_new0 (irc_outbound_queue_entry, 1);
+	entry->raw_buf = g_malloc ((gsize)len + 1);
+	memcpy (entry->raw_buf, buf, len);
+	entry->raw_buf[len] = 0;
+	entry->raw_len = len;
+	entry->priority = server_outbound_queue_priority (entry->raw_buf);
+	entry->wire_buf = text_convert_invalid (entry->raw_buf, len,
+														 serv->write_converter,
+														 arbitrary_encoding_fallback_string,
+														 &entry->wire_len);
+
+	return entry;
+}
+
+static GSList *
+server_outbound_queue_find_priority (GSList *queue, int priority)
+{
+	GSList *list;
+
+	for (list = queue; list; list = list->next)
+	{
+		irc_outbound_queue_entry *entry = (irc_outbound_queue_entry *) list->data;
+		if (entry->priority == priority)
+			return list;
+	}
+
+	return NULL;
+}
+
+/* return: -1 fatal, 0 sent completely, 1 needs retry (would block) */
+static int
+server_outbound_queue_send_wire (server *serv, irc_outbound_queue_entry *entry, int *error_out)
+{
+	while (entry->wire_off < entry->wire_len)
+	{
+		gsize remaining = entry->wire_len - entry->wire_off;
+		ssize_t ret;
+#ifdef USE_OPENSSL
+		if (!serv->ssl)
+			ret = send (serv->sok, entry->wire_buf + entry->wire_off, remaining, 0);
+		else
+			ret = _SSL_send (serv->ssl, entry->wire_buf + entry->wire_off,
+								  (int) MIN ((gsize) G_MAXINT, remaining));
+#else
+		ret = send (serv->sok, entry->wire_buf + entry->wire_off, remaining, 0);
+#endif
+		if (ret > 0)
+		{
+			entry->wire_off += (gsize)ret;
+			continue;
+		}
+
+		if (ret == 0)
+		{
+			*error_out = EPIPE;
+			return -1;
+		}
+
+		if (errno == EINTR)
+			continue;
+
+		if (would_block ())
+			return 1;
+
+		*error_out = sock_error ();
+		return -1;
+	}
+
+	return 0;
+}
+
 /* new throttling system, uses the same method as the Undernet
    ircu2.10 server; under test, a 200-line paste didn't flood
    off the client */
@@ -219,117 +399,113 @@ server_send_real (server *serv, char *buf, int len)
 static int
 tcp_send_queue (server *serv)
 {
-	char *buf, *p;
-	int len, i, pri;
+	int pri;
+	int send_status;
+	int error = 0;
 	GSList *list;
+	irc_outbound_queue_entry *entry;
 	time_t now = time (0);
 
 	/* did the server close since the timeout was added? */
 	if (!is_server (serv))
 		return 0;
 
-	/* try priority 2,1,0 */
-	pri = 2;
-	while (pri >= 0)
+	/* try in-flight first, then normal priorities 2,1,0 */
+	pri = OUTBOUND_PRI_INFLIGHT;
+	while (pri >= OUTBOUND_PRI_LOW)
 	{
-		list = serv->outbound_queue;
-		while (list)
+		list = server_outbound_queue_find_priority (serv->outbound_queue, pri);
+		if (!list)
 		{
-			buf = (char *) list->data;
-			if (buf[0] == pri)
+			pri--;
+			continue;
+		}
+
+		entry = (irc_outbound_queue_entry *) list->data;
+
+		if (prefs.hex_net_throttle && !entry->throttle_charged)
+		{
+			if (serv->next_send < now)
+				serv->next_send = now;
+			if (serv->next_send - now >= 10)
 			{
-				buf++;	/* skip the priority byte */
-				len = strlen (buf);
+				/* check for clock skew */
+				if (now >= serv->prev_now)
+					return 1;		  /* don't remove the timeout handler */
+				/* it is skewed, reset to something sane */
+				serv->next_send = now;
+			}
 
-				if (serv->next_send < now)
-					serv->next_send = now;
-				if (serv->next_send - now >= 10)
+			serv->next_send += server_outbound_queue_throttle_cost (entry);
+			serv->prev_now = now;
+			entry->throttle_charged = TRUE;
+			fe_set_throttle (serv);
+		}
+
+		if (!entry->rawlog_emitted)
+		{
+			fe_add_rawlog (serv, entry->raw_buf, entry->raw_len, TRUE);
+			url_check_line (entry->raw_buf);
+			entry->rawlog_emitted = TRUE;
+		}
+
+		send_status = server_outbound_queue_send_wire (serv, entry, &error);
+		if (send_status < 0)
+		{
+			g_warning ("Failed to write queued IRC data: %s", g_strerror (error));
+			if (!serv->end_of_motd)
+			{
+				server_disconnect (serv->server_session, FALSE, error);
+				if (!servlist_cycle (serv))
 				{
-					/* check for clock skew */
-					if (now >= serv->prev_now)
-						return 1;		  /* don't remove the timeout handler */
-					/* it is skewed, reset to something sane */
-					serv->next_send = now;
+					if (prefs.hex_net_auto_reconnect)
+						auto_reconnect (serv, FALSE, error);
 				}
-
-				for (p = buf, i = len; i && *p != ' '; p++, i--);
-				serv->next_send += (2 + i / 120);
-				serv->sendq_len -= len;
-				serv->prev_now = now;
-				fe_set_throttle (serv);
-
-				server_send_real (serv, buf, len);
-
-				buf--;
-				serv->outbound_queue = g_slist_remove (serv->outbound_queue, buf);
-				g_free (buf);
-				list = serv->outbound_queue;
 			} else
 			{
-				list = list->next;
+				if (prefs.hex_net_auto_reconnect)
+					auto_reconnect (serv, FALSE, error);
+				else
+					server_disconnect (serv->server_session, FALSE, error);
 			}
+
+			return 0; /* connection was closed/reconnect scheduled */
 		}
-		/* now try pri 0 */
-		pri--;
+
+		if (send_status > 0)
+		{
+			entry->priority = OUTBOUND_PRI_INFLIGHT;
+			return 1;
+		}
+
+		serv->sendq_len -= entry->raw_len;
+		if (serv->sendq_len < 0)
+			serv->sendq_len = 0;
+		fe_set_throttle (serv);
+
+		serv->outbound_queue = g_slist_remove (serv->outbound_queue, entry);
+		server_outbound_queue_entry_free (entry);
+
+		/* start from in-flight priority again */
+		now = time (0);
+		pri = OUTBOUND_PRI_INFLIGHT;
 	}
-	return 0;						  /* remove the timeout handler */
+	return 0; /* remove the timeout handler */
 }
 
 int
 tcp_send_len (server *serv, char *buf, int len)
 {
-	char *dbuf;
+	irc_outbound_queue_entry *entry;
 	int noqueue = !serv->outbound_queue;
 
 	if (!prefs.hex_net_throttle)
 		return server_send_real (serv, buf, len);
 
-	dbuf = g_malloc (len + 2);	/* first byte is the priority */
-	dbuf[0] = 2;	/* pri 2 for most things */
-	memcpy (dbuf + 1, buf, len);
-	dbuf[len + 1] = 0;
+	entry = server_outbound_queue_entry_new (serv, buf, len);
 
-	/* privmsg and notice get a lower priority */
-	if (g_ascii_strncasecmp (dbuf + 1, "PRIVMSG", 7) == 0 ||
-		 g_ascii_strncasecmp (dbuf + 1, "NOTICE", 6) == 0)
-	{
-		dbuf[0] = 1;
-	}
-	else
-	{
-		/* WHO gets the lowest priority */
-		if (g_ascii_strncasecmp (dbuf + 1, "WHO ", 4) == 0)
-			dbuf[0] = 0;
-		/* as do MODE queries (but not changes) */
-		else if (g_ascii_strncasecmp (dbuf + 1, "MODE ", 5) == 0)
-		{
-			char *mode_str, *mode_str_end, *loc;
-			/* skip spaces before channel/nickname */
-			for (mode_str = dbuf + 5; *mode_str == ' '; ++mode_str);
-			/* skip over channel/nickname */
-			mode_str = strchr (mode_str, ' ');
-			if (mode_str)
-			{
-				/* skip spaces before mode string */
-				for (; *mode_str == ' '; ++mode_str);
-				/* find spaces after end of mode string */
-				mode_str_end = strchr (mode_str, ' ');
-				/* look for +/- within the mode string */
-				loc = strchr (mode_str, '-');
-				if (loc && (!mode_str_end || loc < mode_str_end))
-					goto keep_priority;
-				loc = strchr (mode_str, '+');
-				if (loc && (!mode_str_end || loc < mode_str_end))
-					goto keep_priority;
-			}
-			dbuf[0] = 0;
-keep_priority:
-			;
-		}
-	}
-
-	serv->outbound_queue = g_slist_append (serv->outbound_queue, dbuf);
-	serv->sendq_len += len; /* tcp_send_queue uses strlen */
+	serv->outbound_queue = g_slist_append (serv->outbound_queue, entry);
+	serv->sendq_len += len;
 
 	if (tcp_send_queue (serv) && noqueue)
 		fe_timeout_add (500, tcp_send_queue, serv);
@@ -887,7 +1063,7 @@ should_auto_reconnect_on_fail (void)
 static void
 server_flush_queue (server *serv)
 {
-	list_free (&serv->outbound_queue);
+	server_outbound_queue_free (&serv->outbound_queue);
 	serv->sendq_len = 0;
 	fe_set_throttle (serv);
 }
