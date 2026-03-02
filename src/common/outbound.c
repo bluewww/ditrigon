@@ -1906,18 +1906,28 @@ cmd_exec (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 		if (pid == 0)
 		{
 			/* This is the child's context */
-			close (0);
-			close (1);
-			close (2);
 			/* Close parent's end of pipe */
-			close(s->myfd);
+			close (s->myfd);
 			/* Copy the child end of the pipe to stdout and stderr */
-			dup2 (fds[1], 1);
-			dup2 (fds[1], 2);
+			if (dup2 (fds[1], 1) == -1)
+			{
+				g_printerr ("dup2(stdout) failed: %s\n", g_strerror (errno));
+				_exit (127);
+			}
+			if (dup2 (fds[1], 2) == -1)
+			{
+				g_printerr ("dup2(stderr) failed: %s\n", g_strerror (errno));
+				_exit (127);
+			}
 			/* Also copy it to stdin so we can write to it */
-			dup2 (fds[1], 0);
+			if (dup2 (fds[1], 0) == -1)
+			{
+				g_printerr ("dup2(stdin) failed: %s\n", g_strerror (errno));
+				_exit (127);
+			}
 			/* Now close all open file descriptors except stdin, stdout and stderr */
-			for (fd = 3; fd < 1024; fd++) close(fd);
+			for (fd = 3; fd < 1024; fd++)
+				close (fd);
 			/* Now we call /bin/sh to run our cmd ; made it more friendly -DC1 */
 			if (shell)
 			{
