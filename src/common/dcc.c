@@ -1803,8 +1803,17 @@ dcc_accept (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 	fe_input_remove (dcc->iotag);
 	dcc->iotag = 0;
 	closesocket (dcc->sok);
+	dcc->sok = -1;
 
-	set_nonblocking (sok);
+	if (set_nonblocking (sok) == -1)
+	{
+		PrintTextf (dcc->serv->front_session,
+					 "Failed to set DCC socket nonblocking mode (%s).\n",
+					 errorstring (errno));
+		closesocket (sok);
+		dcc_close (dcc, STAT_FAILED, FALSE);
+		return TRUE;
+	}
 	dcc->sok = sok;
 	dcc->addr = ntohl (CAddr.sin_addr.s_addr);
 
