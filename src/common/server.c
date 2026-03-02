@@ -448,11 +448,23 @@ server_stopconnecting (server * serv)
 	}
 
 	/* kill the child process trying to connect */
-	kill (serv->childpid, SIGKILL);
-	waitpid (serv->childpid, NULL, 0);
+	if (serv->childpid > 0)
+	{
+		kill (serv->childpid, SIGKILL);
+		waitpid (serv->childpid, NULL, 0);
+		serv->childpid = -1;
+	}
 
-	close (serv->childwrite);
-	close (serv->childread);
+	if (serv->childwrite != -1)
+	{
+		close (serv->childwrite);
+		serv->childwrite = -1;
+	}
+	if (serv->childread != -1)
+	{
+		close (serv->childread);
+		serv->childread = -1;
+	}
 
 #ifdef USE_OPENSSL
 	if (serv->ssl_do_connect_tag)
@@ -1638,13 +1650,20 @@ server_connect (server *serv, char *hostname, int port, int no_login)
 	serv->connecting = TRUE;
 	serv->port = port;
 	serv->no_login = no_login;
+	serv->childpid = -1;
+	serv->childread = -1;
+	serv->childwrite = -1;
 
 	fe_server_event (serv, FE_SE_CONNECTING, 0);
 	fe_set_away (serv);
 	server_flush_queue (serv);
 
 	if (pipe (read_des) < 0)
+	{
+		g_warning ("Failed to create connect helper pipe: %s", strerror (errno));
+		server_cleanup (serv);
 		return;
+	}
 #ifdef __EMX__ /* os/2 */
 	setmode (read_des[0], O_BINARY);
 	setmode (read_des[1], O_BINARY);
@@ -1667,6 +1686,8 @@ server_connect (server *serv, char *hostname, int port, int no_login)
 	switch (pid = fork ())
 	{
 	case -1:
+		g_warning ("Failed to fork connect helper process: %s", strerror (errno));
+		server_cleanup (serv);
 		return;
 
 	case 0:
@@ -1753,6 +1774,9 @@ server_new (void)
 
 	serv->id = id++;
 	serv->sok = -1;
+	serv->childread = -1;
+	serv->childwrite = -1;
+	serv->childpid = -1;
 	strcpy (serv->nick, prefs.hex_irc_nick1);
 	server_set_defaults (serv);
 
