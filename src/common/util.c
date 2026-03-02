@@ -116,16 +116,31 @@ int
 waitline (int sok, char *buf, int bufsize, int use_recv)
 {
 	int i = 0;
+	ssize_t ret;
 
 	while (1)
 	{
 		if (use_recv)
 		{
-			if (recv (sok, &buf[i], 1, 0) < 1)
+			ret = recv (sok, &buf[i], 1, 0);
+			if (ret < 0)
+			{
+				if (errno == EINTR)
+					continue;
+				return -1;
+			}
+			if (ret == 0)
 				return -1;
 		} else
 		{
-			if (read (sok, &buf[i], 1) < 1)
+			ret = read (sok, &buf[i], 1);
+			if (ret < 0)
+			{
+				if (errno == EINTR)
+					continue;
+				return -1;
+			}
+			if (ret == 0)
 				return -1;
 		}
 		if (buf[i] == '\n' || bufsize == i + 1)
