@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "hexchat.h"
 #include "cfgfiles.h"
@@ -105,6 +106,28 @@ list_load_from_data (GSList ** list, char *ibuf, int size)
 	}
 }
 
+static gboolean
+read_fd_full (int fd, char *buf, size_t size)
+{
+	size_t total = 0;
+
+	while (total < size)
+	{
+		ssize_t ret = read (fd, buf + total, size - total);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return FALSE;
+		}
+		if (ret == 0)
+			return FALSE;
+		total += (size_t)ret;
+	}
+
+	return TRUE;
+}
+
 void
 list_loadconf (char *file, GSList ** list, char *defaultconf)
 {
@@ -125,12 +148,29 @@ list_loadconf (char *file, GSList ** list, char *defaultconf)
 	}
 	if (fstat (fd, &st) != 0)
 	{
-		perror ("fstat");
-		abort ();
+		g_warning ("Failed to stat config file");
+		close (fd);
+		if (defaultconf)
+			list_load_from_data (list, defaultconf, strlen (defaultconf));
+		return;
 	}
 
-	ibuf = g_malloc (st.st_size);
-	if (read (fd, ibuf, st.st_size) < 0)
+	if (st.st_size < 0 || st.st_size > G_MAXINT)
+	{
+		g_warning ("Config file has invalid size");
+		close (fd);
+		if (defaultconf)
+			list_load_from_data (list, defaultconf, strlen (defaultconf));
+		return;
+	}
+	if (st.st_size == 0)
+	{
+		close (fd);
+		return;
+	}
+
+	ibuf = g_malloc ((gsize)st.st_size);
+	if (!read_fd_full (fd, ibuf, (gsize)st.st_size))
 	{
 		g_warning ("Failed to read config file");
 		g_free (ibuf);
@@ -141,7 +181,7 @@ list_loadconf (char *file, GSList ** list, char *defaultconf)
 	}
 	close (fd);
 
-	list_load_from_data (list, ibuf, st.st_size);
+	list_load_from_data (list, ibuf, (int)st.st_size);
 
 	g_free (ibuf);
 }

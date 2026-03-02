@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <unistd.h>
 
@@ -255,6 +256,28 @@ ignore_read_next_entry (char *my_cfg, struct ignore *ignore)
 	return my_cfg;
 }
 
+static gboolean
+read_fd_full (int fd, char *buf, size_t size)
+{
+	size_t total = 0;
+
+	while (total < size)
+	{
+		ssize_t ret = read (fd, buf + total, size - total);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return FALSE;
+		}
+		if (ret == 0)
+			return FALSE;
+		total += (size_t)ret;
+	}
+
+	return TRUE;
+}
+
 void
 ignore_load ()
 {
@@ -266,11 +289,22 @@ ignore_load ()
 	fh = hexchat_open_file ("ignore.conf", O_RDONLY, 0, 0);
 	if (fh != -1)
 	{
-		fstat (fh, &st);
+		if (fstat (fh, &st) != 0)
+		{
+			g_warning ("Failed to stat ignore.conf");
+			close (fh);
+			return;
+		}
+		if (st.st_size < 0 || st.st_size > (off_t)(G_MAXSIZE - 1))
+		{
+			g_warning ("ignore.conf has invalid size");
+			close (fh);
+			return;
+		}
 		if (st.st_size)
 		{
-			cfg = g_malloc0 (st.st_size + 1);
-			if (read (fh, cfg, st.st_size) < 0)
+			cfg = g_malloc0 ((gsize)st.st_size + 1);
+			if (!read_fd_full (fh, cfg, (gsize)st.st_size))
 			{
 				g_warning ("Failed to read ignore.conf");
 				g_free (cfg);
