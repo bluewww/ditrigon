@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -45,10 +46,15 @@ net_set_socket_options (int sok)
 {
 	socklen_t sw;
 
+	if (sok < 0)
+		return;
+
 	sw = 1;
-	setsockopt (sok, SOL_SOCKET, SO_REUSEADDR, (char *) &sw, sizeof (sw));
+	if (setsockopt (sok, SOL_SOCKET, SO_REUSEADDR, (char *) &sw, sizeof (sw)) < 0)
+		g_warning ("Failed to set SO_REUSEADDR: %s", g_strerror (errno));
 	sw = 1;
-	setsockopt (sok, SOL_SOCKET, SO_KEEPALIVE, (char *) &sw, sizeof (sw));
+	if (setsockopt (sok, SOL_SOCKET, SO_KEEPALIVE, (char *) &sw, sizeof (sw)) < 0)
+		g_warning ("Failed to set SO_KEEPALIVE: %s", g_strerror (errno));
 }
 
 char *
@@ -115,8 +121,13 @@ net_resolve (netstore * ns, char *hostname, int port, char **real_host)
 
 	/* find the numeric IP number */
 	ipstring[0] = 0;
-	getnameinfo (ns->ip6_hostent->ai_addr, ns->ip6_hostent->ai_addrlen,
-					 ipstring, sizeof (ipstring), NULL, 0, NI_NUMERICHOST);
+	ret = getnameinfo (ns->ip6_hostent->ai_addr, ns->ip6_hostent->ai_addrlen,
+							 ipstring, sizeof (ipstring), NULL, 0, NI_NUMERICHOST);
+	if (ret != 0)
+	{
+		g_warning ("Failed to resolve numeric host for %s: %s", hostname, gai_strerror (ret));
+		return NULL;
+	}
 
 	if (ns->ip6_hostent->ai_canonname)
 		*real_host = g_strdup (ns->ip6_hostent->ai_canonname);
@@ -165,17 +176,59 @@ net_connect (netstore * ns, int sok4, int sok6, int *sok_return)
 void
 net_bind (netstore * tobindto, int sok4, int sok6)
 {
-	bind (sok4, tobindto->ip6_hostent->ai_addr,
-			tobindto->ip6_hostent->ai_addrlen);
-	bind (sok6, tobindto->ip6_hostent->ai_addr,
-			tobindto->ip6_hostent->ai_addrlen);
+	struct addrinfo *res;
+	gboolean bound4 = FALSE;
+	gboolean bound6 = FALSE;
+	gboolean saw4 = FALSE;
+	gboolean saw6 = FALSE;
+	int err4 = 0;
+	int err6 = 0;
+
+	for (res = tobindto->ip6_hostent; res; res = res->ai_next)
+	{
+		if (res->ai_family == AF_INET && sok4 != -1 && !bound4)
+		{
+			saw4 = TRUE;
+			if (bind (sok4, res->ai_addr, res->ai_addrlen) == 0)
+				bound4 = TRUE;
+			else if (err4 == 0)
+				err4 = errno;
+		}
+		else if (res->ai_family == AF_INET6 && sok6 != -1 && !bound6)
+		{
+			saw6 = TRUE;
+			if (bind (sok6, res->ai_addr, res->ai_addrlen) == 0)
+				bound6 = TRUE;
+			else if (err6 == 0)
+				err6 = errno;
+		}
+	}
+
+	if (sok4 != -1 && !bound4)
+	{
+		if (saw4 && err4 != 0)
+			g_warning ("Failed to bind IPv4 socket: %s", g_strerror (err4));
+		else
+			g_warning ("No IPv4 address available for local bind");
+	}
+	if (sok6 != -1 && !bound6)
+	{
+		if (saw6 && err6 != 0)
+			g_warning ("Failed to bind IPv6 socket: %s", g_strerror (err6));
+		else
+			g_warning ("No IPv6 address available for local bind");
+	}
 }
 
 void
 net_sockets (int *sok4, int *sok6)
 {
 	*sok4 = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (*sok4 < 0)
+		g_warning ("Failed to create IPv4 socket: %s", g_strerror (errno));
 	*sok6 = socket (AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+	if (*sok6 < 0)
+		g_warning ("Failed to create IPv6 socket: %s", g_strerror (errno));
 	net_set_socket_options (*sok4);
 	net_set_socket_options (*sok6);
 }
@@ -184,5 +237,9 @@ void
 udp_sockets (int *sok4, int *sok6)
 {
 	*sok4 = socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (*sok4 < 0)
+		g_warning ("Failed to create IPv4 UDP socket: %s", g_strerror (errno));
 	*sok6 = socket (AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+	if (*sok6 < 0)
+		g_warning ("Failed to create IPv6 UDP socket: %s", g_strerror (errno));
 }
