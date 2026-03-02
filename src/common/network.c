@@ -204,14 +204,14 @@ net_bind (netstore * tobindto, int sok4, int sok6)
 		}
 	}
 
-	if (sok4 != -1 && !bound4)
+	if (sok4 != -1 && !bound4 && (sok6 == -1 || !bound6))
 	{
 		if (saw4 && err4 != 0)
 			g_warning ("Failed to bind IPv4 socket: %s", g_strerror (err4));
 		else
 			g_warning ("No IPv4 address available for local bind");
 	}
-	if (sok6 != -1 && !bound6)
+	if (sok6 != -1 && !bound6 && (sok4 == -1 || !bound4))
 	{
 		if (saw6 && err6 != 0)
 			g_warning ("Failed to bind IPv6 socket: %s", g_strerror (err6));
