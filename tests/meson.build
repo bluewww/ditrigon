@@ -3,6 +3,19 @@ if not get_option('gtk4-frontend')
 elif host_machine.system() == 'darwin'
   warning('fuzz-tests are only supported on Linux; skipping parser fuzz smoke test')
 else
+  libdl_dep = cc.find_library('dl', required: false)
+  short_send_preload_deps = []
+  if libdl_dep.found()
+    short_send_preload_deps += libdl_dep
+  endif
+
+  short_send_preload = shared_library('short_send_preload',
+    'short_send_preload.c',
+    dependencies: short_send_preload_deps,
+    build_by_default: false,
+    install: false,
+  )
+
   if libssl_dep.found()
     security_poc_exe = executable('common-security-poc',
       ['common_security_poc.c', '../src/common/ssl.c', '../src/common/scram.c'],
@@ -159,6 +172,23 @@ else
         'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
       ],
       suite: ['security-poc'],
+      is_parallel: false,
+      timeout: 90,
+    )
+
+    irc_partial_send_queue_poc_script = files('irc_partial_send_queue_poc.py')
+    test('IRC Partial Send Queue PoC', python3,
+      args: [
+        irc_partial_send_queue_poc_script,
+        ditrigon_gtk4_exe,
+        join_paths(meson.current_build_dir(), 'libshort_send_preload.so'),
+      ],
+      depends: [ditrigon_gtk4_exe, short_send_preload],
+      env: [
+        'ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:verify_asan_link_order=0',
+        'UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1',
+      ],
+      suite: ['error-poc'],
       is_parallel: false,
       timeout: 90,
     )
