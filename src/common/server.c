@@ -80,6 +80,105 @@ write_error (char *message, GError **error)
 	g_clear_error (error);
 }
 
+static gboolean
+parse_resolved_proxy_uri (const char *proxy, int *proxy_type, char **proxy_host, int *proxy_port)
+{
+	const char *scheme_end;
+	const char *authority_start;
+	const char *authority_end;
+	const char *host_start;
+	const char *host_end;
+	const char *port_start;
+	const char *scan;
+	const char *last_colon;
+	char *endptr = NULL;
+	char *host;
+	guint64 port;
+
+	*proxy_type = 0;
+	*proxy_host = NULL;
+	*proxy_port = 0;
+
+	if (!proxy || !*proxy)
+		return FALSE;
+
+	if (g_str_has_prefix (proxy, "direct://") || g_strcmp0 (proxy, "direct") == 0)
+		return TRUE;
+
+	if (g_str_has_prefix (proxy, "http://"))
+		*proxy_type = 4;
+	else if (g_str_has_prefix (proxy, "socks5://"))
+		*proxy_type = 3;
+	else if (g_str_has_prefix (proxy, "socks://"))
+		*proxy_type = 2;
+	else
+		return FALSE;
+
+	scheme_end = strstr (proxy, "://");
+	if (!scheme_end)
+		return FALSE;
+
+	authority_start = scheme_end + 3;
+	if (!*authority_start)
+		return FALSE;
+
+	authority_end = strchr (authority_start, '/');
+	if (!authority_end)
+		authority_end = proxy + strlen (proxy);
+
+	host_start = authority_start;
+	for (scan = authority_start; scan < authority_end; scan++)
+	{
+		if (*scan == '@')
+			host_start = scan + 1;
+	}
+
+	if (host_start >= authority_end)
+		return FALSE;
+
+	if (*host_start == '[')
+	{
+		host_end = memchr (host_start + 1, ']', authority_end - host_start - 1);
+		if (!host_end || host_end + 1 >= authority_end || host_end[1] != ':')
+			return FALSE;
+
+		port_start = host_end + 2;
+		host = g_strndup (host_start + 1, host_end - host_start - 1);
+	}
+	else
+	{
+		last_colon = NULL;
+		for (scan = host_start; scan < authority_end; scan++)
+		{
+			if (*scan == ':')
+				last_colon = scan;
+		}
+
+		if (!last_colon || last_colon == host_start)
+			return FALSE;
+
+		port_start = last_colon + 1;
+		host = g_strndup (host_start, last_colon - host_start);
+	}
+
+	if (!host[0])
+	{
+		g_free (host);
+		return FALSE;
+	}
+
+	port = g_ascii_strtoull (port_start, &endptr, 10);
+	if (endptr != authority_end || port == 0 || port > G_MAXUINT16)
+	{
+		g_free (host);
+		return FALSE;
+	}
+
+	*proxy_host = host;
+	*proxy_port = (int)port;
+	return TRUE;
+}
+
 /* actually send to the socket. This might do a character translation or
    send via SSL. server/dcc both use this function. */
 
@@ -1558,7 +1657,7 @@ server_child (server * serv)
 		if (prefs.hex_net_proxy_type == 5)
 		{
 			char **proxy_list;
-			char *url, *proxy;
+			char *url;
 			GProxyResolver *resolver;
 			GError *error = NULL;
 
@@ -1566,28 +1665,18 @@ server_child (server * serv)
 			url = g_strdup_printf ("irc://%s:%d", hostname, port);
 			proxy_list = g_proxy_resolver_lookup (resolver, url, NULL, &error);
 
-			if (proxy_list) {
+			if (proxy_list)
+			{
 				/* can use only one */
-				proxy = proxy_list[0];
-				if (!strncmp (proxy, "direct", 6))
+				if (!parse_resolved_proxy_uri (proxy_list[0], &proxy_type, &proxy_host, &proxy_port))
+				{
+					g_warning ("Ignoring malformed proxy URI from resolver");
 					proxy_type = 0;
-				else if (!strncmp (proxy, "http", 4))
-					proxy_type = 4;
-				else if (!strncmp (proxy, "socks5", 6))
-					proxy_type = 3;
-				else if (!strncmp (proxy, "socks", 5))
-					proxy_type = 2;
-			} else {
-				write_error ("Failed to lookup proxy", &error);
+				}
 			}
-
-			if (proxy_type) {
-				char *c;
-				c = strchr (proxy, ':') + 3;
-				proxy_host = g_strdup (c);
-				c = strchr (proxy_host, ':');
-				*c = '\0';
-				proxy_port = atoi (c + 1);
+			else
+			{
+				write_error ("Failed to lookup proxy", &error);
 			}
 
 			g_strfreev (proxy_list);
