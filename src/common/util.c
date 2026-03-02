@@ -137,6 +137,58 @@ waitline (int sok, char *buf, int bufsize, int use_recv)
 	}
 }
 
+gboolean
+read_all (int fd, void *buf, size_t size)
+{
+	unsigned char *p = buf;
+	size_t total = 0;
+
+	while (total < size)
+	{
+		ssize_t ret = read (fd, p + total, size - total);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return FALSE;
+		}
+		if (ret == 0)
+		{
+			errno = EIO;
+			return FALSE;
+		}
+		total += (size_t)ret;
+	}
+
+	return TRUE;
+}
+
+gboolean
+write_all (int fd, const void *buf, size_t size)
+{
+	const unsigned char *p = buf;
+	size_t total = 0;
+
+	while (total < size)
+	{
+		ssize_t ret = write (fd, p + total, size - total);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return FALSE;
+		}
+		if (ret == 0)
+		{
+			errno = EIO;
+			return FALSE;
+		}
+		total += (size_t)ret;
+	}
+
+	return TRUE;
+}
+
 /* checks for "~" in a file and expands */
 
 char *

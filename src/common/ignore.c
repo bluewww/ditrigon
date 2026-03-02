@@ -256,28 +256,6 @@ ignore_read_next_entry (char *my_cfg, struct ignore *ignore)
 	return my_cfg;
 }
 
-static gboolean
-read_fd_full (int fd, char *buf, size_t size)
-{
-	size_t total = 0;
-
-	while (total < size)
-	{
-		ssize_t ret = read (fd, buf + total, size - total);
-		if (ret < 0)
-		{
-			if (errno == EINTR)
-				continue;
-			return FALSE;
-		}
-		if (ret == 0)
-			return FALSE;
-		total += (size_t)ret;
-	}
-
-	return TRUE;
-}
-
 void
 ignore_load ()
 {
@@ -304,7 +282,7 @@ ignore_load ()
 		if (st.st_size)
 		{
 			cfg = g_malloc0 ((gsize)st.st_size + 1);
-			if (!read_fd_full (fh, cfg, (gsize)st.st_size))
+			if (!read_all (fh, cfg, (gsize)st.st_size))
 			{
 				g_warning ("Failed to read ignore.conf");
 				g_free (cfg);
