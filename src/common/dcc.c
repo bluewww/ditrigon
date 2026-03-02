@@ -84,32 +84,6 @@ static gboolean dcc_read_ack (GIOChannel *source, GIOCondition condition, struct
 static int dcc_check_timeouts (void);
 
 static gboolean
-dcc_write_full (int fd, const void *buf, size_t len)
-{
-	const unsigned char *p = buf;
-	size_t written = 0;
-
-	while (written < len)
-	{
-		ssize_t ret = write (fd, p + written, len - written);
-		if (ret < 0)
-		{
-			if (errno == EINTR)
-				continue;
-			return FALSE;
-		}
-		if (ret == 0)
-		{
-			errno = EIO;
-			return FALSE;
-		}
-		written += (size_t)ret;
-	}
-
-	return TRUE;
-}
-
-static gboolean
 dcc_connect_in_progress (int err)
 {
 	return err == EINPROGRESS || err == EWOULDBLOCK || err == EAGAIN
@@ -899,7 +873,7 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 			return TRUE;
 		}
 
-		if (!dcc_write_full (dcc->fp, buf, (size_t)n)) /* could be out of hdd space */
+		if (!write_all (dcc->fp, buf, (size_t)n)) /* could be out of hdd space */
 		{
 			EMIT_SIGNAL (XP_TE_DCCRECVERR, dcc->serv->front_session, dcc->file,
 						 dcc->destfile, dcc->nick, errorstring (errno), 0);

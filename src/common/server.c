@@ -1074,8 +1074,8 @@ server_disconnect (session * sess, int sendquit, int err)
 static void
 proxy_error (int fd, char *msg)
 {
-	if (write (fd, "0\n", 2) < 0 ||
-	    write (fd, msg, strlen (msg)) < 0)
+	if (!write_all (fd, "0\n", 2) ||
+		 !write_all (fd, msg, strlen (msg)))
 		g_warning ("Failed to write proxy error");
 }
 

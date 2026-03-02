@@ -63,6 +63,8 @@ int strip_hidden_attribute (char *src, char *dst);
 char *errorstring (int err);
 int waitline (int sok, char *buf, int bufsize, int);
 #define waitline2(source,buf,size) waitline(serv->childread,buf,size,0)
+gboolean read_all (int fd, void *buf, size_t size);
+gboolean write_all (int fd, const void *buf, size_t size);
 unsigned long make_ping_time (void);
 void move_file (char *src_dir, char *dst_dir, char *fname, int dccpermissions);
 int token_foreach (char *str, char sep, int (*callback) (char *str, void *ud), void *ud);

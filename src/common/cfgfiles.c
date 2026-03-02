@@ -106,28 +106,6 @@ list_load_from_data (GSList ** list, char *ibuf, int size)
 	}
 }
 
-static gboolean
-read_fd_full (int fd, char *buf, size_t size)
-{
-	size_t total = 0;
-
-	while (total < size)
-	{
-		ssize_t ret = read (fd, buf + total, size - total);
-		if (ret < 0)
-		{
-			if (errno == EINTR)
-				continue;
-			return FALSE;
-		}
-		if (ret == 0)
-			return FALSE;
-		total += (size_t)ret;
-	}
-
-	return TRUE;
-}
-
 void
 list_loadconf (char *file, GSList ** list, char *defaultconf)
 {
@@ -170,7 +148,7 @@ list_loadconf (char *file, GSList ** list, char *defaultconf)
 	}
 
 	ibuf = g_malloc ((gsize)st.st_size);
-	if (!read_fd_full (fd, ibuf, (gsize)st.st_size))
+	if (!read_all (fd, ibuf, (gsize)st.st_size))
 	{
 		g_warning ("Failed to read config file");
 		g_free (ibuf);
