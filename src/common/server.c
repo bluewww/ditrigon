@@ -1412,18 +1412,18 @@ http_read_line (int print_fd, int sok, char *buf, int len)
 	if (len >= 1)
 	{
 		/* print the message out (send it to the parent process) */
-		if (write (print_fd, "0\n", 2) < 0)
+		if (!write_all (print_fd, "0\n", 2))
 			g_warning ("Failed to write to child pipe");
 
 		if (buf[len-1] == '\r')
 		{
 			buf[len-1] = '\n';
-			if (write (print_fd, buf, len) < 0)
+			if (!write_all (print_fd, buf, len))
 				g_warning ("Failed to write to child pipe");
 		} else
 		{
-			if (write (print_fd, buf, len) < 0 ||
-			    write (print_fd, "\n", 1) < 0)
+			if (!write_all (print_fd, buf, len) ||
+			    !write_all (print_fd, "\n", 1))
 				g_warning ("Failed to write to child pipe");
 		}
 	}
