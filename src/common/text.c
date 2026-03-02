@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include <unistd.h>
 #include <sys/mman.h>
@@ -1622,6 +1623,28 @@ pevent_find (char *name, int *i_i)
 	}
 }
 
+static gboolean
+read_fd_full (int fd, char *buf, size_t size)
+{
+	size_t total = 0;
+
+	while (total < size)
+	{
+		ssize_t ret = read (fd, buf + total, size - total);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return FALSE;
+		}
+		if (ret == 0)
+			return FALSE;
+		total += (size_t)ret;
+	}
+
+	return TRUE;
+}
+
 int
 pevent_load (char *filename)
 {
@@ -1648,8 +1671,19 @@ pevent_load (char *filename)
 		close (fd);
 		return 1;
 	}
-	ibuf = g_malloc (st.st_size);
-	if (read (fd, ibuf, st.st_size) < 0)
+	if (st.st_size < 0 || st.st_size > G_MAXINT)
+	{
+		close (fd);
+		return 1;
+	}
+	if (st.st_size == 0)
+	{
+		close (fd);
+		return 0;
+	}
+
+	ibuf = g_malloc ((gsize)st.st_size);
+	if (!read_fd_full (fd, ibuf, (gsize)st.st_size))
 	{
 		g_warning ("Failed to read pevents.conf");
 		g_free (ibuf);
@@ -1658,7 +1692,7 @@ pevent_load (char *filename)
 	}
 	close (fd);
 
-	while (buf_get_line (ibuf, &buf, &pnt, st.st_size))
+	while (buf_get_line (ibuf, &buf, &pnt, (int)st.st_size))
 	{
 		if (buf[0] == '#')
 			continue;
