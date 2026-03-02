@@ -474,7 +474,9 @@ tcp_send_queue (server *serv)
 
 		if (send_status > 0)
 		{
-			entry->priority = OUTBOUND_PRI_INFLIGHT;
+			/* Preserve original priority unless we've sent a partial frame. */
+			if (entry->wire_off > 0)
+				entry->priority = OUTBOUND_PRI_INFLIGHT;
 			return 1;
 		}
 
