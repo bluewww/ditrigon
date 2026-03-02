@@ -394,6 +394,27 @@ server_read (GIOChannel *source, GIOCondition condition, server *serv)
 	}
 }
 
+static gboolean
+server_set_nonblocking_or_reconnect (server *serv)
+{
+	char buf[256];
+	int error;
+
+	if (set_nonblocking (serv->sok) == 0)
+		return TRUE;
+
+	error = sock_error ();
+	g_snprintf (buf, sizeof (buf),
+					"Failed to set socket nonblocking mode: %s", g_strerror (error));
+	EMIT_SIGNAL (XP_TE_CONNFAIL, serv->server_session, buf, NULL, NULL, NULL, 0);
+
+	server_cleanup (serv);
+	if (should_auto_reconnect_on_fail ())
+		auto_reconnect (serv, FALSE, error);
+
+	return FALSE;
+}
+
 static void
 server_connected (server * serv)
 {
@@ -401,7 +422,8 @@ server_connected (server * serv)
 	serv->ping_recv = time (0);
 	serv->lag_sent = 0;
 	serv->connected = TRUE;
-	set_nonblocking (serv->sok);
+	if (!server_set_nonblocking_or_reconnect (serv))
+		return;
 	serv->iotag = fe_input_add (serv->sok, FIA_READ|FIA_EX, server_read, serv);
 	if (!serv->no_login)
 	{
@@ -794,7 +816,8 @@ server_connect_success (server *serv)
 		serv->ssl = _SSL_socket (serv->ctx, serv->sok);
 		/* FIXME: it'll be needed by new servers */
 		/* send(serv->sok, "STLS\r\n", 6, 0); sleep(1); */
-		set_nonblocking (serv->sok);
+		if (!server_set_nonblocking_or_reconnect (serv))
+			return;
 		serv->ssl_do_connect_tag = fe_timeout_add (SSLDOCONNTMOUT,
 																 ssl_do_connect, serv);
 		return;
