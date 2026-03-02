@@ -1056,6 +1056,52 @@ proxy_error (int fd, char *msg)
 		g_warning ("Failed to write proxy error");
 }
 
+static int
+proxy_send_all (int sok, const void *buf, size_t len)
+{
+	const unsigned char *p = buf;
+	size_t sent = 0;
+
+	while (sent < len)
+	{
+		ssize_t ret = send (sok, p + sent, len - sent, 0);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return -1;
+		}
+		if (ret == 0)
+			return -1;
+		sent += (size_t)ret;
+	}
+
+	return 0;
+}
+
+static int
+proxy_recv_all (int sok, void *buf, size_t len)
+{
+	unsigned char *p = buf;
+	size_t received = 0;
+
+	while (received < len)
+	{
+		ssize_t ret = recv (sok, p + received, len - received, 0);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return -1;
+		}
+		if (ret == 0)
+			return -1;
+		received += (size_t)ret;
+	}
+
+	return 0;
+}
+
 struct sock_connect
 {
 	char version;
@@ -1081,9 +1127,18 @@ traverse_socks (int print_fd, int sok, char *serverAddr, int port)
 	sc.address = inet_addr (serverAddr);
 	g_strlcpy (sc.username, prefs.hex_irc_user_name, sizeof (sc.username));
 
-	send (sok, (char *) &sc, 8 + strlen (sc.username) + 1, 0);
-	buf[1] = 0;
-	recv (sok, buf, 10, 0);
+	if (proxy_send_all (sok, &sc, 8 + strlen (sc.username) + 1) != 0)
+	{
+		proxy_error (print_fd, "SOCKS\tWrite error to server.\n");
+		return 1;
+	}
+
+	if (proxy_recv_all (sok, buf, 8) != 0)
+	{
+		proxy_error (print_fd, "SOCKS\tRead error from server.\n");
+		return 1;
+	}
+
 	if (buf[1] == 90)
 		return 0;
 
@@ -1114,8 +1169,9 @@ traverse_socks5 (int print_fd, int sok, char *serverAddr, int port)
 		sc1.method = 2;  /* Username/Password Authentication (UPA) */
 	else
 		sc1.method = 0;  /* NO Authentication */
-	send (sok, (char *) &sc1, 3, 0);
-	if (recv (sok, buf, 2, 0) != 2)
+	if (proxy_send_all (sok, &sc1, 3) != 0)
+		goto write_error;
+	if (proxy_recv_all (sok, buf, 2) != 0)
 		goto read_error;
 
 	if (buf[0] != 5)
@@ -1144,7 +1200,7 @@ traverse_socks5 (int print_fd, int sok, char *serverAddr, int port)
 		len_u = strlen (prefs.hex_net_proxy_user);
 		len_p = strlen (prefs.hex_net_proxy_pass);
 
-        packetlen = 2 + len_u + 1 + len_p;
+		packetlen = 2 + len_u + 1 + len_p;
 		u_p_buf = g_malloc0 (packetlen);
 
 		u_p_buf[0] = 1;
@@ -1153,18 +1209,22 @@ traverse_socks5 (int print_fd, int sok, char *serverAddr, int port)
 		u_p_buf[2 + len_u] = len_p;
 		memcpy (u_p_buf + 3 + len_u, prefs.hex_net_proxy_pass, len_p);
 
-		send (sok, u_p_buf, packetlen, 0);
-		g_free(u_p_buf);
+		if (proxy_send_all (sok, u_p_buf, packetlen) != 0)
+		{
+			g_free (u_p_buf);
+			goto write_error;
+		}
+		g_free (u_p_buf);
 
-		if ( recv (sok, buf, 2, 0) != 2 )
+		if (proxy_recv_all (sok, buf, 2) != 0)
 			goto read_error;
-		if ( buf[1] != 0 )
+		if (buf[1] != 0)
 		{
 			proxy_error (print_fd, "SOCKS\tAuthentication failed. "
-							 "Is username and password correct?\n");
+						 "Is username and password correct?\n");
 			return 1; /* UPA failed! */
 		}
-	}
+		}
 	else
 	{
 		if (buf[1] != 0)
@@ -1184,11 +1244,15 @@ traverse_socks5 (int print_fd, int sok, char *serverAddr, int port)
 	sc2[4] = (unsigned char) addrlen;	/* hostname length */
 	memcpy (sc2 + 5, serverAddr, addrlen);
 	*((unsigned short *) (sc2 + 5 + addrlen)) = htons (port);
-	send (sok, sc2, packetlen, 0);
+	if (proxy_send_all (sok, sc2, packetlen) != 0)
+	{
+		g_free (sc2);
+		goto write_error;
+	}
 	g_free (sc2);
 
 	/* consume all of the reply */
-	if (recv (sok, buf, 4, 0) != 4)
+	if (proxy_recv_all (sok, buf, 4) != 0)
 		goto read_error;
 	if (buf[0] != 5 || buf[1] != 0)
 	{
@@ -1201,22 +1265,26 @@ traverse_socks5 (int print_fd, int sok, char *serverAddr, int port)
 	}
 	if (buf[3] == 1)	/* IPV4 32bit address */
 	{
-		if (recv (sok, buf, 6, 0) != 6)
+		if (proxy_recv_all (sok, buf, 6) != 0)
 			goto read_error;
 	} else if (buf[3] == 4)	/* IPV6 128bit address */
 	{
-		if (recv (sok, buf, 18, 0) != 18)
+		if (proxy_recv_all (sok, buf, 18) != 0)
 			goto read_error;
 	} else if (buf[3] == 3)	/* string, 1st byte is size */
 	{
-		if (recv (sok, buf, 1, 0) != 1)	/* read the string size */
+		if (proxy_recv_all (sok, buf, 1) != 0)	/* read the string size */
 			goto read_error;
 		packetlen = buf[0] + 2;	/* can't exceed 260 */
-		if (recv (sok, buf, packetlen, 0) != packetlen)
+		if (proxy_recv_all (sok, buf, packetlen) != 0)
 			goto read_error;
 	}
 
 	return 0;	/* success */
+
+write_error:
+	proxy_error (print_fd, "SOCKS\tWrite error to server.\n");
+	return 1;
 
 read_error:
 	proxy_error (print_fd, "SOCKS\tRead error from server.\n");
@@ -1229,7 +1297,11 @@ traverse_wingate (int print_fd, int sok, char *serverAddr, int port)
 	char buf[128];
 
 	g_snprintf (buf, sizeof (buf), "%s %d\r\n", serverAddr, port);
-	send (sok, buf, strlen (buf), 0);
+	if (proxy_send_all (sok, buf, strlen (buf)) != 0)
+	{
+		proxy_error (print_fd, "WINGATE\tWrite error to server.\n");
+		return 1;
+	}
 
 	return 0;
 }
@@ -1342,7 +1414,14 @@ traverse_http (int print_fd, int sok, char *serverAddr, int port)
 		return 1;
 	}
 
-	send (sok, connect_req, strlen (connect_req), 0);
+	if (proxy_send_all (sok, connect_req, strlen (connect_req)) != 0)
+	{
+		proxy_error (print_fd, "HTTP\tWrite error to server.\n");
+		g_free (connect_req);
+		g_free (auth_data);
+		g_free (auth_plain);
+		return 1;
+	}
 	g_free (connect_req);
 	g_free (auth_data);
 	g_free (auth_plain);
