@@ -833,6 +833,12 @@ server_connect_success (server *serv)
 /* receive info from the child-process about connection progress */
 
 static gboolean
+server_child_read_line (server *serv, char *buf, int len)
+{
+	return waitline (serv->childread, buf, len, FALSE) >= 0;
+}
+
+static gboolean
 server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 {
 	session *sess = serv->server_session;
@@ -841,12 +847,14 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 	char host[100];
 	char ip[100];
 
-	waitline2 (source, tbuf, sizeof tbuf);
+	if (!server_child_read_line (serv, tbuf, sizeof tbuf))
+		goto read_error;
 
 	switch (tbuf[0])
 	{
 	case '0':	/* print some text */
-		waitline2 (source, tbuf, sizeof tbuf);
+		if (!server_child_read_line (serv, tbuf, sizeof tbuf))
+			goto read_error;
 		PrintText (serv->server_session, tbuf);
 		break;
 	case '1':						  /* unknown host */
@@ -864,7 +872,8 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 				auto_reconnect (serv, FALSE, -1);
 		break;
 	case '2':						  /* connection failed */
-		waitline2 (source, tbuf, sizeof tbuf);
+		if (!server_child_read_line (serv, tbuf, sizeof tbuf))
+			goto read_error;
 		server_stopconnecting (serv);
 		closesocket (serv->sok4);
 		if (serv->proxy_sok4 != -1)
@@ -880,13 +889,15 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 				auto_reconnect (serv, FALSE, -1);
 		break;
 	case '3':						  /* gethostbyname finished */
-		waitline2 (source, host, sizeof host);
-		waitline2 (source, ip, sizeof ip);
-		waitline2 (source, outbuf, sizeof outbuf);
+		if (!server_child_read_line (serv, host, sizeof host) ||
+			 !server_child_read_line (serv, ip, sizeof ip) ||
+			 !server_child_read_line (serv, outbuf, sizeof outbuf))
+			goto read_error;
 		EMIT_SIGNAL (XP_TE_CONNECT, sess, host, ip, outbuf, NULL, 0);
 		break;
 	case '4':						  /* success */
-		waitline2 (source, tbuf, sizeof (tbuf));
+		if (!server_child_read_line (serv, tbuf, sizeof (tbuf)))
+			goto read_error;
 		serv->sok = atoi (tbuf);
 		/* close the one we didn't end up using */
 		if (serv->sok == serv->sok4)
@@ -927,7 +938,8 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 		server_connect_success (serv);
 		break;
 	case '5':						  /* prefs ip discovered */
-		waitline2 (source, tbuf, sizeof tbuf);
+		if (!server_child_read_line (serv, tbuf, sizeof tbuf))
+			goto read_error;
 		prefs.local_ip = inet_addr (tbuf);
 		break;
 	case '7':						  /* gethostbyname (prefs.hex_net_bind_host) failed */
@@ -941,11 +953,24 @@ server_read_child (GIOChannel *source, GIOCondition condition, server *serv)
 		server_disconnect (sess, FALSE, -1);
 		break;
 	case '9':
-		waitline2 (source, tbuf, sizeof tbuf);
+		if (!server_child_read_line (serv, tbuf, sizeof tbuf))
+			goto read_error;
 		EMIT_SIGNAL (XP_TE_SERVERLOOKUP, sess, tbuf, NULL, NULL, NULL, 0);
 		break;
 	}
 
+	return TRUE;
+
+read_error:
+	g_warning ("Failed to read from connect helper process");
+	server_cleanup (serv);
+	EMIT_SIGNAL (XP_TE_CONNFAIL, sess, "Lost connection to connect helper process",
+					 NULL, NULL, NULL, 0);
+	if (!servlist_cycle (serv))
+	{
+		if (should_auto_reconnect_on_fail ())
+			auto_reconnect (serv, FALSE, -1);
+	}
 	return TRUE;
 }
 
