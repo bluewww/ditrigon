@@ -1922,20 +1922,33 @@ cmd_exec (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 			if (shell)
 			{
 				execl ("/bin/sh", "sh", "-c", cmd, NULL);
+				g_printerr ("execl(/bin/sh) failed: %s\n", g_strerror (errno));
+				_exit (127);
 			} else
 			{
+				GError *error = NULL;
 				char **argv;
 				int argc;
 
-				g_shell_parse_argv (cmd, &argc, &argv, NULL);
+				if (!g_shell_parse_argv (cmd, &argc, &argv, &error))
+				{
+					g_printerr ("Failed to parse command: %s\n", error->message);
+					g_error_free (error);
+					_exit (127);
+				}
+				if (argc < 1)
+				{
+					g_strfreev (argv);
+					g_printerr ("No command to execute\n");
+					_exit (127);
+				}
+
 				execvp (argv[0], argv);
+				g_printerr ("execvp(%s) failed: %s\n", argv[0], g_strerror (errno));
 
 				g_strfreev (argv);
+				_exit (127);
 			}
-			/* not reached unless error */
-			/*printf("exec error\n");*/
-			fflush (stdout);
-			_exit (0);
 		}
 		if (pid == -1)
 		{

@@ -114,7 +114,13 @@ identd_command_cb (char *word[], char *word_eol[], void *userdata)
 static void
 identd_write_ready (GOutputStream *stream, GAsyncResult *res, ident_info *info)
 {
-	g_output_stream_write_finish (stream, res, NULL);
+	GError *error = NULL;
+
+	if (g_output_stream_write_finish (stream, res, &error) < 0)
+	{
+		g_warning ("Identd: Failed to write response: %s", error->message);
+		g_error_free (error);
+	}
 
 	ident_info_free (info);
 }
@@ -122,70 +128,78 @@ identd_write_ready (GOutputStream *stream, GAsyncResult *res, ident_info *info)
 static void
 identd_read_ready (GDataInputStream *in_stream, GAsyncResult *res, ident_info *info)
 {
+	GError *error = NULL;
 	GSocketAddress *sok_addr;
 	GOutputStream *out_stream;
 	guint64 local, remote;
 	gchar *read_buf, buf[512], *p;
 
-	if ((read_buf = g_data_input_stream_read_line_finish (in_stream, res, NULL, NULL)))
+	read_buf = g_data_input_stream_read_line_finish (in_stream, res, NULL, &error);
+	if (!read_buf)
 	{
-		local = g_ascii_strtoull (read_buf, NULL, 0);
-		p = strchr (read_buf, ',');
-		if (!p)
+		if (error)
 		{
-			g_free (read_buf);
-			goto cleanup;
+			g_warning ("Identd: Failed to read request: %s", error->message);
+			g_error_free (error);
 		}
+		goto cleanup;
+	}
 
-		remote = g_ascii_strtoull (p + 1, NULL, 0);
+	local = g_ascii_strtoull (read_buf, NULL, 0);
+	p = strchr (read_buf, ',');
+	if (!p)
+	{
 		g_free (read_buf);
+		goto cleanup;
+	}
 
-		g_snprintf (buf, sizeof (buf), "%"G_GUINT16_FORMAT", %"G_GUINT16_FORMAT" : ",
-					(guint16)MIN(local, G_MAXUINT16), (guint16)MIN(remote, G_MAXUINT16));
+	remote = g_ascii_strtoull (p + 1, NULL, 0);
+	g_free (read_buf);
 
-		if (!local || !remote || local > G_MAXUINT16 || remote > G_MAXUINT16)
+	g_snprintf (buf, sizeof (buf), "%"G_GUINT16_FORMAT", %"G_GUINT16_FORMAT" : ",
+				(guint16)MIN(local, G_MAXUINT16), (guint16)MIN(remote, G_MAXUINT16));
+
+	if (!local || !remote || local > G_MAXUINT16 || remote > G_MAXUINT16)
+	{
+		g_strlcat (buf, "ERROR : INVALID-PORT\r\n", sizeof (buf));
+		g_debug ("Identd: Received invalid port");
+	}
+	else
+	{
+		info->username = g_hash_table_lookup (responses, GINT_TO_POINTER (local));
+		if (!info->username)
 		{
-			g_strlcat (buf, "ERROR : INVALID-PORT\r\n", sizeof (buf));
-			g_debug ("Identd: Received invalid port");
+			g_strlcat (buf, "ERROR : NO-USER\r\n", sizeof (buf));
+			g_debug ("Identd: Received invalid local port");
 		}
 		else
 		{
-			info->username = g_hash_table_lookup (responses, GINT_TO_POINTER (local));
-			if (!info->username)
+			const gsize len = strlen (buf);
+
+			g_hash_table_steal (responses, GINT_TO_POINTER (local));
+
+			g_snprintf (buf + len, sizeof (buf) - len, "USERID : UNIX : %s\r\n", info->username);
+
+			if ((sok_addr = g_socket_connection_get_remote_address (info->conn, NULL)))
 			{
-				g_strlcat (buf, "ERROR : NO-USER\r\n", sizeof (buf));
-				g_debug ("Identd: Received invalid local port");
-			}
-			else
-			{
-				const gsize len = strlen (buf);
+				GInetAddress *inet_addr;
+				gchar *addr;
 
-				g_hash_table_steal (responses, GINT_TO_POINTER (local));
+				inet_addr = g_inet_socket_address_get_address (G_INET_SOCKET_ADDRESS (sok_addr));
+				addr = g_inet_address_to_string (inet_addr);
 
-				g_snprintf (buf + len, sizeof (buf) - len, "USERID : UNIX : %s\r\n", info->username);
+				hexchat_printf (ph, _("*\tServicing ident request from %s as %s"), addr, info->username);
 
-				if ((sok_addr = g_socket_connection_get_remote_address (info->conn, NULL)))
-				{
-					GInetAddress *inet_addr;
-					gchar *addr;
-
-					inet_addr = g_inet_socket_address_get_address (G_INET_SOCKET_ADDRESS (sok_addr));
-					addr = g_inet_address_to_string (inet_addr);
-
-					hexchat_printf (ph, _("*\tServicing ident request from %s as %s"), addr, info->username);
-
-					g_object_unref (sok_addr);
-					g_object_unref (inet_addr);
-					g_free (addr);
-				}
+				g_object_unref (sok_addr);
+				g_object_unref (inet_addr);
+				g_free (addr);
 			}
 		}
-
-		out_stream = g_io_stream_get_output_stream (G_IO_STREAM (info->conn));
-		g_output_stream_write_async (out_stream, buf, strlen (buf), G_PRIORITY_DEFAULT,
-									NULL, (GAsyncReadyCallback)identd_write_ready, info);
 	}
 
+	out_stream = g_io_stream_get_output_stream (G_IO_STREAM (info->conn));
+	g_output_stream_write_async (out_stream, buf, strlen (buf), G_PRIORITY_DEFAULT,
+								NULL, (GAsyncReadyCallback)identd_write_ready, info);
 	return;
 
 cleanup:
@@ -210,6 +224,7 @@ identd_incoming_cb (GSocketService *service, GSocketConnection *conn,
 	g_data_input_stream_set_newline_type (data_stream, G_DATA_STREAM_NEWLINE_TYPE_CR_LF);
 	g_data_input_stream_read_line_async (data_stream, G_PRIORITY_DEFAULT,
 										NULL, (GAsyncReadyCallback)identd_read_ready, info);
+	g_object_unref (data_stream);
 
 	return TRUE;
 }
