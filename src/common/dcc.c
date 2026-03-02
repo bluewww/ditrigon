@@ -84,6 +84,42 @@ static gboolean dcc_read_ack (GIOChannel *source, GIOCondition condition, struct
 static int dcc_check_timeouts (void);
 
 static gboolean
+dcc_write_full (int fd, const void *buf, size_t len)
+{
+	const unsigned char *p = buf;
+	size_t written = 0;
+
+	while (written < len)
+	{
+		ssize_t ret = write (fd, p + written, len - written);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			return FALSE;
+		}
+		if (ret == 0)
+		{
+			errno = EIO;
+			return FALSE;
+		}
+		written += (size_t)ret;
+	}
+
+	return TRUE;
+}
+
+static gboolean
+dcc_connect_in_progress (int err)
+{
+	return err == EINPROGRESS || err == EWOULDBLOCK || err == EAGAIN
+#ifdef EALREADY
+		|| err == EALREADY
+#endif
+		;
+}
+
+static gboolean
 parse_u16_field (const char *text, int *value)
 {
 	char *end = NULL;
@@ -457,8 +493,24 @@ dcc_connect_sok (struct DCC *dcc)
 		addr.sin_addr.s_addr = htonl (dcc->addr);
 	}
 
-	set_nonblocking (sok);
-	connect (sok, (struct sockaddr *) &addr, sizeof (addr));
+	if (set_nonblocking (sok) == -1)
+	{
+		int err = sock_error ();
+		closesocket (sok);
+		errno = err;
+		return -1;
+	}
+
+	if (connect (sok, (struct sockaddr *) &addr, sizeof (addr)) != 0)
+	{
+		int err = sock_error ();
+		if (!dcc_connect_in_progress (err))
+		{
+			closesocket (sok);
+			errno = err;
+			return -1;
+		}
+	}
 
 	return sok;
 }
@@ -847,10 +899,10 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 			return TRUE;
 		}
 
-		if (write (dcc->fp, buf, n) == -1) /* could be out of hdd space */
+		if (!dcc_write_full (dcc->fp, buf, (size_t)n)) /* could be out of hdd space */
 		{
 			EMIT_SIGNAL (XP_TE_DCCRECVERR, dcc->serv->front_session, dcc->file,
-							 dcc->destfile, dcc->nick, errorstring (errno), 0);
+						 dcc->destfile, dcc->nick, errorstring (errno), 0);
 			if (need_ack)
 				dcc_send_ack (dcc);
 			dcc_close (dcc, STAT_FAILED, FALSE);
@@ -1525,7 +1577,7 @@ static gboolean
 dcc_send_data (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 {
 	char *buf;
-	int len, sent, sok = dcc->sok;
+	int len, sent, sok = dcc->sok, err = 0;
 
 	if (prefs.hex_dcc_blocksize < 1) /* this is too little! */
 		prefs.hex_dcc_blocksize = 1024;
@@ -1550,22 +1602,42 @@ dcc_send_data (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 
 	buf = g_malloc (prefs.hex_dcc_blocksize);
 
-	lseek (dcc->fp, dcc->pos, SEEK_SET);
-	len = read (dcc->fp, buf, prefs.hex_dcc_blocksize);
-	if (len < 1)
+	if (lseek (dcc->fp, dcc->pos, SEEK_SET) == (off_t)-1)
+	{
+		err = errno;
 		goto abortit;
+	}
+
+	len = read (dcc->fp, buf, prefs.hex_dcc_blocksize);
+	if (len < 0)
+	{
+		err = errno;
+		goto abortit;
+	}
+	if (len == 0)
+	{
+		err = EIO;
+		goto abortit;
+	}
+
 	sent = send (sok, buf, len, 0);
 
-	if (sent < 0 && !(would_block ()))
+	if (sent < 0)
 	{
-abortit:
-		g_free (buf);
-		EMIT_SIGNAL (XP_TE_DCCSENDFAIL, dcc->serv->front_session,
-						 file_part (dcc->file), dcc->nick,
-						 errorstring (sock_error ()), NULL, 0);
-		dcc_close (dcc, STAT_FAILED, FALSE);
-		return TRUE;
+		if (would_block ())
+		{
+			g_free (buf);
+			return TRUE;
+		}
+		err = sock_error ();
+		goto abortit;
 	}
+	if (sent == 0)
+	{
+		err = EPIPE;
+		goto abortit;
+	}
+
 	if (sent > 0)
 	{
 		dcc->pos += sent;
@@ -1585,6 +1657,14 @@ abortit:
 
 	g_free (buf);
 
+	return TRUE;
+
+abortit:
+	g_free (buf);
+	EMIT_SIGNAL (XP_TE_DCCSENDFAIL, dcc->serv->front_session,
+					 file_part (dcc->file), dcc->nick,
+					 errorstring (err), NULL, 0);
+	dcc_close (dcc, STAT_FAILED, FALSE);
 	return TRUE;
 }
 
@@ -1803,7 +1883,12 @@ dcc_listen_init (struct DCC *dcc, session *sess)
 	memset (&SAddr, 0, sizeof (struct sockaddr_in));
 
 	len = sizeof (SAddr);
-	getsockname (dcc->serv->sok, (struct sockaddr *) &SAddr, &len);
+	if (getsockname (dcc->serv->sok, (struct sockaddr *) &SAddr, &len) != 0)
+	{
+		PrintTextf (sess, "Failed to determine local address (%s).\n",
+					 errorstring (errno));
+		return FALSE;
+	}
 
 	SAddr.sin_family = AF_INET;
 
@@ -1832,8 +1917,12 @@ dcc_listen_init (struct DCC *dcc, session *sess)
 		}
 
 		/* with a small port range, reUseAddr is needed */
-		len = 1;
-		setsockopt (dcc->sok, SOL_SOCKET, SO_REUSEADDR, (char *) &len, sizeof (len));
+		{
+			int reuse = 1;
+			if (setsockopt (dcc->sok, SOL_SOCKET, SO_REUSEADDR,
+							  (char *) &reuse, sizeof (reuse)) != 0)
+				g_warning ("Failed to set SO_REUSEADDR on DCC listener");
+		}
 
 	} else
 	{
@@ -1850,7 +1939,12 @@ dcc_listen_init (struct DCC *dcc, session *sess)
 	}
 
 	len = sizeof (SAddr);
-	getsockname (dcc->sok, (struct sockaddr *) &SAddr, &len);
+	if (getsockname (dcc->sok, (struct sockaddr *) &SAddr, &len) != 0)
+	{
+		PrintTextf (sess, "Failed to determine DCC listener port (%s).\n",
+					 errorstring (errno));
+		return FALSE;
+	}
 
 	dcc->port = ntohs (SAddr.sin_port);
 
@@ -1865,9 +1959,24 @@ dcc_listen_init (struct DCC *dcc, session *sess)
 
 	dcc->addr = ntohl (dcc->addr);
 
-	set_nonblocking (dcc->sok);
-	listen (dcc->sok, 1);
-	set_blocking (dcc->sok);
+	if (set_nonblocking (dcc->sok) == -1)
+	{
+		PrintTextf (sess, "Failed to set DCC listener nonblocking mode (%s).\n",
+					 errorstring (errno));
+		return FALSE;
+	}
+	if (listen (dcc->sok, 1) != 0)
+	{
+		PrintTextf (sess, "Failed to listen on DCC socket (%s).\n",
+					 errorstring (errno));
+		return FALSE;
+	}
+	if (set_blocking (dcc->sok) == -1)
+	{
+		PrintTextf (sess, "Failed to restore DCC listener blocking mode (%s).\n",
+					 errorstring (errno));
+		return FALSE;
+	}
 
 	dcc->iotag = fe_input_add (dcc->sok, FIA_READ|FIA_EX, dcc_accept, dcc);
 
