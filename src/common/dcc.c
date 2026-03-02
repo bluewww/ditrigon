@@ -768,12 +768,39 @@ dcc_calc_average_cps (struct DCC *dcc)
 		dcc->cps = (dcc->pos - dcc->resumable) / sec;
 }
 
-static void
+static gboolean
 dcc_send_ack (struct DCC *dcc)
 {
+	size_t sent = 0;
 	/* send in 32-bit big endian */
 	guint32 pos = htonl (dcc->pos & 0xffffffff);
-	send (dcc->sok, (char *) &pos, 4, 0);
+	unsigned char *ack = (unsigned char *)&pos;
+
+	while (sent < sizeof (pos))
+	{
+		ssize_t ret = send (dcc->sok, (char *)ack + sent, sizeof (pos) - sent, 0);
+		if (ret < 0)
+		{
+			if (errno == EINTR)
+				continue;
+
+			EMIT_SIGNAL (XP_TE_DCCRECVERR, dcc->serv->front_session, dcc->file,
+							 dcc->destfile, dcc->nick, errorstring (sock_error ()), 0);
+			dcc_close (dcc, STAT_FAILED, FALSE);
+			return FALSE;
+		}
+		if (ret == 0)
+		{
+			EMIT_SIGNAL (XP_TE_DCCRECVERR, dcc->serv->front_session, dcc->file,
+							 dcc->destfile, dcc->nick, errorstring (EIO), 0);
+			dcc_close (dcc, STAT_FAILED, FALSE);
+			return FALSE;
+		}
+
+		sent += (size_t)ret;
+	}
+
+	return TRUE;
 }
 
 static gboolean
@@ -840,8 +867,8 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 	{
 		if (dcc->throttled)
 		{
-			if (need_ack)
-				dcc_send_ack (dcc);
+			if (need_ack && !dcc_send_ack (dcc))
+				return TRUE;
 
 			fe_input_remove (dcc->iotag);
 			dcc->iotag = 0;
@@ -858,8 +885,8 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 			{
 				if (would_block ())
 				{
-					if (need_ack)
-						dcc_send_ack (dcc);
+					if (need_ack && !dcc_send_ack (dcc))
+						return TRUE;
 					return TRUE;
 				}
 			}
@@ -877,8 +904,8 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 		{
 			EMIT_SIGNAL (XP_TE_DCCRECVERR, dcc->serv->front_session, dcc->file,
 						 dcc->destfile, dcc->nick, errorstring (errno), 0);
-			if (need_ack)
-				dcc_send_ack (dcc);
+			if (need_ack && !dcc_send_ack (dcc))
+				return TRUE;
 			dcc_close (dcc, STAT_FAILED, FALSE);
 			return TRUE;
 		}
@@ -889,7 +916,8 @@ dcc_read (GIOChannel *source, GIOCondition condition, struct DCC *dcc)
 
 		if (dcc->pos >= dcc->size)
 		{
-			dcc_send_ack (dcc);
+			if (!dcc_send_ack (dcc))
+				return TRUE;
 			dcc_close (dcc, STAT_DONE, FALSE);
 			dcc_calc_average_cps (dcc);	/* this must be done _after_ dcc_close, or dcc_remove_from_sum will see the wrong value in dcc->cps */
 			/* cppcheck-suppress deallocuse */
