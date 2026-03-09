@@ -1189,7 +1189,24 @@ process_named_msg (session *sess, char *type, char *word[], char *word_eol[],
 		{
 
 		case WORDL('T','A','G','M'):
-			inbound_tagmsg (sess, nick, word[3], tags_data);
+			{
+				session *target_sess = NULL;
+				char *to = word[3];
+				if (*to)
+				{
+					if (strchr (serv->chantypes, to[0]) == NULL
+						&& strchr (serv->nick_prefixes, to[0]) != NULL)
+						to++;
+						
+					if (is_channel (serv, to))
+						target_sess = find_dialog (serv, to);
+					else
+						target_sess = find_dialog (serv, nick);
+						
+					if (target_sess)
+						inbound_tagmsg (target_sess, nick, to, tags_data);
+				}
+			}
 			return;
 
 		case WORDL('A','C','C','O'):

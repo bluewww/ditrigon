@@ -2117,6 +2117,8 @@ static gboolean
 typing_timeout_cb (gpointer user_data)
 {
 	TypingTimeoutData *data = user_data;
+	session *sess = data->sess;
+	char *nick = g_strdup (data->nick);
 
 	/* 
 	 * The timeout fired, which means the user has not sent a follow-up "active" 
@@ -2125,19 +2127,20 @@ typing_timeout_cb (gpointer user_data)
 	 * the value destroy function (g_source_remove), which is safe to call
 	 * on the currently executing source ID.
 	 */
-	if (data->sess && data->sess->typing_users)
+	if (sess && sess->typing_users)
 	{
-		g_hash_table_remove (data->sess->typing_users, data->nick);
-
 		/* Find the user in the UI list and update them so the typing icon disappears */
-		struct User *u = userlist_find (data->sess, data->nick);
+		struct User *u = userlist_find (sess, nick);
 		if (u)
 		{
 			u->typing = FALSE;
-			fe_userlist_update (data->sess, u);
+			fe_userlist_update (sess, u);
 		}
+
+		g_hash_table_remove (sess->typing_users, nick);
 	}
 
+	g_free (nick);
 	return G_SOURCE_REMOVE;
 }
 
