@@ -1199,9 +1199,11 @@ process_named_msg (session *sess, char *type, char *word[], char *word_eol[],
 						to++;
 						
 					if (is_channel (serv, to))
-						target_sess = find_dialog (serv, to);
-					else
+						target_sess = find_channel (serv, to);
+					else if (!rfc_casecmp (to, serv->nick))
 						target_sess = find_dialog (serv, nick);
+					else
+						target_sess = find_dialog (serv, to);
 						
 					if (target_sess)
 						inbound_tagmsg (target_sess, nick, to, tags_data);

@@ -1683,6 +1683,8 @@ inbound_toggle_caps (server *serv, const char *extensions_str, gboolean enable)
 			serv->have_account_tag = enable;
 		else if (!strcmp (extension, "message-tags"))
 			serv->have_message_tags = enable;
+		else if (!strcmp (extension, "echo-message"))
+			serv->have_echo_message = enable;
 		else if (!strcmp (extension, "sasl"))
 		{
 			serv->have_sasl = enable;
@@ -1746,6 +1748,7 @@ static const char * const supported_caps[] = {
 	"extended-monitor",
 	"message-tags",
 	"msgid",
+	"echo-message",
 
 	/* ZNC */
 	"znc.in/server-time-iso",
