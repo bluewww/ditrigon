@@ -966,9 +966,40 @@ entry_update_send_sensitivity (void)
 static void
 entry_changed_cb (GtkEditable *editable, gpointer userdata)
 {
+	const char *text;
+	time_t now;
+
 	(void) editable;
 	(void) userdata;
 	entry_update_send_sensitivity ();
+
+	if (!current_sess || !current_sess->server || !current_sess->server->have_message_tags)
+		return;
+
+	if (current_sess->type != SESS_CHANNEL && current_sess->type != SESS_DIALOG)
+		return;
+
+	text = gtk_editable_get_text (GTK_EDITABLE (command_entry));
+	/* Don't send typing indicators for commands */
+	if (text && text[0] == '/' && text[1] != '/')
+		return;
+
+	now = time (NULL);
+	if (text && text[0])
+	{
+		if (!current_sess->typing_active || now - current_sess->typing_sent >= 3)
+		{
+			tcp_sendf (current_sess->server, "@+typing=active TAGMSG %s\r\n", current_sess->channel);
+			current_sess->typing_active = 1;
+			current_sess->typing_sent = now;
+		}
+	}
+	else if (current_sess->typing_active)
+	{
+		tcp_sendf (current_sess->server, "@+typing=done TAGMSG %s\r\n", current_sess->channel);
+		current_sess->typing_active = 0;
+		current_sess->typing_sent = 0;
+	}
 }
 
 static void

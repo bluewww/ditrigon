@@ -1188,6 +1188,29 @@ process_named_msg (session *sess, char *type, char *word[], char *word_eol[],
 		switch (t)
 		{
 
+		case WORDL('T','A','G','M'):
+			{
+				session *target_sess = NULL;
+				char *to = word[3];
+				if (*to)
+				{
+					if (strchr (serv->chantypes, to[0]) == NULL
+						&& strchr (serv->nick_prefixes, to[0]) != NULL)
+						to++;
+						
+					if (is_channel (serv, to))
+						target_sess = find_channel (serv, to);
+					else if (!rfc_casecmp (to, serv->nick))
+						target_sess = find_dialog (serv, nick);
+					else
+						target_sess = find_dialog (serv, to);
+						
+					if (target_sess)
+						inbound_tagmsg (target_sess, nick, to, tags_data);
+				}
+			}
+			return;
+
 		case WORDL('A','C','C','O'):
 			inbound_account (serv, nick, STRIP_COLON(word, word_eol, 3), tags_data);
 			return;
@@ -1543,6 +1566,10 @@ handle_message_tags (server *serv, const char *tags_str,
 		if (serv->have_idmsg && !strcmp (key, "solanum.chat/identified"))
 			tags_data->identified = TRUE;
 
+		/* IRCv3 typing indicators are sent as "+typing=active|paused|done" */
+		if (!strcmp (key, "+typing"))
+			tags_data->typing = g_strdup (value);
+
 		if (serv->have_server_time && !strcmp (key, "time"))
 			handle_message_tag_time (value, tags_data);
 	}
@@ -1648,6 +1675,7 @@ void
 message_tags_data_free (message_tags_data *tags_data)
 {
 	g_clear_pointer (&tags_data->account, g_free);
+	g_clear_pointer (&tags_data->typing, g_free);
 }
 
 void

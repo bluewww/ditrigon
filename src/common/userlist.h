@@ -38,6 +38,7 @@ struct User
 	unsigned int voice:1;
 	unsigned int me:1;
 	unsigned int away:1;
+	unsigned int typing:1;
 	unsigned int selected:1;
 };
 
