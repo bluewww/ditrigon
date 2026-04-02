@@ -17,6 +17,7 @@ typedef struct _HcUserItem
 	char *display;
 	char *host;
 	char prefix;
+	gboolean typing;
 } HcUserItem;
 
 typedef struct _HcUserItemClass
@@ -183,15 +184,19 @@ userlist_install_css (void)
 }
 
 static void
-userlist_set_presence_icon (GtkWidget *image, gboolean away)
+userlist_set_presence_icon (GtkWidget *image, gboolean away, gboolean typing)
 {
 	if (!image)
 		return;
 
-	gtk_image_set_from_icon_name (GTK_IMAGE (image),
-		away ? "user-away-symbolic" : "user-available-symbolic");
+	if (typing)
+		gtk_image_set_from_icon_name (GTK_IMAGE (image), "document-edit-symbolic");
+	else
+		gtk_image_set_from_icon_name (GTK_IMAGE (image),
+			away ? "user-away-symbolic" : "user-available-symbolic");
+
 	gtk_widget_remove_css_class (image, "dim-label");
-	if (away)
+	if (away && !typing)
 		gtk_widget_add_css_class (image, "dim-label");
 }
 
@@ -512,6 +517,7 @@ hc_user_item_new (session *sess, struct User *user)
 	item->display = user_display_text (user);
 	item->host = g_strdup (user && user->hostname ? user->hostname : "");
 	item->prefix = (user && user->prefix[0]) ? user->prefix[0] : 0;
+	item->typing = user ? user->typing : FALSE;
 
 	return item;
 }
@@ -892,7 +898,7 @@ userlist_apply_row (GtkListItem *list_item, HcUserItem *item)
 
 	if (!item)
 	{
-		userlist_set_presence_icon (presence_image, FALSE);
+		userlist_set_presence_icon (presence_image, FALSE, FALSE);
 		gtk_label_set_text (GTK_LABEL (name_label), "");
 		gtk_label_set_text (GTK_LABEL (host_label), "");
 		gtk_widget_set_visible (host_label, FALSE);
@@ -901,7 +907,7 @@ userlist_apply_row (GtkListItem *list_item, HcUserItem *item)
 		return;
 	}
 
-	userlist_set_presence_icon (presence_image, item->user && item->user->away);
+	userlist_set_presence_icon (presence_image, item->user && item->user->away, item->typing);
 
 	markup = user_markup_text (item->user, item->display);
 	gtk_label_set_markup (GTK_LABEL (name_label), markup);

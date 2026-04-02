@@ -470,6 +470,8 @@ irc_init (session *sess)
 	load_perform_file (sess, "startup.txt");
 }
 
+
+
 static session *
 session_new (server *serv, char *from, int type, int focus)
 {
@@ -492,6 +494,8 @@ session_new (server *serv, char *from, int type, int focus)
 	sess->text_strip = SET_DEFAULT;
 
 	sess->lastact_idx = LACT_NONE;
+
+	sess->typing_users = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_source_remove);
 
 	if (from != NULL)
 	{
@@ -681,6 +685,12 @@ session_free (session *killsess)
 		current_sess = NULL;
 		if (sess_list)
 			current_sess = sess_list->data;
+	}
+
+	if (killsess->typing_users)
+	{
+		g_hash_table_destroy (killsess->typing_users);
+		killsess->typing_users = NULL;
 	}
 
 	g_free (killsess);

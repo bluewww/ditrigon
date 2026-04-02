@@ -2769,9 +2769,10 @@ cmd_me (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 			{
 				sess->server->p_action (sess->server, sess->channel, split_text);
 				/* print it to screen */
-				inbound_action (sess, sess->channel, sess->server->nick, "",
-									 split_text, TRUE, FALSE,
-									 &no_tags);
+				if (!sess->server->have_echo_message)
+					inbound_action (sess, sess->channel, sess->server->nick, "",
+										 split_text, TRUE, FALSE,
+										 &no_tags);
 
 				if (*split_text)
 					offset += strlen(split_text);
@@ -2781,8 +2782,9 @@ cmd_me (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 
 			sess->server->p_action (sess->server, sess->channel, act + offset);
 			/* print it to screen */
-			inbound_action (sess, sess->channel, sess->server->nick, "",
-								 act + offset, TRUE, FALSE, &no_tags);
+			if (!sess->server->have_echo_message)
+				inbound_action (sess, sess->channel, sess->server->nick, "",
+									 act + offset, TRUE, FALSE, &no_tags);
 		} else
 		{
 			notc_msg (sess);
@@ -2905,18 +2907,20 @@ cmd_msg (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 
 				while ((split_text = split_up_text (sess, msg + offset, cmd_length, split_text)))
 				{
-					inbound_chanmsg (newsess->server, NULL, newsess->channel,
-										  newsess->server->nick, split_text, TRUE, FALSE,
-										  &no_tags);
+					if (!newsess->server->have_echo_message)
+						inbound_chanmsg (newsess->server, NULL, newsess->channel,
+											  newsess->server->nick, split_text, TRUE, FALSE,
+											  &no_tags);
 
 					if (*split_text)
 						offset += strlen(split_text);
 
 					g_free (split_text);
 				}
-				inbound_chanmsg (newsess->server, NULL, newsess->channel,
-									  newsess->server->nick, msg + offset, TRUE, FALSE,
-									  &no_tags);
+				if (!newsess->server->have_echo_message)
+					inbound_chanmsg (newsess->server, NULL, newsess->channel,
+										  newsess->server->nick, msg + offset, TRUE, FALSE,
+										  &no_tags);
 			}
 			else
 			{
@@ -3006,7 +3010,8 @@ cmd_notice (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 		while ((split_text = split_up_text (sess, text + offset, cmd_length, split_text)))
 		{
 			sess->server->p_notice (sess->server, word[2], split_text);
-			EMIT_SIGNAL (XP_TE_NOTICESEND, sess, word[2], split_text, NULL, NULL, 0);
+			if (!sess->server->have_echo_message)
+				EMIT_SIGNAL (XP_TE_NOTICESEND, sess, word[2], split_text, NULL, NULL, 0);
 			
 			if (*split_text)
 				offset += strlen(split_text);
@@ -3015,7 +3020,8 @@ cmd_notice (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 		}
 
 		sess->server->p_notice (sess->server, word[2], text + offset);
-		EMIT_SIGNAL (XP_TE_NOTICESEND, sess, word[2], text + offset, NULL, NULL, 0);
+		if (!sess->server->have_echo_message)
+			EMIT_SIGNAL (XP_TE_NOTICESEND, sess, word[2], text + offset, NULL, NULL, 0);
 
 		return TRUE;
 	}

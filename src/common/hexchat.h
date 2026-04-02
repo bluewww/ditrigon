@@ -405,6 +405,10 @@ typedef struct session
 
 	int type;					/* SESS_* */
 
+	GHashTable *typing_users;	/* keys: nick, values: timer tag */
+	time_t typing_sent;			/* Timestamp when we last sent active typing */
+	unsigned int typing_active:1; /* Are we currently sending typing indicators? */
+
 	int lastact_idx;		/* the sess_list_by_lastact[] index of the list we're in.
 							 * For valid values, see defines of LACT_*. */
 
@@ -568,6 +572,8 @@ typedef struct server
 	unsigned int have_accnotify:1; /* cap account-notify */
 	unsigned int have_extjoin:1;	/* cap extended-join */
 	unsigned int have_account_tag:1;	/* cap account-tag */
+	unsigned int have_message_tags:1;	/* cap message-tags */
+	unsigned int have_echo_message:1;	/* cap echo-message */
 	unsigned int have_server_time:1;	/* cap server-time */
 	unsigned int have_sasl:1;		/* SASL capability */
 	unsigned int have_except:1;	/* ban exemptions +e */

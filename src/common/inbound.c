@@ -1681,6 +1681,10 @@ inbound_toggle_caps (server *serv, const char *extensions_str, gboolean enable)
 			serv->have_awaynotify = enable;
 		else if (!strcmp (extension, "account-tag"))
 			serv->have_account_tag = enable;
+		else if (!strcmp (extension, "message-tags"))
+			serv->have_message_tags = enable;
+		else if (!strcmp (extension, "echo-message"))
+			serv->have_echo_message = enable;
 		else if (!strcmp (extension, "sasl"))
 		{
 			serv->have_sasl = enable;
@@ -1742,6 +1746,9 @@ static const char * const supported_caps[] = {
 	"invite-notify",
 	"account-tag",
 	"extended-monitor",
+	"message-tags",
+	"msgid",
+	"echo-message",
 
 	/* ZNC */
 	"znc.in/server-time-iso",
@@ -2077,4 +2084,140 @@ inbound_sasl_error (server *serv)
 #endif
 	/* Just abort, not much we can do */
 	tcp_sendf (serv, "AUTHENTICATE *\r\n");
+}
+
+/* Data struct to pass context to the timeout callback */
+typedef struct {
+	session *sess;
+	char *nick;
+} TypingTimeoutData;
+
+/*
+ * Helper function to clean up the TypingTimeoutData struct.
+ * This is called automatically when the source ID is removed by glib.
+ */
+static void
+typing_timeout_data_free (gpointer user_data)
+{
+	TypingTimeoutData *data = user_data;
+	g_free (data->nick);
+	g_free (data);
+}
+
+/*
+ * Helper callback for when the typing timeout fires.
+ *
+ * This function is called by the glib main loop approximately 6000 milliseconds
+ * after a user's typing indicator was last set to "active". It removes the user
+ * from the session's typing_users hash table. This is necessary because clients
+ * may unexpectedly disconnect or stop sending typing indicators without sending
+ * a "done" status, so we must automatically clear their typing state to prevent
+ * them from appearing as permanently typing.
+ *
+ * It returns G_SOURCE_REMOVE to ensure the timeout does not repeat.
+ */
+static gboolean
+typing_timeout_cb (gpointer user_data)
+{
+	TypingTimeoutData *data = user_data;
+	session *sess = data->sess;
+	char *nick = g_strdup (data->nick);
+
+	/* 
+	 * The timeout fired, which means the user has not sent a follow-up "active" 
+	 * tag in 6 seconds. Assume they have stopped typing.
+	 * Remove them from the session's typing_users hash table. This triggers
+	 * the value destroy function (g_source_remove), which is safe to call
+	 * on the currently executing source ID.
+	 */
+	if (sess && sess->typing_users)
+	{
+		/* Find the user in the UI list and update them so the typing icon disappears */
+		struct User *u = userlist_find (sess, nick);
+		if (u)
+		{
+			u->typing = FALSE;
+			fe_userlist_update (sess, u);
+		}
+
+		g_hash_table_remove (sess->typing_users, nick);
+	}
+
+	g_free (nick);
+	return G_SOURCE_REMOVE;
+}
+
+/*
+ * Process incoming TAGMSG IRC messages with +typing tags.
+ *
+ * This function extracts the +typing tag value from a TAGMSG and updates the
+ * session's typing_users hash table accordingly. 
+ *
+ * - If the value is "active", we add/update the user in the hash table and set 
+ *   a 6-second timeout. If they don't send another "active" message within 
+ *   that timeframe, the timeout will remove them.
+ * - If the value is "paused" or "done", we immediately remove them from the 
+ *   hash table, which cancels any pending timeout.
+ */
+void
+inbound_tagmsg (session *sess, const char *nick, const char *target, const message_tags_data *tags_data)
+{
+	TypingTimeoutData *timeout_data;
+	guint timeout_id;
+
+	if (!sess || !tags_data || !tags_data->typing || !sess->typing_users)
+		return;
+
+	if (g_strcmp0 (tags_data->typing, "active") == 0)
+	{
+		/* 
+		 * The user is actively typing. We create a timeout data struct to pass 
+		 * the session and nick to the callback.
+		 */
+		timeout_data = g_new0 (TypingTimeoutData, 1);
+		timeout_data->sess = sess;
+		timeout_data->nick = g_strdup (nick);
+
+		/* 
+		 * Set a glib timeout for 6 seconds (6000 milliseconds) using 
+		 * g_timeout_add_full. We pass our custom destroy function to handle
+		 * cleanup of the timeout_data memory when the source is removed.
+		 */
+		timeout_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 6000, 
+										 typing_timeout_cb, timeout_data, 
+										 typing_timeout_data_free);
+
+		/* 
+		 * Insert the new timeout ID into the typing_users hash table. 
+		 * If an entry for this nick already exists, the old timeout is 
+		 * automatically cancelled and replaced by the new one because we
+		 * configured the hash table to call g_source_remove on values.
+		 */
+		g_hash_table_insert (sess->typing_users, g_strdup (nick), GUINT_TO_POINTER (timeout_id));
+
+		/* Update the userlist UI so the typing icon appears */
+		struct User *u = userlist_find (sess, nick);
+		if (u)
+		{
+			u->typing = TRUE;
+			fe_userlist_update (sess, u);
+		}
+	}
+	else if (g_strcmp0 (tags_data->typing, "paused") == 0 || g_strcmp0 (tags_data->typing, "done") == 0)
+	{
+		/* 
+		 * The user stopped typing ("done") or paused ("paused"). 
+		 * We remove them from the hash table immediately. This also cancels
+		 * their associated 6-second timeout.
+		 */
+		g_hash_table_remove (sess->typing_users, nick);
+
+		/* Update the userlist UI so the typing icon disappears */
+		struct User *u = userlist_find (sess, nick);
+		if (u)
+		{
+			u->typing = FALSE;
+			fe_userlist_update (sess, u);
+		}
+	}
 }
